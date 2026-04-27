@@ -1,0 +1,19 @@
+import type { Metadata } from "next";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { getGoals } from "@/lib/db/goals";
+import { MetasClient } from "./MetasClient";
+
+export const metadata: Metadata = { title: "Metas de ahorro" };
+
+export default async function MetasPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const goals = await getGoals(user.id);
+
+  return <MetasClient initialGoals={goals} />;
+}

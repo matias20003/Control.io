@@ -1,0 +1,149 @@
+import { prisma } from "@/lib/prisma";
+import { addMonths } from "date-fns";
+
+export type SerializedCreditInstallment = {
+  id: number;
+  installmentNumber: number;
+  amount: number;
+  dueDate: string;
+  isPaid: boolean;
+  paidAt: string | null;
+};
+
+export type SerializedCreditPurchase = {
+  id: string;
+  accountId: string;
+  accountName: string | null;
+  description: string;
+  totalAmount: number;
+  currency: string;
+  totalInstallments: number;
+  paidInstallments: number;
+  firstPaymentDate: string;
+  installments: SerializedCreditInstallment[];
+  createdAt: string;
+};
+
+function toNum(val: unknown): number {
+  if (val === null || val === undefined) return 0;
+  return typeof val === "number" ? val : parseFloat(String(val));
+}
+
+function serializeInstallment(i: any): SerializedCreditInstallment {
+  return {
+    id: i.id,
+    installmentNumber: i.installmentNumber,
+    amount: toNum(i.amount),
+    dueDate: i.dueDate instanceof Date ? i.dueDate.toISOString() : i.dueDate,
+    isPaid: i.isPaid,
+    paidAt: i.paidAt instanceof Date ? i.paidAt.toISOString() : (i.paidAt ?? null),
+  };
+}
+
+function serialize(p: any): SerializedCreditPurchase {
+  return {
+    id: p.id,
+    accountId: p.accountId,
+    accountName: p.account?.name ?? null,
+    description: p.description,
+    totalAmount: toNum(p.totalAmount),
+    currency: p.currency,
+    totalInstallments: p.totalInstallments,
+    paidInstallments: p.paidInstallments,
+    firstPaymentDate:
+      p.firstPaymentDate instanceof Date
+        ? p.firstPaymentDate.toISOString()
+        : p.firstPaymentDate,
+    installments: (p.installments ?? []).map(serializeInstallment),
+    createdAt:
+      p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
+  };
+}
+
+const INCLUDE = {
+  account: { select: { name: true } },
+  installments: { orderBy: { installmentNumber: "asc" as const } },
+};
+
+export async function getCreditPurchases(
+  userId: string
+): Promise<SerializedCreditPurchase[]> {
+  const rows = await prisma.creditPurchase.findMany({
+    where: { userId },
+    include: INCLUDE,
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.map(serialize);
+}
+
+export async function createCreditPurchase(
+  userId: string,
+  data: {
+    accountId: string;
+    description: string;
+    totalAmount: number;
+    currency: string;
+    totalInstallments: number;
+    firstPaymentDate: string;
+    categoryId?: string;
+  }
+): Promise<SerializedCreditPurchase> {
+  const firstDate = new Date(data.firstPaymentDate);
+  const baseAmount = data.totalAmount / data.totalInstallments;
+  const rounded = parseFloat(baseAmount.toFixed(2));
+
+  const installmentsData = Array.from(
+    { length: data.totalInstallments },
+    (_, i) => ({
+      installmentNumber: i + 1,
+      amount: rounded,
+      dueDate: addMonths(firstDate, i),
+    })
+  );
+
+  const row = await prisma.creditPurchase.create({
+    data: {
+      userId,
+      accountId: data.accountId,
+      description: data.description,
+      totalAmount: data.totalAmount,
+      currency: data.currency,
+      totalInstallments: data.totalInstallments,
+      firstPaymentDate: firstDate,
+      categoryId: data.categoryId || null,
+      installments: { create: installmentsData },
+    },
+    include: INCLUDE,
+  });
+  return serialize(row);
+}
+
+export async function payInstallment(
+  userId: string,
+  installmentId: number
+): Promise<void> {
+  const installment = await prisma.creditInstallment.findUnique({
+    where: { id: installmentId },
+    include: { creditPurchase: { select: { userId: true, id: true } } },
+  });
+  if (!installment || installment.creditPurchase.userId !== userId) {
+    throw new Error("No encontrado");
+  }
+
+  await prisma.creditInstallment.update({
+    where: { id: installmentId },
+    data: { isPaid: true, paidAt: new Date() },
+  });
+
+  await prisma.creditPurchase.update({
+    where: { id: installment.creditPurchaseId },
+    data: { paidInstallments: { increment: 1 } },
+  });
+}
+
+export async function deleteCreditPurchase(
+  userId: string,
+  purchaseId: string
+): Promise<void> {
+  await prisma.creditPurchase.delete({ where: { id: purchaseId, userId } });
+}
