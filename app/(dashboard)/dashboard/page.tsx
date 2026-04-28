@@ -9,7 +9,7 @@ import { getInsights, getNetWorth } from "@/lib/db/insights";
 import { getCotizaciones } from "@/lib/cotizaciones";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatMonth, percentageOf } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Scale, PiggyBank, ChevronRight, DollarSign, Landmark, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { TrendingUp, TrendingDown, Scale, PiggyBank, ChevronRight, AlertTriangle, CheckCircle2, Info, ClipboardList } from "lucide-react";
 import { DashboardQuickAdd } from "./DashboardQuickAdd";
 import { CategoryChart } from "./CategoryChart";
 
@@ -76,6 +76,23 @@ export default async function DashboardPage() {
 
       {/* Quick Add */}
       <DashboardQuickAdd accounts={accounts} categories={categories} />
+
+      {/* ── Reporte semanal CTA ── */}
+      <Link
+        href="/reporte"
+        className="flex items-center justify-between w-full bg-surface border border-border hover:border-primary rounded-xl px-4 py-3.5 transition-colors group"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <ClipboardList size={18} className="text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground leading-tight">Ver reporte semanal</p>
+            <p className="text-xs text-muted">Gastos, categorías y comparativa</p>
+          </div>
+        </div>
+        <ChevronRight size={16} className="text-muted group-hover:text-primary transition-colors" />
+      </Link>
 
       {/* ── Métricas del mes ── */}
       <div className="space-y-3">

@@ -17,6 +17,7 @@ import {
   BarChart3,
   DollarSign,
   CalendarClock,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/dashboard",     icon: LayoutDashboard, label: "Dashboard" },
   { href: "/movimientos",   icon: ArrowUpDown,     label: "Movimientos" },
   { href: "/cuentas",       icon: Wallet,          label: "Cuentas" },
+  { href: "/reporte",       icon: ClipboardList,   label: "Reporte semanal" },
   { href: "/tendencias",    icon: BarChart3,       label: "Tendencias" },
   { href: "/agenda",        icon: CalendarClock,   label: "Agenda" },
   { href: "/cotizaciones",  icon: DollarSign,      label: "Cotizaciones" },
