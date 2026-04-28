@@ -77,6 +77,7 @@ model Profile {
   recurringTransactions RecurringTransaction[]
   budgets               Budget[]
   goals                 Goal[]
+  pushSubscriptions     PushSubscription[]
 
   @@map("profiles")
 }
@@ -306,6 +307,19 @@ model Goal {
   @@index([userId])
   @@index([userId, isCompleted])
   @@map("goals")
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 model ExchangeRate {

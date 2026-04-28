@@ -14,6 +14,7 @@ import {
   Settings,
   LogOut,
   PiggyBank,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
@@ -23,6 +24,7 @@ const navItems = [
   { href: "/dashboard",     icon: LayoutDashboard, label: "Dashboard" },
   { href: "/movimientos",   icon: ArrowUpDown,     label: "Movimientos" },
   { href: "/cuentas",       icon: Wallet,          label: "Cuentas" },
+  { href: "/tendencias",    icon: BarChart3,       label: "Tendencias" },
   { href: "/inversiones",   icon: TrendingUp,      label: "Inversiones" },
   { href: "/deudas",        icon: HandCoins,       label: "Deudas" },
   { href: "/cuotas",        icon: CreditCard,      label: "Cuotas" },

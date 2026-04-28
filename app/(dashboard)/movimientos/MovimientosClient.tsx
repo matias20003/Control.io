@@ -13,6 +13,7 @@ import {
   Receipt,
   Search,
   X,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -294,6 +295,14 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
           className="p-1.5 rounded-lg border border-border text-muted hover:text-foreground transition-colors disabled:opacity-40">
           <ChevronRight size={16} />
         </button>
+        <a
+          href={`/api/export/transactions?month=${month}&year=${year}`}
+          download
+          title="Exportar CSV"
+          className="p-1.5 rounded-lg border border-border text-muted hover:text-primary hover:border-primary transition-colors"
+        >
+          <Download size={16} />
+        </a>
       </div>
 
       {/* Summary */}
