@@ -117,6 +117,60 @@ export async function createTransaction(userId: string, data: {
   return serialize(tx);
 }
 
+export async function updateTransaction(
+  userId: string,
+  transactionId: string,
+  data: {
+    type: string; amount: number; currency: string; description?: string;
+    date: string; categoryId?: string; accountId?: string; toAccountId?: string; notes?: string;
+  }
+) {
+  const existing = await prisma.transaction.findFirst({ where: { id: transactionId, userId } });
+  if (!existing) throw new Error("No encontrado");
+
+  // Revertir efectos del movimiento anterior
+  if (existing.accountId) {
+    const oldAmount = toNum(existing.amount);
+    const reverseDelta = existing.type === "INCOME" ? -oldAmount : oldAmount;
+    await prisma.account.update({ where: { id: existing.accountId, userId }, data: { balance: { increment: reverseDelta } } });
+  }
+  if (existing.type === "TRANSFER" && existing.toAccountId) {
+    await prisma.account.update({ where: { id: existing.toAccountId, userId }, data: { balance: { increment: -toNum(existing.amount) } } });
+  }
+
+  // Actualizar el movimiento
+  const updated = await prisma.transaction.update({
+    where: { id: transactionId },
+    data: {
+      type: data.type as any,
+      amount: data.amount,
+      currency: data.currency,
+      description: data.description || null,
+      date: new Date(data.date),
+      categoryId: data.categoryId || null,
+      accountId: data.accountId || null,
+      toAccountId: data.toAccountId || null,
+      notes: data.notes || null,
+    },
+    include: {
+      category: { select: { name: true, icon: true, color: true } },
+      account: { select: { name: true } },
+      toAccount: { select: { name: true } },
+    },
+  });
+
+  // Aplicar efectos del nuevo movimiento
+  if (data.accountId) {
+    const delta = data.type === "INCOME" ? data.amount : -data.amount;
+    await prisma.account.update({ where: { id: data.accountId, userId }, data: { balance: { increment: delta } } });
+  }
+  if (data.type === "TRANSFER" && data.toAccountId) {
+    await prisma.account.update({ where: { id: data.toAccountId, userId }, data: { balance: { increment: data.amount } } });
+  }
+
+  return serialize(updated);
+}
+
 export async function deleteTransaction(userId: string, transactionId: string) {
   const tx = await prisma.transaction.findFirst({ where: { id: transactionId, userId } });
   if (!tx) throw new Error("No encontrado");

@@ -265,6 +265,7 @@ model RecurringTransaction {
   updatedAt    DateTime           @updatedAt
 
   @@index([userId])
+  @@index([userId, isActive])
   @@map("recurring_transactions")
 }
 
@@ -283,6 +284,7 @@ model Budget {
   updatedAt  DateTime @updatedAt
 
   @@unique([userId, categoryId, month, year])
+  @@index([userId, month, year])
   @@map("budgets")
 }
 
@@ -302,6 +304,7 @@ model Goal {
   updatedAt     DateTime  @updatedAt
 
   @@index([userId])
+  @@index([userId, isCompleted])
   @@map("goals")
 }
 

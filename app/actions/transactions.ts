@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import {
   createTransaction,
+  updateTransaction,
   deleteTransaction,
   getTransactions,
 } from "@/lib/db/transactions";
@@ -51,6 +52,37 @@ export async function createTransactionAction(formData: FormData) {
     return { success: true, transaction: tx };
   } catch {
     return { error: "Error al crear el movimiento" };
+  }
+}
+
+export async function updateTransactionAction(transactionId: string, formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autorizado" };
+
+  const raw = {
+    type: formData.get("type") as string,
+    amount: formData.get("amount"),
+    currency: (formData.get("currency") as string) || "ARS",
+    description: (formData.get("description") as string) || undefined,
+    date: formData.get("date") as string,
+    categoryId: (formData.get("categoryId") as string) || undefined,
+    accountId: (formData.get("accountId") as string) || undefined,
+    toAccountId: (formData.get("toAccountId") as string) || undefined,
+    notes: (formData.get("notes") as string) || undefined,
+  };
+
+  const result = createTransactionSchema.safeParse(raw);
+  if (!result.success) return { error: result.error.issues[0].message };
+
+  try {
+    const tx = await updateTransaction(user.id, transactionId, result.data);
+    revalidatePath("/movimientos");
+    revalidatePath("/dashboard");
+    revalidatePath("/cuentas");
+    return { success: true, transaction: tx };
+  } catch {
+    return { error: "Error al actualizar el movimiento" };
   }
 }
 

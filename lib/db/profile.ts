@@ -38,5 +38,15 @@ export async function getOrCreateProfile(userId: string, email: string, name?: s
     skipDuplicates: true,
   });
 
+  // Cuentas por defecto
+  await prisma.account.createMany({
+    data: [
+      { userId, name: "Efectivo", type: "CASH", currency: "ARS", balance: 0, icon: "💵", color: "#22c55e" },
+      { userId, name: "Cuenta bancaria", type: "BANK", currency: "ARS", balance: 0, icon: "🏦", color: "#3b82f6" },
+      { userId, name: "Mercado Pago", type: "DIGITAL_WALLET", currency: "ARS", balance: 0, icon: "💙", color: "#06b6d4" },
+    ],
+    skipDuplicates: true,
+  });
+
   return profile;
 }
