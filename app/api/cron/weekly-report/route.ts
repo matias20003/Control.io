@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { resend, FROM } from "@/lib/email/client";
+import { getResend, FROM } from "@/lib/email/client";
 import { getWeeklyData, buildWeeklyReportHtml } from "@/lib/email/weekly-report";
 import { startOfWeek, endOfWeek, subWeeks } from "date-fns";
 
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
         appUrl,
       });
 
-      await resend.emails.send({
+      await getResend().emails.send({
         from: FROM,
         to: profile.email,
         subject: `📊 Tu reporte semanal — control.io`,
