@@ -14,6 +14,7 @@ import {
   Search,
   X,
   Download,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ImportCSVDialog } from "./ImportCSVDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatDate, formatMonth } from "@/lib/utils";
 import {
@@ -70,6 +72,9 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
 
   // Delete confirm
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // CSV import
+  const [importOpen, setImportOpen] = useState(false);
 
   const [isPending, startTransition]  = useTransition();
 
@@ -275,10 +280,18 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
             <ArrowUpRight size={16} className="mr-1.5" />Nuevo gasto
           </Button>
         </div>
-        <button onClick={() => openCreate("TRANSFER")}
-          className="flex items-center gap-1.5 text-xs text-muted hover:text-primary transition-colors">
-          <ArrowLeftRight size={12} />Nueva transferencia
-        </button>
+        <div className="flex items-center justify-between">
+          <button onClick={() => openCreate("TRANSFER")}
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-primary transition-colors">
+            <ArrowLeftRight size={12} />Nueva transferencia
+          </button>
+          <button
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-primary transition-colors"
+          >
+            <Upload size={12} />Importar CSV
+          </button>
+        </div>
       </div>
 
       {/* Month nav */}
@@ -446,6 +459,18 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
         confirmLabel="Eliminar"
         onConfirm={() => confirmDeleteId && handleDelete(confirmDeleteId)}
         isPending={isPending}
+      />
+
+      {/* Import CSV Dialog */}
+      <ImportCSVDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        accounts={accounts}
+        categories={categories}
+        onImported={async () => {
+          const data = await getTransactionsAction(month, year);
+          setTransactions(data);
+        }}
       />
     </div>
   );

@@ -15,6 +15,8 @@ import {
   LogOut,
   PiggyBank,
   BarChart3,
+  DollarSign,
+  CalendarClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
@@ -25,6 +27,8 @@ const navItems = [
   { href: "/movimientos",   icon: ArrowUpDown,     label: "Movimientos" },
   { href: "/cuentas",       icon: Wallet,          label: "Cuentas" },
   { href: "/tendencias",    icon: BarChart3,       label: "Tendencias" },
+  { href: "/agenda",        icon: CalendarClock,   label: "Agenda" },
+  { href: "/cotizaciones",  icon: DollarSign,      label: "Cotizaciones" },
   { href: "/inversiones",   icon: TrendingUp,      label: "Inversiones" },
   { href: "/deudas",        icon: HandCoins,       label: "Deudas" },
   { href: "/cuotas",        icon: CreditCard,      label: "Cuotas" },
