@@ -54,24 +54,39 @@ export async function registerAction(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
   const { error } = await supabase.auth.signUp({
     email: result.data.email,
     password: result.data.password,
     options: {
       data: { name: result.data.name },
-      emailRedirectTo: `${siteUrl}/auth/callback`,
+      // Sin emailRedirectTo → Supabase envía código OTP de 6 dígitos en vez de link
     },
   });
 
   if (error) {
-    if (error.message.toLowerCase().includes("already registered")) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes("already registered") || msg.includes("user already registered")) {
       return { error: "Este email ya está registrado" };
     }
-    return { error: "Error al registrar. Intenta de nuevo." };
+    return { error: `Error al registrar: ${error.message}` };
   }
 
-  return { success: "Revisá tu email para confirmar tu cuenta" };
+  return { needsOtp: true, email: result.data.email };
+}
+
+export async function verifyOtpAction(email: string, token: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type: "signup",
+  });
+
+  if (error) {
+    return { error: "Código incorrecto o expirado. Revisá tu email." };
+  }
+
+  redirect("/dashboard");
 }
 
 export async function forgotPasswordAction(formData: FormData) {

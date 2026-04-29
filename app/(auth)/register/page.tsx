@@ -1,16 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { registerAction } from "@/app/actions/auth";
+import { registerAction, verifyOtpAction } from "@/app/actions/auth";
 
 const schema = z
   .object({
@@ -33,13 +33,14 @@ type FormData = z.infer<typeof schema>;
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [verifying, setVerifying] = useState(false);
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<FormData>({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+    resolver: zodResolver(schema),
+  });
 
   const onSubmit = async (data: FormData) => {
     setLoading(true);
@@ -50,31 +51,92 @@ export default function RegisterPage() {
       fd.append("password", data.password);
       const result = await registerAction(fd);
       if (result?.error) toast.error(result.error);
-      else if (result?.success) setSuccess(true);
+      else if (result?.needsOtp) setPendingEmail(result.email);
     } finally {
       setLoading(false);
     }
   };
 
-  if (success) {
+  const handleOtpChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return;
+    const next = [...otp];
+    next[index] = value.slice(-1);
+    setOtp(next);
+    if (value && index < 5) inputsRef.current[index + 1]?.focus();
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      inputsRef.current[index - 1]?.focus();
+    }
+  };
+
+  const handleVerify = async () => {
+    const token = otp.join("");
+    if (token.length !== 6) {
+      toast.error("Ingresá los 6 dígitos");
+      return;
+    }
+    setVerifying(true);
+    try {
+      const result = await verifyOtpAction(pendingEmail!, token);
+      if (result?.error) toast.error(result.error);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  // ── Paso 2: ingresar código OTP ──
+  if (pendingEmail) {
     return (
-      <div className="text-center space-y-5">
-        <div className="w-16 h-16 rounded-full bg-success/15 flex items-center justify-center mx-auto">
-          <CheckCircle2 size={32} className="text-success" />
-        </div>
-        <div>
+      <div className="space-y-6">
+        <div className="text-center space-y-2">
+          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+            <Mail size={26} className="text-primary" />
+          </div>
           <h2 className="text-xl font-bold text-foreground">Revisá tu email</h2>
-          <p className="text-sm text-muted mt-2">
-            Te enviamos un link de confirmación. Hacé click en él para activar tu cuenta.
+          <p className="text-sm text-muted">
+            Enviamos un código de 6 dígitos a<br />
+            <span className="font-medium text-foreground">{pendingEmail}</span>
           </p>
         </div>
-        <Link href="/login" className="inline-block text-primary hover:text-primary-dark text-sm font-medium transition-colors">
-          Volver al login →
-        </Link>
+
+        {/* Inputs OTP */}
+        <div className="flex justify-center gap-3">
+          {otp.map((digit, i) => (
+            <input
+              key={i}
+              ref={(el) => { inputsRef.current[i] = el; }}
+              type="text"
+              inputMode="numeric"
+              maxLength={1}
+              value={digit}
+              onChange={(e) => handleOtpChange(i, e.target.value)}
+              onKeyDown={(e) => handleOtpKeyDown(i, e)}
+              className="w-11 h-14 text-center text-xl font-bold rounded-xl border border-border bg-surface-2 text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+            />
+          ))}
+        </div>
+
+        <Button onClick={handleVerify} className="w-full" disabled={verifying}>
+          {verifying && <Loader2 size={16} className="animate-spin" />}
+          {verifying ? "Verificando..." : "Confirmar código"}
+        </Button>
+
+        <p className="text-center text-xs text-muted">
+          ¿No llegó?{" "}
+          <button
+            className="text-primary hover:underline"
+            onClick={() => { setPendingEmail(null); setOtp(["","","","","",""]); }}
+          >
+            Volver a registrarse
+          </button>
+        </p>
       </div>
     );
   }
 
+  // ── Paso 1: formulario de registro ──
   return (
     <div>
       <div className="mb-8">
