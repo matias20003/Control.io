@@ -1,12 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password"];
+const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/auth"];
 
 export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isPublicRoute = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
 
-  // Detectar cookie de sesión de Supabase (formato: sb-<project-ref>-auth-token)
+  // Chequeo optimista: si no hay cookie de sesión y la ruta es protegida, redirigir al login.
+  // NO redirigimos de login→dashboard aquí porque la cookie puede estar expirada,
+  // lo que causaría un loop infinito. El dashboard/layout valida la sesión real con Supabase.
   const hasSession = request.cookies
     .getAll()
     .some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"));
@@ -14,12 +16,6 @@ export function proxy(request: NextRequest) {
   if (!hasSession && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
-
-  if (hasSession && isPublicRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
