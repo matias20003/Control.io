@@ -32,7 +32,14 @@ export async function loginAction(formData: FormData) {
   });
 
   if (error) {
-    return { error: "Email o contraseña incorrectos" };
+    const msg = error.message.toLowerCase();
+    if (msg.includes("email not confirmed")) {
+      return { error: "Confirmá tu email antes de ingresar. Revisá tu bandeja de entrada." };
+    }
+    if (msg.includes("invalid login") || msg.includes("invalid credentials") || msg.includes("wrong password")) {
+      return { error: "Email o contraseña incorrectos" };
+    }
+    return { error: `Error al ingresar: ${error.message}` };
   }
 
   redirect("/dashboard");
