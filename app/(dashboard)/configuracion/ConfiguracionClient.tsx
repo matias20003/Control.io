@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Tag, User, LogOut, Pencil } from "lucide-react";
+import { Plus, Trash2, Tag, User, LogOut, Pencil, KeyRound, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,7 @@ import {
   updateCategoryAction,
   deleteCategoryAction,
 } from "@/app/actions/categories";
-import { signOutAction } from "@/app/actions/auth";
+import { signOutAction, updatePasswordAction } from "@/app/actions/auth";
 import type { SerializedCategory } from "@/lib/db/categories";
 
 type Tab = "categorias" | "perfil";
@@ -195,38 +195,10 @@ export function ConfiguracionClient({
 
       {/* Profile tab */}
       {tab === "perfil" && (
-        <div className="space-y-4 max-w-sm">
-          <Card>
-            <CardContent className="p-5 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-xl font-bold text-primary">
-                  {(profileName || profileEmail)[0].toUpperCase()}
-                </div>
-                <div>
-                  <p className="font-semibold text-foreground">
-                    {profileName || "Sin nombre"}
-                  </p>
-                  <p className="text-sm text-muted">{profileEmail}</p>
-                </div>
-              </div>
-
-              <div className="pt-1 border-t border-border space-y-3">
-                <p className="text-xs text-muted">
-                  Para cambiar tu email o contraseña, contactá al administrador.
-                </p>
-                <form action={signOutAction}>
-                  <button
-                    type="submit"
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-danger hover:bg-danger/10 transition-all w-full border border-danger/30"
-                  >
-                    <LogOut size={15} />
-                    Cerrar sesión
-                  </button>
-                </form>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <ProfileTab
+          profileName={profileName}
+          profileEmail={profileEmail}
+        />
       )}
 
       {/* Edit category dialog */}
@@ -326,6 +298,89 @@ export function ConfiguracionClient({
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function ProfileTab({ profileName, profileEmail }: { profileName: string | null; profileEmail: string }) {
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew]         = useState(false);
+  const [loading, setLoading]         = useState(false);
+
+  const handlePassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const result = await updatePasswordAction(new FormData(e.currentTarget));
+      if (result?.error) toast.error(result.error);
+      else { toast.success(result.success!); (e.target as HTMLFormElement).reset(); }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 max-w-sm">
+      {/* Info */}
+      <Card>
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-xl font-bold text-primary">
+              {(profileName || profileEmail)[0].toUpperCase()}
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">{profileName || "Sin nombre"}</p>
+              <p className="text-sm text-muted">{profileEmail}</p>
+            </div>
+          </div>
+          <div className="pt-1 border-t border-border">
+            <form action={signOutAction}>
+              <button type="submit" className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-danger hover:bg-danger/10 transition-all w-full border border-danger/30">
+                <LogOut size={15} />
+                Cerrar sesión
+              </button>
+            </form>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Cambiar contraseña */}
+      <Card>
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <KeyRound size={16} className="text-primary" />
+            <p className="text-sm font-semibold text-foreground">Cambiar contraseña</p>
+          </div>
+          <form onSubmit={handlePassword} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="currentPassword">Contraseña actual</Label>
+              <div className="relative">
+                <Input id="currentPassword" name="currentPassword" type={showCurrent ? "text" : "password"} placeholder="••••••••" className="pr-10" required />
+                <button type="button" onClick={() => setShowCurrent(!showCurrent)} className="absolute right-3 top-3 text-muted hover:text-foreground">
+                  {showCurrent ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="password">Nueva contraseña</Label>
+              <div className="relative">
+                <Input id="password" name="password" type={showNew ? "text" : "password"} placeholder="Mínimo 8 caracteres" className="pr-10" required />
+                <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-3 text-muted hover:text-foreground">
+                  {showNew ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="confirmPassword">Confirmar nueva contraseña</Label>
+              <Input id="confirmPassword" name="confirmPassword" type="password" placeholder="••••••••" required />
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading && <Loader2 size={15} className="animate-spin mr-1" />}
+              {loading ? "Actualizando..." : "Actualizar contraseña"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -122,6 +122,32 @@ export async function resetPasswordAction(formData: FormData) {
   redirect("/login");
 }
 
+export async function updatePasswordAction(formData: FormData) {
+  const current = formData.get("currentPassword") as string;
+  const password = formData.get("password") as string;
+  const confirm  = formData.get("confirmPassword") as string;
+
+  if (password !== confirm) return { error: "Las contraseñas no coinciden" };
+  if (password.length < 8)  return { error: "Mínimo 8 caracteres" };
+
+  const supabase = await createClient();
+
+  // Re-autenticar con la contraseña actual para verificar identidad
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email) return { error: "No autorizado" };
+
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: current,
+  });
+  if (signInError) return { error: "La contraseña actual es incorrecta" };
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { error: "Error al actualizar la contraseña" };
+
+  return { success: "Contraseña actualizada correctamente" };
+}
+
 export async function signOutAction() {
   const supabase = await createClient();
   await supabase.auth.signOut();
