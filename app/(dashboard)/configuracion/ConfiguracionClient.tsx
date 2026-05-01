@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Tag, User } from "lucide-react";
+import { Plus, Trash2, Tag, User, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,7 @@ import {
   createCategoryAction,
   deleteCategoryAction,
 } from "@/app/actions/categories";
+import { signOutAction } from "@/app/actions/auth";
 import type { SerializedCategory } from "@/lib/db/categories";
 
 type Tab = "categorias" | "perfil";
@@ -192,11 +193,19 @@ export function ConfiguracionClient({
                 </div>
               </div>
 
-              <div className="pt-1 border-t border-border">
+              <div className="pt-1 border-t border-border space-y-3">
                 <p className="text-xs text-muted">
-                  Para cambiar tu email o contraseña, usá las opciones de
-                  Supabase Auth en la configuración de tu cuenta.
+                  Para cambiar tu email o contraseña, contactá al administrador.
                 </p>
+                <form action={signOutAction}>
+                  <button
+                    type="submit"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-danger hover:bg-danger/10 transition-all w-full border border-danger/30"
+                  >
+                    <LogOut size={15} />
+                    Cerrar sesión
+                  </button>
+                </form>
               </div>
             </CardContent>
           </Card>
