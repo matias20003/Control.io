@@ -34,7 +34,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
-  const [otp, setOtp] = useState(["", "", "", "", "", "", "", ""]);
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [verifying, setVerifying] = useState(false);
   const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -62,7 +62,7 @@ export default function RegisterPage() {
     const next = [...otp];
     next[index] = value.slice(-1);
     setOtp(next);
-    if (value && index < 7) inputsRef.current[index + 1]?.focus();
+    if (value && index < 5) inputsRef.current[index + 1]?.focus();
   };
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
@@ -73,8 +73,8 @@ export default function RegisterPage() {
 
   const handleVerify = async () => {
     const token = otp.join("");
-    if (token.length !== 8) {
-      toast.error("Ingresá los 8 dígitos");
+    if (token.length !== 6) {
+      toast.error("Ingresá los 6 dígitos");
       return;
     }
     setVerifying(true);
@@ -96,7 +96,7 @@ export default function RegisterPage() {
           </div>
           <h2 className="text-xl font-bold text-foreground">Revisá tu email</h2>
           <p className="text-sm text-muted">
-            Enviamos un código de 8 dígitos a<br />
+            Enviamos un código de 6 dígitos a<br />
             <span className="font-medium text-foreground">{pendingEmail}</span>
           </p>
         </div>
