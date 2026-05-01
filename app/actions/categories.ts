@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import { createCategory, deleteCategory } from "@/lib/db/categories";
+import { createCategory, updateCategory, deleteCategory } from "@/lib/db/categories";
 import { z } from "zod";
 
 const createCategorySchema = z.object({
@@ -36,6 +36,27 @@ export async function createCategoryAction(formData: FormData) {
     return { success: true, category };
   } catch {
     return { error: "Error al crear la categoría" };
+  }
+}
+
+export async function updateCategoryAction(categoryId: string, formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autorizado" };
+
+  const data = {
+    name: (formData.get("name") as string) || undefined,
+    icon: (formData.get("icon") as string) || undefined,
+    color: (formData.get("color") as string) || undefined,
+  };
+
+  try {
+    const category = await updateCategory(user.id, categoryId, data);
+    revalidatePath("/configuracion");
+    revalidatePath("/movimientos");
+    return { success: true, category };
+  } catch {
+    return { error: "Error al actualizar la categoría" };
   }
 }
 

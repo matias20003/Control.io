@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Tag, User, LogOut } from "lucide-react";
+import { Plus, Trash2, Tag, User, LogOut, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   createCategoryAction,
+  updateCategoryAction,
   deleteCategoryAction,
 } from "@/app/actions/categories";
 import { signOutAction } from "@/app/actions/auth";
@@ -31,9 +32,9 @@ export function ConfiguracionClient({
   profileEmail,
 }: Props) {
   const [tab, setTab] = useState<Tab>("categorias");
-  const [categories, setCategories] =
-    useState<SerializedCategory[]>(initialCategories);
+  const [categories, setCategories] = useState<SerializedCategory[]>(initialCategories);
   const [isOpen, setIsOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<SerializedCategory | null>(null);
   const [isPending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -49,6 +50,20 @@ export function ConfiguracionClient({
         setCategories((prev) => [...prev, result.category!]);
         setIsOpen(false);
         toast.success("Categoría creada");
+      }
+    });
+  };
+
+  const handleEdit = (formData: FormData) => {
+    if (!editingCategory) return;
+    startTransition(async () => {
+      const result = await updateCategoryAction(editingCategory.id, formData);
+      if (result.error) {
+        toast.error(result.error);
+      } else if (result.success && result.category) {
+        setCategories((prev) => prev.map((c) => c.id === result.category!.id ? result.category! : c));
+        setEditingCategory(null);
+        toast.success("Categoría actualizada");
       }
     });
   };
@@ -127,6 +142,7 @@ export function ConfiguracionClient({
                   <CategoryRow
                     key={cat.id}
                     category={cat}
+                    onEdit={setEditingCategory}
                     onDelete={handleDelete}
                     deletingId={deletingId}
                     isPending={isPending}
@@ -151,6 +167,7 @@ export function ConfiguracionClient({
                   <CategoryRow
                     key={cat.id}
                     category={cat}
+                    onEdit={setEditingCategory}
                     onDelete={handleDelete}
                     deletingId={deletingId}
                     isPending={isPending}
@@ -211,6 +228,35 @@ export function ConfiguracionClient({
           </Card>
         </div>
       )}
+
+      {/* Edit category dialog */}
+      <Dialog open={!!editingCategory} onOpenChange={(o) => !o && setEditingCategory(null)}>
+        <DialogContent title="Editar categoría">
+          <form action={handleEdit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-name">Nombre *</Label>
+              <Input id="edit-name" name="name" defaultValue={editingCategory?.name} required />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-icon">Ícono (emoji)</Label>
+                <Input id="edit-icon" name="icon" placeholder="📦" maxLength={4} defaultValue={editingCategory?.icon ?? ""} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-color">Color</Label>
+                <div className="flex gap-2 items-center">
+                  <Input id="edit-color" name="color" type="color" defaultValue={editingCategory?.color ?? "#94a3b8"} className="h-10 w-12 p-1 cursor-pointer" />
+                  <span className="text-xs text-muted">Opcional</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button type="button" variant="ghost" className="flex-1" onClick={() => setEditingCategory(null)}>Cancelar</Button>
+              <Button type="submit" className="flex-1" disabled={isPending}>{isPending ? "Guardando..." : "Guardar"}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Create category dialog */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -286,11 +332,13 @@ export function ConfiguracionClient({
 
 function CategoryRow({
   category,
+  onEdit,
   onDelete,
   deletingId,
   isPending,
 }: {
   category: SerializedCategory;
+  onEdit: (cat: SerializedCategory) => void;
   onDelete: (id: string) => void;
   deletingId: string | null;
   isPending: boolean;
@@ -321,6 +369,13 @@ function CategoryRow({
             />
           )}
 
+          <button
+            onClick={() => onEdit(category)}
+            disabled={isPending}
+            className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+          >
+            <Pencil size={13} />
+          </button>
           <button
             onClick={() => onDelete(category.id)}
             disabled={deletingId === category.id || isPending}
