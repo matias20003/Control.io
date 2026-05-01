@@ -59,7 +59,7 @@ export async function createAccount(userId: string, data: {
 }
 
 export async function updateAccount(userId: string, accountId: string, data: {
-  name?: string; type?: string; currency?: string; color?: string; icon?: string;
+  name?: string; type?: string; currency?: string; balance?: number; color?: string; icon?: string;
 }) {
   const row = await prisma.account.update({
     where: { id: accountId, userId },
@@ -67,6 +67,7 @@ export async function updateAccount(userId: string, accountId: string, data: {
       ...(data.name !== undefined && { name: data.name }),
       ...(data.type !== undefined && { type: data.type as any }),
       ...(data.currency !== undefined && { currency: data.currency }),
+      ...(data.balance !== undefined && { balance: data.balance }),
       ...(data.color !== undefined && { color: data.color }),
       ...(data.icon !== undefined && { icon: data.icon }),
     },

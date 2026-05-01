@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import { createAccount, deleteAccount } from "@/lib/db/accounts";
+import { createAccount, updateAccount, deleteAccount } from "@/lib/db/accounts";
 import { z } from "zod";
 
 const createAccountSchema = z.object({
@@ -50,6 +50,33 @@ export async function createAccountAction(formData: FormData) {
     return { success: true, account };
   } catch {
     return { error: "Error al crear la cuenta" };
+  }
+}
+
+export async function updateAccountAction(accountId: string, formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autorizado" };
+
+  const data = {
+    name: (formData.get("name") as string) || undefined,
+    type: (formData.get("type") as string) || undefined,
+    currency: (formData.get("currency") as string) || undefined,
+    balance: formData.get("balance") !== null ? parseFloat(formData.get("balance") as string) : undefined,
+    color: (formData.get("color") as string) || undefined,
+    icon: (formData.get("icon") as string) || undefined,
+  };
+
+  try {
+    const account = await updateAccount(user.id, accountId, data);
+    revalidatePath("/cuentas");
+    revalidatePath("/dashboard");
+    revalidatePath("/movimientos");
+    return { success: true, account };
+  } catch {
+    return { error: "Error al actualizar la cuenta" };
   }
 }
 
