@@ -16,6 +16,7 @@ import {
   deleteCategoryAction,
 } from "@/app/actions/categories";
 import { signOutAction, updatePasswordAction } from "@/app/actions/auth";
+import { deleteAllDataAction } from "@/app/actions/data";
 import type { SerializedCategory } from "@/lib/db/categories";
 
 type Tab = "categorias" | "perfil";
@@ -306,6 +307,22 @@ function ProfileTab({ profileName, profileEmail }: { profileName: string | null;
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew]         = useState(false);
   const [loading, setLoading]         = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteAll = async () => {
+    setDeleting(true);
+    try {
+      const result = await deleteAllDataAction();
+      if (result?.error) toast.error(result.error);
+      else {
+        toast.success("Todos los datos fueron eliminados");
+        setShowDeleteConfirm(false);
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const handlePassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -351,6 +368,7 @@ function ProfileTab({ profileName, profileEmail }: { profileName: string | null;
             <KeyRound size={16} className="text-primary" />
             <p className="text-sm font-semibold text-foreground">Cambiar contraseña</p>
           </div>
+
           <form onSubmit={handlePassword} className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="currentPassword">Contraseña actual</Label>
@@ -379,6 +397,44 @@ function ProfileTab({ profileName, profileEmail }: { profileName: string | null;
               {loading ? "Actualizando..." : "Actualizar contraseña"}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Zona de peligro */}
+      <Card className="border-danger/30">
+        <CardContent className="p-5 space-y-3">
+          <p className="text-sm font-semibold text-danger">Zona de peligro</p>
+          <p className="text-xs text-muted">
+            Esto elimina permanentemente todos tus movimientos, cuentas, categorías, inversiones, deudas, metas y presupuestos. No se puede deshacer.
+          </p>
+
+          {!showDeleteConfirm ? (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="w-full py-2 px-4 rounded-lg border border-danger/40 text-danger text-sm font-medium hover:bg-danger/10 transition-colors"
+            >
+              Eliminar todos mis datos
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-danger text-center">¿Estás seguro? Esta acción no se puede deshacer.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 py-2 px-4 rounded-lg border border-border text-sm font-medium text-muted hover:bg-surface-2 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteAll}
+                  disabled={deleting}
+                  className="flex-1 py-2 px-4 rounded-lg bg-danger text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                >
+                  {deleting ? "Eliminando..." : "Sí, eliminar todo"}
+                </button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
