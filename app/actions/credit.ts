@@ -58,10 +58,14 @@ export async function updateCreditPurchaseAction(purchaseId: string, formData: F
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autorizado" };
 
+  const rawAmount = formData.get("totalAmount") as string;
   const data = {
     description: (formData.get("description") as string) || undefined,
     accountId: (formData.get("accountId") as string) || undefined,
     categoryId: (formData.get("categoryId") as string) || null,
+    currency: (formData.get("currency") as string) || undefined,
+    totalAmount: rawAmount ? parseFloat(rawAmount) : undefined,
+    firstPaymentDate: (formData.get("firstPaymentDate") as string) || undefined,
   };
 
   try {

@@ -328,14 +328,47 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
               <Label htmlFor="edit-desc">Descripción *</Label>
               <Input id="edit-desc" name="description" defaultValue={editingPurchase?.description} required />
             </div>
+
             <div className="space-y-1.5">
-              <Label htmlFor="edit-account">Tarjeta de crédito *</Label>
+              <Label htmlFor="edit-account">Tarjeta / Cuenta *</Label>
               <Select id="edit-account" name="accountId" defaultValue={editingPurchase?.accountId} required>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </Select>
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-amount">Monto total *</Label>
+                <Input
+                  id="edit-amount"
+                  name="totalAmount"
+                  type="number"
+                  step="0.01"
+                  defaultValue={editingPurchase?.totalAmount}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-currency">Moneda</Label>
+                <Select id="edit-currency" name="currency" defaultValue={editingPurchase?.currency ?? "ARS"}>
+                  <option value="ARS">ARS</option>
+                  <option value="USD">USD</option>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-first">Fecha 1ª cuota</Label>
+              <Input
+                id="edit-first"
+                name="firstPaymentDate"
+                type="date"
+                defaultValue={editingPurchase?.firstPaymentDate?.split("T")[0]}
+              />
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="edit-cat">Categoría</Label>
               <Select id="edit-cat" name="categoryId" defaultValue={editingPurchase?.categoryId ?? ""}>
@@ -345,7 +378,11 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
                 ))}
               </Select>
             </div>
-            <p className="text-xs text-muted">El monto y cantidad de cuotas no se pueden cambiar.</p>
+
+            <p className="text-xs text-muted">
+              Cambiar monto o fecha recalcula las cuotas pendientes.
+            </p>
+
             <div className="flex gap-2 pt-1">
               <Button type="button" variant="ghost" className="flex-1" onClick={() => setEditingPurchase(null)}>Cancelar</Button>
               <Button type="submit" className="flex-1" disabled={isPending}>{isPending ? "Guardando..." : "Guardar"}</Button>

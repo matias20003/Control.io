@@ -146,17 +146,66 @@ export async function payInstallment(
 export async function updateCreditPurchase(
   userId: string,
   purchaseId: string,
-  data: { description?: string; accountId?: string; categoryId?: string | null }
+  data: {
+    description?: string;
+    accountId?: string;
+    categoryId?: string | null;
+    currency?: string;
+    totalAmount?: number;
+    firstPaymentDate?: string;
+  }
 ): Promise<SerializedCreditPurchase> {
-  const row = await prisma.creditPurchase.update({
+  // Get current purchase to know unpaid installments
+  const current = await prisma.creditPurchase.findUnique({
     where: { id: purchaseId, userId },
-    data: {
-      ...(data.description !== undefined && { description: data.description }),
-      ...(data.accountId !== undefined && { accountId: data.accountId }),
-      ...(data.categoryId !== undefined && { categoryId: data.categoryId }),
-    },
-    include: INCLUDE,
+    include: { installments: { orderBy: { installmentNumber: "asc" } } },
   });
+  if (!current) throw new Error("No encontrado");
+
+  const unpaid = current.installments.filter((i) => !i.isPaid);
+  const newFirstDate = data.firstPaymentDate ? new Date(data.firstPaymentDate) : null;
+  const newAmount = data.totalAmount;
+
+  // Build installment updates if needed
+  const installmentUpdates: Promise<any>[] = [];
+
+  if (newFirstDate || newAmount !== undefined) {
+    const baseAmount = newAmount !== undefined
+      ? parseFloat((newAmount / current.totalInstallments).toFixed(2))
+      : null;
+
+    unpaid.forEach((inst) => {
+      const updates: any = {};
+      if (newFirstDate) {
+        updates.dueDate = addMonths(newFirstDate, inst.installmentNumber - 1);
+      }
+      if (baseAmount !== null) {
+        updates.amount = baseAmount;
+      }
+      if (Object.keys(updates).length > 0) {
+        installmentUpdates.push(
+          prisma.creditInstallment.update({ where: { id: inst.id }, data: updates })
+        );
+      }
+    });
+  }
+
+  const [row] = await prisma.$transaction([
+    prisma.creditPurchase.update({
+      where: { id: purchaseId, userId },
+      data: {
+        ...(data.description !== undefined && { description: data.description }),
+        ...(data.accountId !== undefined && { accountId: data.accountId }),
+        ...(data.categoryId !== undefined && { categoryId: data.categoryId }),
+        ...(data.currency !== undefined && { currency: data.currency }),
+        ...(newAmount !== undefined && { totalAmount: newAmount }),
+        ...(newFirstDate && { firstPaymentDate: newFirstDate }),
+      },
+      include: INCLUDE,
+    }),
+    ...installmentUpdates,
+  ]);
+
   return serialize(row);
 }
 
