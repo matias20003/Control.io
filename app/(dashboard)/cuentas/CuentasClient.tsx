@@ -169,23 +169,27 @@ export function CuentasClient({ initialAccounts }: Props) {
                     <p className="text-xs text-muted">{account.currency}</p>
                   </div>
 
-                  {/* Edit */}
-                  <button
-                    onClick={() => setEditingAccount(account)}
-                    disabled={isPending}
-                    className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
-                  >
-                    <Pencil size={14} />
-                  </button>
-
-                  {/* Delete */}
-                  <button
-                    onClick={() => handleDelete(account.id)}
-                    disabled={deletingId === account.id || isPending}
-                    className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {/* Actions */}
+                  <div className="flex items-center gap-1 ml-2">
+                    <button
+                      onClick={() => setEditingAccount(account)}
+                      disabled={isPending}
+                      title="Editar cuenta"
+                      style={{ color: "#94a3b8" }}
+                      className="p-2 rounded-lg hover:bg-blue-500/20 hover:text-blue-400 transition-colors disabled:opacity-50"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(account.id)}
+                      disabled={deletingId === account.id || isPending}
+                      title="Eliminar cuenta"
+                      style={{ color: "#94a3b8" }}
+                      className="p-2 rounded-lg hover:bg-red-500/20 hover:text-red-400 transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
