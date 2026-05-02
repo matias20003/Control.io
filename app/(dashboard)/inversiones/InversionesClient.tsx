@@ -199,7 +199,7 @@ export function InversionesClient({ initialInvestments, rates }: Props) {
                     <button
                       onClick={() => handleDelete(inv.id)}
                       disabled={deletingId === inv.id || isPending}
-                      className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50 flex-shrink-0"
+                      className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50 flex-shrink-0"
                     >
                       <Trash2 size={13} />
                     </button>

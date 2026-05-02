@@ -414,7 +414,7 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
                       </p>
                     </div>
                     {/* Actions */}
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-0.5 transition-opacity">
                       <button onClick={() => openEdit(tx)}
                         className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors">
                         <Pencil size={13} />

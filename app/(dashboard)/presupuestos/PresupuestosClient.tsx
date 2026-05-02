@@ -201,7 +201,7 @@ export function PresupuestosClient({
                     <button
                       onClick={() => handleDelete(b.id)}
                       disabled={deletingId === b.id || isPending}
-                      className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                      className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
                     >
                       <Trash2 size={13} />
                     </button>

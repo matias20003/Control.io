@@ -483,14 +483,14 @@ function CategoryRow({
           <button
             onClick={() => onEdit(category)}
             disabled={isPending}
-            className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+            className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
           >
             <Pencil size={13} />
           </button>
           <button
             onClick={() => onDelete(category.id)}
             disabled={deletingId === category.id || isPending}
-            className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+            className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
           >
             <Trash2 size={13} />
           </button>
