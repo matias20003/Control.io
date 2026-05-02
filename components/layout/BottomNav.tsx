@@ -30,7 +30,7 @@ const mainItems = [
 ];
 
 const moreItems = [
-  { href: "/reporte-semanal", icon: BookOpen,   label: "Reporte semanal" },
+  { href: "/reporte",         icon: BookOpen,   label: "Reporte semanal" },
   { href: "/tendencias",      icon: BarChart2,  label: "Tendencias" },
   { href: "/agenda",          icon: Calendar,   label: "Agenda" },
   { href: "/cotizaciones",    icon: DollarSign, label: "Cotizaciones" },
