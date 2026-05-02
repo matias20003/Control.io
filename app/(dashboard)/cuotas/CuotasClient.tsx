@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Check, Trash2, CreditCard } from "lucide-react";
+import { Plus, Check, Trash2, CreditCard, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   createCreditPurchaseAction,
+  updateCreditPurchaseAction,
   payInstallmentAction,
   deleteCreditPurchaseAction,
 } from "@/app/actions/credit";
@@ -33,6 +34,7 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
   const [purchases, setPurchases] =
     useState<SerializedCreditPurchase[]>(initialPurchases);
   const [isOpen, setIsOpen] = useState(false);
+  const [editingPurchase, setEditingPurchase] = useState<SerializedCreditPurchase | null>(null);
   const [isPending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -59,6 +61,19 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
+    });
+  };
+
+  const handleEdit = (formData: FormData) => {
+    if (!editingPurchase) return;
+    startTransition(async () => {
+      const result = await updateCreditPurchaseAction(editingPurchase.id, formData);
+      if (result.error) toast.error(result.error);
+      else if (result.success && result.purchase) {
+        setPurchases((prev) => prev.map((p) => p.id === result.purchase!.id ? result.purchase! : p));
+        setEditingPurchase(null);
+        toast.success("Compra actualizada");
+      }
     });
   };
 
@@ -184,6 +199,13 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
                     {p.paidInstallments}/{p.totalInstallments}
                   </span>
                   <button
+                    onClick={() => setEditingPurchase(p)}
+                    disabled={isPending}
+                    className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
                     onClick={() => handleDelete(p.id)}
                     disabled={deletingId === p.id || isPending}
                     className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
@@ -297,6 +319,40 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
           ))}
         </div>
       )}
+
+      {/* Edit dialog */}
+      <Dialog open={!!editingPurchase} onOpenChange={(o) => !o && setEditingPurchase(null)}>
+        <DialogContent title="Editar compra en cuotas">
+          <form action={handleEdit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-desc">Descripción *</Label>
+              <Input id="edit-desc" name="description" defaultValue={editingPurchase?.description} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-account">Tarjeta de crédito *</Label>
+              <Select id="edit-account" name="accountId" defaultValue={editingPurchase?.accountId} required>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-cat">Categoría</Label>
+              <Select id="edit-cat" name="categoryId" defaultValue={editingPurchase?.categoryId ?? ""}>
+                <option value="">Sin categoría</option>
+                {categories.filter((c) => c.type === "EXPENSE").map((c) => (
+                  <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                ))}
+              </Select>
+            </div>
+            <p className="text-xs text-muted">El monto y cantidad de cuotas no se pueden cambiar.</p>
+            <div className="flex gap-2 pt-1">
+              <Button type="button" variant="ghost" className="flex-1" onClick={() => setEditingPurchase(null)}>Cancelar</Button>
+              <Button type="submit" className="flex-1" disabled={isPending}>{isPending ? "Guardando..." : "Guardar"}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Create dialog */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>

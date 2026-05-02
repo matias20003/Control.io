@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import {
   createCreditPurchase,
+  updateCreditPurchase,
   payInstallment,
   deleteCreditPurchase,
 } from "@/lib/db/credit";
@@ -49,6 +50,26 @@ export async function createCreditPurchaseAction(formData: FormData) {
     return { success: true, purchase };
   } catch {
     return { error: "Error al registrar la compra" };
+  }
+}
+
+export async function updateCreditPurchaseAction(purchaseId: string, formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autorizado" };
+
+  const data = {
+    description: (formData.get("description") as string) || undefined,
+    accountId: (formData.get("accountId") as string) || undefined,
+    categoryId: (formData.get("categoryId") as string) || null,
+  };
+
+  try {
+    const purchase = await updateCreditPurchase(user.id, purchaseId, data);
+    revalidatePath("/cuotas");
+    return { success: true, purchase };
+  } catch {
+    return { error: "Error al actualizar la compra" };
   }
 }
 

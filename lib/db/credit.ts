@@ -20,6 +20,7 @@ export type SerializedCreditPurchase = {
   totalInstallments: number;
   paidInstallments: number;
   firstPaymentDate: string;
+  categoryId: string | null;
   installments: SerializedCreditInstallment[];
   createdAt: string;
 };
@@ -54,6 +55,7 @@ function serialize(p: any): SerializedCreditPurchase {
       p.firstPaymentDate instanceof Date
         ? p.firstPaymentDate.toISOString()
         : p.firstPaymentDate,
+    categoryId: p.categoryId ?? null,
     installments: (p.installments ?? []).map(serializeInstallment),
     createdAt:
       p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
@@ -139,6 +141,23 @@ export async function payInstallment(
     where: { id: installment.creditPurchaseId },
     data: { paidInstallments: { increment: 1 } },
   });
+}
+
+export async function updateCreditPurchase(
+  userId: string,
+  purchaseId: string,
+  data: { description?: string; accountId?: string; categoryId?: string | null }
+): Promise<SerializedCreditPurchase> {
+  const row = await prisma.creditPurchase.update({
+    where: { id: purchaseId, userId },
+    data: {
+      ...(data.description !== undefined && { description: data.description }),
+      ...(data.accountId !== undefined && { accountId: data.accountId }),
+      ...(data.categoryId !== undefined && { categoryId: data.categoryId }),
+    },
+    include: INCLUDE,
+  });
+  return serialize(row);
 }
 
 export async function deleteCreditPurchase(
