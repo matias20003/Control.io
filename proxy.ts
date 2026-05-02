@@ -1,10 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/auth"];
+// /login/verify cae bajo el prefijo /login.
+// /setup-2fa NO es pública — requiere sesión activa (la página la valida).
+const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/auth", "/presentacion"];
+// Rutas públicas con match exacto (para no abrir todo el árbol con startsWith("/")).
+const PUBLIC_EXACT = ["/"];
 
 export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  const isPublicRoute = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
+  const isPublicRoute =
+    PUBLIC_EXACT.includes(pathname) ||
+    PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
 
   // Chequeo optimista: si no hay cookie de sesión y la ruta es protegida, redirigir al login.
   // NO redirigimos de login→dashboard aquí porque la cookie puede estar expirada,

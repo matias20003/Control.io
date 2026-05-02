@@ -42,6 +42,18 @@ export async function loginAction(formData: FormData) {
     return { error: `Error al ingresar: ${error.message}` };
   }
 
+  // 2FA es opcional. Si el user activó un factor verificado, exigimos el desafío.
+  // Si no, va directo al dashboard.
+  const { data: factors } = await supabase.auth.mfa.listFactors();
+  const hasVerifiedFactor = factors?.totp?.some((f) => f.status === "verified") ?? false;
+
+  if (hasVerifiedFactor) {
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal?.currentLevel !== "aal2") {
+      redirect("/login/verify");
+    }
+  }
+
   redirect("/dashboard");
 }
 

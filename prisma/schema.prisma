@@ -78,6 +78,7 @@ model Profile {
   budgets               Budget[]
   goals                 Goal[]
   pushSubscriptions     PushSubscription[]
+  mfaRecoveryCodes      MfaRecoveryCode[]
 
   @@map("profiles")
 }
@@ -320,6 +321,18 @@ model PushSubscription {
 
   @@index([userId])
   @@map("push_subscriptions")
+}
+
+model MfaRecoveryCode {
+  id         String    @id @default(cuid())
+  userId     String
+  user       Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, consumedAt])
+  @@map("mfa_recovery_codes")
 }
 
 model ExchangeRate {
