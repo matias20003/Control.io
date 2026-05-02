@@ -12,6 +12,7 @@ import { formatCurrency, formatMonth, percentageOf } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Scale, PiggyBank, ChevronRight, AlertTriangle, CheckCircle2, Info, ClipboardList } from "lucide-react";
 import { DashboardQuickAdd } from "./DashboardQuickAdd";
 import { CategoryChart } from "./CategoryChart";
+import { TodayDate } from "./TodayDate";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -69,9 +70,7 @@ export default async function DashboardPage() {
       {/* Greeting */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">Hola, {name} 👋</h1>
-        <p className="text-sm text-muted mt-0.5 capitalize">
-          {new Intl.DateTimeFormat("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(now)}
-        </p>
+        <TodayDate />
       </div>
 
       {/* Quick Add */}
