@@ -79,6 +79,8 @@ model Profile {
   goals                 Goal[]
   pushSubscriptions     PushSubscription[]
   mfaRecoveryCodes      MfaRecoveryCode[]
+  gruposCreados         GrupoGasto[]          @relation("GruposCreados")
+  gruposMiembro         MiembroGrupo[]        @relation("GruposMiembro")
 
   @@map("profiles")
 }
@@ -333,6 +335,90 @@ model MfaRecoveryCode {
 
   @@index([userId, consumedAt])
   @@map("mfa_recovery_codes")
+}
+
+// ─────────────────────────────────────────────
+// GRUPOS / GASTOS COMPARTIDOS
+// ─────────────────────────────────────────────
+
+model GrupoGasto {
+  id          String    @id @default(cuid())
+  nombre      String
+  descripcion String?
+  userId      String
+  user        Profile   @relation("GruposCreados", fields: [userId], references: [id], onDelete: Cascade)
+
+  miembros     MiembroGrupo[]
+  gastos       GastoGrupo[]
+  invitaciones GrupoInvitacion[]
+
+  creadoEn    DateTime  @default(now())
+  archivadoEn DateTime?
+
+  @@index([userId])
+  @@map("grupos_gasto")
+}
+
+model MiembroGrupo {
+  id        String     @id @default(cuid())
+  grupoId   String
+  grupo     GrupoGasto @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      Profile?   @relation("GruposMiembro", fields: [userId], references: [id])
+  nombre    String
+  email     String?
+  esCreador Boolean    @default(false)
+  uniEn     DateTime   @default(now())
+
+  gastosPagados GastoGrupo[]    @relation("PagadoPor")
+  divisiones    DivisionGasto[]
+
+  @@unique([grupoId, userId])
+  @@index([grupoId])
+  @@map("miembros_grupo")
+}
+
+model GastoGrupo {
+  id          String       @id @default(cuid())
+  grupoId     String
+  grupo       GrupoGasto   @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  descripcion String
+  monto       Decimal      @db.Decimal(15, 2)
+  pagadoPorId String
+  pagadoPor   MiembroGrupo @relation("PagadoPor", fields: [pagadoPorId], references: [id])
+  divisiones  DivisionGasto[]
+  fecha       DateTime     @default(now())
+  creadoEn    DateTime     @default(now())
+
+  @@index([grupoId])
+  @@map("gastos_grupo")
+}
+
+model DivisionGasto {
+  id        String       @id @default(cuid())
+  gastoId   String
+  gasto     GastoGrupo   @relation(fields: [gastoId], references: [id], onDelete: Cascade)
+  miembroId String
+  miembro   MiembroGrupo @relation(fields: [miembroId], references: [id])
+  monto     Decimal      @db.Decimal(15, 2)
+
+  @@index([gastoId])
+  @@map("divisiones_gasto")
+}
+
+model GrupoInvitacion {
+  id       String     @id @default(cuid())
+  grupoId  String
+  grupo    GrupoGasto @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  email    String
+  nombre   String?
+  token    String     @unique @default(cuid())
+  estado   String     @default("pendiente") // pendiente | aceptada | expirada
+  creadoEn DateTime   @default(now())
+  expiraEn DateTime
+
+  @@index([grupoId])
+  @@map("grupo_invitaciones")
 }
 
 model ExchangeRate {

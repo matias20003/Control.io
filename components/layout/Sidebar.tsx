@@ -18,6 +18,7 @@ import {
   DollarSign,
   CalendarClock,
   ClipboardList,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
@@ -32,6 +33,7 @@ const navItems = [
   { href: "/agenda",        icon: CalendarClock,   label: "Agenda" },
   { href: "/cotizaciones",  icon: DollarSign,      label: "Cotizaciones" },
   { href: "/inversiones",   icon: TrendingUp,      label: "Inversiones" },
+  { href: "/grupos",        icon: Users,           label: "Grupos" },
   { href: "/deudas",        icon: HandCoins,       label: "Deudas" },
   { href: "/cuotas",        icon: CreditCard,      label: "Cuotas" },
   { href: "/presupuestos",  icon: Target,          label: "Presupuestos" },

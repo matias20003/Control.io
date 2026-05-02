@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // /login/verify cae bajo el prefijo /login.
 // /setup-2fa NO es pública — requiere sesión activa (la página la valida).
-const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/auth", "/presentacion"];
+const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/auth", "/presentacion", "/grupos/unirse"];
 // Rutas públicas con match exacto (para no abrir todo el árbol con startsWith("/")).
 const PUBLIC_EXACT = ["/"];
 
