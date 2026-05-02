@@ -8,6 +8,31 @@ import { prisma } from "@/lib/prisma";
 import { getResend, FROM } from "@/lib/email/client";
 import { invitacionGrupoHtml } from "@/lib/email/invitacion-grupo";
 
+// ─── Recalcular divisiones iguales cuando cambia la cantidad de miembros ───
+// Se llama cada vez que se agrega un miembro al grupo.
+// Solo afecta gastos con tipo "igual" — los custom quedan intactos.
+
+async function recalcularDivisionesIguales(grupoId: string) {
+  const miembros = await prisma.miembroGrupo.findMany({ where: { grupoId } });
+  const gastos = await prisma.gastoGrupo.findMany({
+    where: { grupoId, tipo: "igual" },
+  });
+
+  for (const gasto of gastos) {
+    const montoPorMiembro =
+      Math.round((parseFloat(gasto.monto.toString()) / miembros.length) * 100) / 100;
+
+    await prisma.divisionGasto.deleteMany({ where: { gastoId: gasto.id } });
+    await prisma.divisionGasto.createMany({
+      data: miembros.map((m) => ({
+        gastoId: gasto.id,
+        miembroId: m.id,
+        monto: montoPorMiembro,
+      })),
+    });
+  }
+}
+
 // ─── Crear grupo ───────────────────────────────────────────────────────────
 
 const crearGrupoSchema = z.object({
@@ -75,6 +100,9 @@ export async function agregarMiembroAction(formData: FormData) {
       nombre: result.data.nombre,
     },
   });
+
+  // Recalcular todas las divisiones iguales con el nuevo miembro incluido
+  await recalcularDivisionesIguales(result.data.grupoId);
 
   revalidatePath(`/grupos/${result.data.grupoId}`);
   return {
@@ -218,6 +246,7 @@ export async function agregarGastoAction(formData: FormData) {
       descripcion,
       monto,
       pagadoPorId,
+      tipo,
       divisiones: { create: divisiones },
     },
     include: { divisiones: true, pagadoPor: true },
@@ -322,6 +351,9 @@ export async function aceptarInvitacionAction(token: string) {
       data: { estado: "aceptada" },
     }),
   ]);
+
+  // Recalcular divisiones iguales con el nuevo miembro incluido
+  await recalcularDivisionesIguales(invitacion.grupoId);
 
   revalidatePath(`/grupos/${invitacion.grupoId}`);
   revalidatePath("/grupos");

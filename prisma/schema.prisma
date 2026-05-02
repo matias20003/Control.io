@@ -386,6 +386,7 @@ model GastoGrupo {
   monto       Decimal      @db.Decimal(15, 2)
   pagadoPorId String
   pagadoPor   MiembroGrupo @relation("PagadoPor", fields: [pagadoPorId], references: [id])
+  tipo        String       @default("igual") // igual | custom
   divisiones  DivisionGasto[]
   fecha       DateTime     @default(now())
   creadoEn    DateTime     @default(now())
