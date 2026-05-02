@@ -173,7 +173,7 @@ export function CuentasClient({ initialAccounts }: Props) {
                   <button
                     onClick={() => setEditingAccount(account)}
                     disabled={isPending}
-                    className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                    className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
                   >
                     <Pencil size={14} />
                   </button>
@@ -182,7 +182,7 @@ export function CuentasClient({ initialAccounts }: Props) {
                   <button
                     onClick={() => handleDelete(account.id)}
                     disabled={deletingId === account.id || isPending}
-                    className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                    className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
                   >
                     <Trash2 size={14} />
                   </button>
