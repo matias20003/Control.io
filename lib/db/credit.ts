@@ -165,33 +165,22 @@ export async function updateCreditPurchase(
   const unpaid = current.installments.filter((i) => !i.isPaid);
   const newFirstDate = data.firstPaymentDate ? new Date(data.firstPaymentDate) : null;
   const newAmount = data.totalAmount;
+  const baseAmount = newAmount !== undefined
+    ? parseFloat((newAmount / current.totalInstallments).toFixed(2))
+    : null;
 
-  // Build installment updates if needed
-  const installmentUpdates: Promise<any>[] = [];
-
-  if (newFirstDate || newAmount !== undefined) {
-    const baseAmount = newAmount !== undefined
-      ? parseFloat((newAmount / current.totalInstallments).toFixed(2))
-      : null;
-
-    unpaid.forEach((inst) => {
+  const row = await prisma.$transaction(async (tx) => {
+    // Recalculate unpaid installments if date or amount changed
+    for (const inst of unpaid) {
       const updates: any = {};
-      if (newFirstDate) {
-        updates.dueDate = addMonths(newFirstDate, inst.installmentNumber - 1);
-      }
-      if (baseAmount !== null) {
-        updates.amount = baseAmount;
-      }
+      if (newFirstDate) updates.dueDate = addMonths(newFirstDate, inst.installmentNumber - 1);
+      if (baseAmount !== null) updates.amount = baseAmount;
       if (Object.keys(updates).length > 0) {
-        installmentUpdates.push(
-          prisma.creditInstallment.update({ where: { id: inst.id }, data: updates })
-        );
+        await tx.creditInstallment.update({ where: { id: inst.id }, data: updates });
       }
-    });
-  }
+    }
 
-  const [row] = await prisma.$transaction([
-    prisma.creditPurchase.update({
+    return tx.creditPurchase.update({
       where: { id: purchaseId, userId },
       data: {
         ...(data.description !== undefined && { description: data.description }),
@@ -202,9 +191,8 @@ export async function updateCreditPurchase(
         ...(newFirstDate && { firstPaymentDate: newFirstDate }),
       },
       include: INCLUDE,
-    }),
-    ...installmentUpdates,
-  ]);
+    });
+  });
 
   return serialize(row);
 }
