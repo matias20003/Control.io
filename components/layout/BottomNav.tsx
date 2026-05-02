@@ -30,16 +30,16 @@ const mainItems = [
 ];
 
 const moreItems = [
-  { href: "/reporte-semanal", icon: BookOpen,    label: "Reporte semanal" },
-  { href: "/tendencias",      icon: BarChart2,   label: "Tendencias" },
-  { href: "/agenda",          icon: Calendar,    label: "Agenda" },
-  { href: "/cotizaciones",    icon: DollarSign,  label: "Cotizaciones" },
-  { href: "/deudas",          icon: CreditCard,  label: "Deudas" },
-  { href: "/cuotas",          icon: CreditCard,  label: "Cuotas" },
-  { href: "/presupuestos",    icon: PiggyBank,   label: "Presupuestos" },
-  { href: "/metas",           icon: Target,      label: "Metas" },
-  { href: "/recurrentes",     icon: Repeat,      label: "Recurrentes" },
-  { href: "/configuracion",   icon: Settings,    label: "Configuración" },
+  { href: "/reporte-semanal", icon: BookOpen,   label: "Reporte semanal" },
+  { href: "/tendencias",      icon: BarChart2,  label: "Tendencias" },
+  { href: "/agenda",          icon: Calendar,   label: "Agenda" },
+  { href: "/cotizaciones",    icon: DollarSign, label: "Cotizaciones" },
+  { href: "/deudas",          icon: CreditCard, label: "Deudas" },
+  { href: "/cuotas",          icon: CreditCard, label: "Cuotas" },
+  { href: "/presupuestos",    icon: PiggyBank,  label: "Presupuestos" },
+  { href: "/metas",           icon: Target,     label: "Metas" },
+  { href: "/recurrentes",     icon: Repeat,     label: "Recurrentes" },
+  { href: "/configuracion",   icon: Settings,   label: "Configuración" },
 ];
 
 export function BottomNav() {
@@ -50,51 +50,56 @@ export function BottomNav() {
 
   return (
     <>
-      {/* Drawer overlay */}
+      {/* Overlay + sheet — solo se monta cuando está abierto */}
       {open && (
-        <div
-          className="md:hidden fixed inset-0 z-40 bg-black/50"
-          onClick={() => setOpen(false)}
-        />
+        <>
+          {/* Fondo oscuro */}
+          <div
+            className="md:hidden fixed inset-0 z-40 bg-black/50"
+            onClick={() => setOpen(false)}
+          />
+
+          {/* Panel de opciones */}
+          <div className="md:hidden fixed left-0 right-0 bottom-[57px] z-50 bg-surface border-t border-border rounded-t-2xl">
+            <div className="flex items-center justify-between px-5 pt-4 pb-2">
+              <p className="text-sm font-semibold text-foreground">Más opciones</p>
+              <button
+                onClick={() => setOpen(false)}
+                className="p-1 text-muted hover:text-foreground"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-4 gap-1 px-3 pb-5">
+              {moreItems.map((item) => {
+                const isActive = pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className={cn(
+                      "flex flex-col items-center gap-1 px-1 py-3 rounded-xl",
+                      isActive
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted"
+                    )}
+                  >
+                    <item.icon size={22} strokeWidth={1.8} />
+                    <span className="text-[10px] font-medium text-center leading-tight">
+                      {item.label}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </>
       )}
 
-      {/* More drawer */}
-      <div
-        className={cn(
-          "md:hidden fixed left-0 right-0 z-50 bg-surface border-t border-border rounded-t-2xl transition-transform duration-300",
-          open ? "translate-y-0" : "translate-y-full",
-          "bottom-[57px]"
-        )}
-      >
-        <div className="flex items-center justify-between px-5 pt-4 pb-2">
-          <p className="text-sm font-semibold text-foreground">Más opciones</p>
-          <button onClick={() => setOpen(false)} className="text-muted hover:text-foreground">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="grid grid-cols-4 gap-1 px-3 pb-4">
-          {moreItems.map((item) => {
-            const isActive = pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className={cn(
-                  "flex flex-col items-center gap-1 px-2 py-3 rounded-xl transition-all",
-                  isActive ? "bg-primary/10 text-primary" : "text-muted hover:text-foreground hover:bg-surface-2"
-                )}
-              >
-                <item.icon size={22} strokeWidth={1.8} />
-                <span className="text-[10px] font-medium text-center leading-tight">{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Bottom bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface border-t border-border pb-safe">
+      {/* Barra inferior */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-border pb-safe">
         <div className="flex items-center justify-around px-1 py-1">
           {mainItems.map((item) => {
             const isActive =
@@ -115,7 +120,6 @@ export function BottomNav() {
             );
           })}
 
-          {/* Más button */}
           <button
             onClick={() => setOpen(!open)}
             className={cn(
