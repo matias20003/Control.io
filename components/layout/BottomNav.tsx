@@ -19,6 +19,7 @@ import {
   Repeat,
   Settings,
   BookOpen,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,7 @@ const mainItems = [
 ];
 
 const moreItems = [
+  { href: "/grupos",          icon: Users,      label: "Grupos" },
   { href: "/reporte",         icon: BookOpen,   label: "Reporte semanal" },
   { href: "/tendencias",      icon: BarChart2,  label: "Tendencias" },
   { href: "/agenda",          icon: Calendar,   label: "Agenda" },
