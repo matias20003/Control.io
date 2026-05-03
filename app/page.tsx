@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { LogoFull, LogoIcon } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/button";
+import { DashboardMockAnimated } from "./DashboardMockAnimated";
 import {
   ArrowRight,
   ShieldCheck,
@@ -222,9 +223,9 @@ function Hero({ isLogged }: { isLogged: boolean }) {
           </ul>
         </div>
 
-        {/* Right — dashboard mock */}
+        {/* Right — dashboard mock animado */}
         <div className="relative lg:col-span-5">
-          <DashboardMock />
+          <DashboardMockAnimated />
         </div>
       </div>
     </section>
