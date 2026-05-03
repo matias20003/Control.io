@@ -52,9 +52,9 @@ export function BottomNav() {
           />
 
           {/* Sheet */}
-          <div className="md:hidden fixed left-0 right-0 bottom-[57px] z-50 bg-surface border-t border-border rounded-t-2xl shadow-[0_-8px_32px_oklch(0_0_0/40%)] flex flex-col max-h-[75vh]">
+          <div className="md:hidden fixed left-0 right-0 bottom-[57px] z-50 bg-surface border-t border-border rounded-t-2xl shadow-[0_-8px_32px_oklch(0_0_0/40%)] flex flex-col overflow-hidden" style={{ maxHeight: "calc(100dvh - 80px)" }}>
             {/* Header — fijo */}
-            <div className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0">
+            <div className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0 border-b border-border/50">
               <p className="text-xs font-semibold text-muted uppercase tracking-[0.08em]">
                 Más opciones
               </p>
@@ -67,8 +67,8 @@ export function BottomNav() {
             </div>
 
             {/* Grid — scrollable */}
-            <div className="overflow-y-auto overscroll-contain px-3 pb-6 pt-1">
-              <div className="grid grid-cols-4 gap-1">
+            <div className="overflow-y-auto overscroll-contain flex-1 px-3 pt-2 pb-4">
+              <div className="grid grid-cols-3 gap-1">
                 {moreItems.map((item) => {
                   const isActive = pathname.startsWith(item.href);
                   return (
@@ -77,14 +77,14 @@ export function BottomNav() {
                       href={item.href}
                       onClick={() => setOpen(false)}
                       className={cn(
-                        "flex flex-col items-center gap-1.5 px-1 py-3 rounded-xl transition-all duration-150",
+                        "flex flex-col items-center gap-2 px-2 py-4 rounded-xl transition-all duration-150",
                         isActive
                           ? "bg-primary/10 text-primary"
                           : "text-muted hover:text-foreground hover:bg-surface-2"
                       )}
                     >
-                      <item.icon size={19} strokeWidth={isActive ? 2.2 : 1.7} />
-                      <span className="text-[10px] font-medium text-center leading-tight w-full break-words">
+                      <item.icon size={20} strokeWidth={isActive ? 2.2 : 1.7} />
+                      <span className="text-[11px] font-medium text-center leading-tight">
                         {item.label}
                       </span>
                     </Link>
