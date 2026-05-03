@@ -39,16 +39,25 @@ export async function POST() {
       appUrl,
     });
 
-    await getResend().emails.send({
+    const resend = getResend();
+    const result = await resend.emails.send({
       from: FROM,
       to: profile.email,
       subject: `📊 Tu reporte semanal — control.io`,
       html,
     });
 
+    // Resend devuelve { data, error } — verificar error explícitamente
+    if ((result as any).error) {
+      const msg = (result as any).error?.message ?? "Error de Resend";
+      console.error("Resend error:", (result as any).error);
+      return Response.json({ error: msg }, { status: 500 });
+    }
+
     return Response.json({ ok: true, email: profile.email });
-  } catch (err) {
+  } catch (err: any) {
+    const msg = err?.message ?? "Error desconocido";
     console.error("send-report error:", err);
-    return Response.json({ error: "Error al enviar el reporte" }, { status: 500 });
+    return Response.json({ error: msg }, { status: 500 });
   }
 }
