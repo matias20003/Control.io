@@ -190,7 +190,7 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
     type: TxType;
     setType: (t: TxType) => void;
     cats: typeof filteredCategories;
-    defaultValues?: Partial<SerializedTransaction> & { categoryId?: string };
+    defaultValues?: Partial<SerializedTransaction> & { categoryId?: string | null };
     submitLabel: string;
     showAddAnother?: boolean;
   }) => {
