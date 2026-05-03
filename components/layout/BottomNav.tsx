@@ -67,8 +67,8 @@ export function BottomNav() {
             </div>
 
             {/* Grid — scrollable */}
-            <div className="overflow-y-auto overscroll-contain flex-1 px-3 pt-2 pb-4">
-              <div className="grid grid-cols-3 gap-1">
+            <div className="overflow-y-auto overscroll-contain flex-1 px-2 pt-2 pb-8">
+              <div className="grid grid-cols-4 gap-0.5">
                 {moreItems.map((item) => {
                   const isActive = pathname.startsWith(item.href);
                   return (
@@ -77,14 +77,14 @@ export function BottomNav() {
                       href={item.href}
                       onClick={() => setOpen(false)}
                       className={cn(
-                        "flex flex-col items-center gap-2 px-2 py-4 rounded-xl transition-all duration-150",
+                        "flex flex-col items-center gap-2 px-1 py-4 rounded-xl transition-all duration-150",
                         isActive
                           ? "bg-primary/10 text-primary"
                           : "text-muted hover:text-foreground hover:bg-surface-2"
                       )}
                     >
                       <item.icon size={20} strokeWidth={isActive ? 2.2 : 1.7} />
-                      <span className="text-[11px] font-medium text-center leading-tight">
+                      <span className="text-[10px] font-medium text-center leading-tight">
                         {item.label}
                       </span>
                     </Link>
