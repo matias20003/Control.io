@@ -10,31 +10,36 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const mainItems = [
+const leftItems = [
   { href: "/dashboard",   icon: LayoutDashboard, label: "Inicio" },
   { href: "/movimientos", icon: ArrowUpDown,      label: "Movimientos" },
-  { href: "/cuentas",     icon: Wallet,           label: "Cuentas" },
-  { href: "/inversiones", icon: TrendingUp,       label: "Inversiones" },
+];
+
+const rightItems = [
+  { href: "/grupos",      icon: Users,      label: "Grupos" },
 ];
 
 const moreItems = [
-  { href: "/grupos",        icon: Users,      label: "Grupos" },
-  { href: "/reporte",       icon: BookOpen,   label: "Reporte semanal" },
-  { href: "/tendencias",    icon: BarChart2,  label: "Tendencias" },
-  { href: "/agenda",        icon: Calendar,   label: "Agenda" },
-  { href: "/cotizaciones",  icon: DollarSign, label: "Cotizaciones" },
-  { href: "/deudas",        icon: CreditCard, label: "Deudas" },
-  { href: "/cuotas",        icon: CreditCard, label: "Cuotas" },
-  { href: "/presupuestos",  icon: PiggyBank,  label: "Presupuestos" },
-  { href: "/metas",         icon: Target,     label: "Metas" },
-  { href: "/recurrentes",   icon: Repeat,     label: "Recurrentes" },
-  { href: "/configuracion", icon: Settings,   label: "Configuración" },
+  { href: "/inversiones",  icon: TrendingUp, label: "Inversiones" },
+  { href: "/reporte",      icon: BookOpen,   label: "Reporte semanal" },
+  { href: "/tendencias",   icon: BarChart2,  label: "Tendencias" },
+  { href: "/agenda",       icon: Calendar,   label: "Agenda" },
+  { href: "/cotizaciones", icon: DollarSign, label: "Cotizaciones" },
+  { href: "/deudas",       icon: CreditCard, label: "Deudas" },
+  { href: "/cuotas",       icon: CreditCard, label: "Cuotas" },
+  { href: "/presupuestos", icon: PiggyBank,  label: "Presupuestos" },
+  { href: "/metas",        icon: Target,     label: "Metas" },
+  { href: "/recurrentes",  icon: Repeat,     label: "Recurrentes" },
+  { href: "/configuracion",icon: Settings,   label: "Configuración" },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
   const isMoreActive = moreItems.some((i) => pathname.startsWith(i.href));
+  const isCuentasActive =
+    pathname === "/cuentas" || pathname.startsWith("/cuentas/");
 
   return (
     <>
@@ -88,9 +93,11 @@ export function BottomNav() {
       )}
 
       {/* Barra inferior */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-border pb-safe">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-border pb-safe overflow-visible">
         <div className="flex items-center justify-around px-1 py-1.5">
-          {mainItems.map((item) => {
+
+          {/* Izquierda: Inicio + Movimientos */}
+          {leftItems.map((item) => {
             const isActive =
               pathname === item.href ||
               (item.href !== "/dashboard" && pathname.startsWith(item.href));
@@ -103,15 +110,57 @@ export function BottomNav() {
                   isActive ? "text-primary" : "text-muted"
                 )}
               >
-                <item.icon
-                  size={20}
-                  strokeWidth={isActive ? 2.2 : 1.7}
-                />
+                <item.icon size={20} strokeWidth={isActive ? 2.2 : 1.7} />
                 <span className="text-[10px] font-medium">{item.label}</span>
               </Link>
             );
           })}
 
+          {/* Centro: Cuentas — FAB elevado */}
+          <div className="flex flex-col items-center min-w-[64px] -translate-y-4">
+            <Link href="/cuentas" className="flex flex-col items-center gap-1.5">
+              <div
+                className={cn(
+                  "w-14 h-14 rounded-full flex items-center justify-center transition-all duration-200",
+                  "ring-[3px] ring-surface shadow-lg",
+                  isCuentasActive
+                    ? "bg-primary shadow-[0_4px_20px_oklch(0.67_0.19_258/50%)]"
+                    : "bg-primary/80 shadow-[0_4px_16px_oklch(0_0_0/40%)]"
+                )}
+              >
+                <Wallet size={22} strokeWidth={2} className="text-white" />
+              </div>
+              <span
+                className={cn(
+                  "text-[10px] font-medium leading-tight",
+                  isCuentasActive ? "text-primary" : "text-muted"
+                )}
+              >
+                Cuentas
+              </span>
+            </Link>
+          </div>
+
+          {/* Derecha: Grupos */}
+          {rightItems.map((item) => {
+            const isActive =
+              pathname === item.href || pathname.startsWith(item.href + "/");
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-150 min-w-[60px]",
+                  isActive ? "text-primary" : "text-muted"
+                )}
+              >
+                <item.icon size={20} strokeWidth={isActive ? 2.2 : 1.7} />
+                <span className="text-[10px] font-medium">{item.label}</span>
+              </Link>
+            );
+          })}
+
+          {/* Más */}
           <button
             onClick={() => setOpen(!open)}
             className={cn(
@@ -122,6 +171,7 @@ export function BottomNav() {
             <MoreHorizontal size={20} strokeWidth={isMoreActive || open ? 2.2 : 1.7} />
             <span className="text-[10px] font-medium">Más</span>
           </button>
+
         </div>
       </nav>
     </>
