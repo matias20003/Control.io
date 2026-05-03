@@ -3,22 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
-  ArrowUpDown,
-  Wallet,
-  TrendingUp,
-  HandCoins,
-  CreditCard,
-  Target,
-  Repeat2,
-  Settings,
-  LogOut,
-  PiggyBank,
-  BarChart3,
-  DollarSign,
-  CalendarClock,
-  ClipboardList,
-  Users,
+  LayoutDashboard, ArrowUpDown, Wallet, TrendingUp,
+  HandCoins, CreditCard, Target, Repeat2, Settings,
+  LogOut, PiggyBank, BarChart3, DollarSign, CalendarClock,
+  ClipboardList, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
@@ -46,17 +34,14 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden md:flex flex-col w-60 fixed left-0 top-0 bottom-0 z-30 bg-surface border-r border-border">
+    <aside className="hidden md:flex flex-col w-56 fixed left-0 top-0 bottom-0 z-30 bg-surface border-r border-border">
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-border">
-        <LogoFull />
-        <p className="text-[10px] text-muted uppercase tracking-widest mt-1 pl-9">
-          systematic efficiency
-        </p>
+      <div className="px-4 pt-5 pb-5 border-b border-border">
+        <LogoFull size="md" />
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-2.5 py-3 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
           const isActive =
             pathname === item.href ||
@@ -66,27 +51,38 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150",
                 isActive
-                  ? "bg-primary/12 text-primary"
-                  : "text-muted hover:text-foreground hover:bg-surface-2"
+                  ? "bg-primary/10 text-primary font-medium"
+                  : "text-muted hover:text-foreground hover:bg-surface-2 font-normal"
               )}
             >
-              <item.icon size={17} strokeWidth={isActive ? 2.5 : 1.8} />
-              {item.label}
+              <item.icon
+                size={15}
+                strokeWidth={isActive ? 2.2 : 1.7}
+                className="shrink-0"
+              />
+              <span className="truncate">{item.label}</span>
+              {isActive && (
+                <span className="ml-auto w-1 h-1 rounded-full bg-primary shrink-0" />
+              )}
             </Link>
           );
         })}
       </nav>
 
       {/* Sign out */}
-      <div className="px-3 py-4 border-t border-border">
+      <div className="px-2.5 py-3 border-t border-border">
         <form action={signOutAction}>
           <button
             type="submit"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted hover:text-danger hover:bg-danger/10 transition-all w-full cursor-pointer"
+            className={cn(
+              "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm w-full",
+              "text-muted hover:text-danger hover:bg-danger/8 transition-all duration-150",
+              "cursor-pointer font-normal"
+            )}
           >
-            <LogOut size={17} />
+            <LogOut size={15} strokeWidth={1.7} />
             Cerrar sesión
           </button>
         </form>

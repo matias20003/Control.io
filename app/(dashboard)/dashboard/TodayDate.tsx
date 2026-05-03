@@ -7,14 +7,13 @@ export function TodayDate() {
 
   useEffect(() => {
     function update() {
-      setLabel(
-        new Intl.DateTimeFormat("es-AR", {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-        }).format(new Date())
-      );
+      const s = new Intl.DateTimeFormat("es-AR", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }).format(new Date());
+      setLabel(s.charAt(0).toUpperCase() + s.slice(1));
     }
     update();
 
@@ -31,6 +30,6 @@ export function TodayDate() {
   }, []);
 
   return (
-    <p className="text-sm text-muted mt-0.5 capitalize">{label}</p>
+    <p className="text-sm text-muted mt-0.5">{label}</p>
   );
 }

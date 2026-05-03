@@ -89,47 +89,51 @@ export default function RegisterPage() {
   // ── Paso 2: ingresar código OTP ──
   if (pendingEmail) {
     return (
-      <div className="space-y-6">
-        <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-            <Mail size={26} className="text-primary" />
+      <div className="space-y-8">
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
+            <Mail size={22} className="text-primary" strokeWidth={1.7} />
           </div>
-          <h2 className="text-xl font-bold text-foreground">Revisá tu email</h2>
-          <p className="text-sm text-muted">
-            Enviamos un código de 6 dígitos a<br />
-            <span className="font-medium text-foreground">{pendingEmail}</span>
-          </p>
+          <div>
+            <h2 className="text-2xl font-bold text-foreground tracking-tight">Revisá tu email</h2>
+            <p className="mt-1.5 text-sm text-muted">
+              Enviamos un código de 6 dígitos a{" "}
+              <span className="font-medium text-foreground">{pendingEmail}</span>
+            </p>
+          </div>
         </div>
 
-        {/* Inputs OTP */}
-        <div className="flex justify-center gap-3">
-          {otp.map((digit, i) => (
-            <input
-              key={i}
-              ref={(el) => { inputsRef.current[i] = el; }}
-              type="text"
-              inputMode="numeric"
-              maxLength={1}
-              value={digit}
-              onChange={(e) => handleOtpChange(i, e.target.value)}
-              onKeyDown={(e) => handleOtpKeyDown(i, e)}
-              className="w-11 h-14 text-center text-xl font-bold rounded-xl border border-border bg-surface-2 text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-            />
-          ))}
+        <div className="space-y-5">
+          {/* Inputs OTP */}
+          <div className="flex justify-center gap-2.5">
+            {otp.map((digit, i) => (
+              <input
+                key={i}
+                ref={(el) => { inputsRef.current[i] = el; }}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={digit}
+                onChange={(e) => handleOtpChange(i, e.target.value)}
+                onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                className="w-11 h-14 text-center text-xl font-bold rounded-xl border border-border bg-surface-2 text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all font-mono caret-primary"
+              />
+            ))}
+          </div>
+
+          <Button onClick={handleVerify} className="w-full h-11" disabled={verifying}>
+            {verifying && <Loader2 size={15} className="animate-spin" />}
+            {verifying ? "Verificando..." : "Confirmar código"}
+          </Button>
         </div>
 
-        <Button onClick={handleVerify} className="w-full" disabled={verifying}>
-          {verifying && <Loader2 size={16} className="animate-spin" />}
-          {verifying ? "Verificando..." : "Confirmar código"}
-        </Button>
-
-        <p className="text-center text-xs text-muted">
+        <p className="text-center text-sm text-muted">
           ¿No llegó?{" "}
           <button
-            className="text-primary hover:underline"
+            className="text-primary hover:text-primary-dark font-medium transition-colors"
             onClick={() => { setPendingEmail(null); setOtp(["","","","","",""]); }}
           >
-            Volver a registrarse
+            Volver a intentarlo
           </button>
         </p>
       </div>
@@ -138,26 +142,26 @@ export default function RegisterPage() {
 
   // ── Paso 1: formulario de registro ──
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">Crear cuenta</h1>
-        <p className="mt-1 text-sm text-muted">Empezá a controlar tus finanzas hoy</p>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold text-foreground tracking-tight">Crear cuenta</h1>
+        <p className="mt-1.5 text-sm text-muted">Empezá a controlar tus finanzas hoy</p>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="name">Nombre completo</Label>
-          <Input id="name" type="text" placeholder="Tu nombre" autoComplete="name" {...register("name")} />
-          {errors.name && <p className="text-xs text-danger">{errors.name.message}</p>}
+          <Input id="name" type="text" placeholder="Tu nombre" autoComplete="name" autoFocus {...register("name")} />
+          {errors.name && <p className="text-xs text-danger mt-1">{errors.name.message}</p>}
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="email">Email</Label>
           <Input id="email" type="email" placeholder="vos@ejemplo.com" autoComplete="email" {...register("email")} />
-          {errors.email && <p className="text-xs text-danger">{errors.email.message}</p>}
+          {errors.email && <p className="text-xs text-danger mt-1">{errors.email.message}</p>}
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="password">Contraseña</Label>
           <div className="relative">
             <Input
@@ -171,16 +175,16 @@ export default function RegisterPage() {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-3 text-muted hover:text-foreground transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors"
               tabIndex={-1}
             >
-              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
             </button>
           </div>
-          {errors.password && <p className="text-xs text-danger">{errors.password.message}</p>}
+          {errors.password && <p className="text-xs text-danger mt-1">{errors.password.message}</p>}
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="confirmPassword">Confirmar contraseña</Label>
           <Input
             id="confirmPassword"
@@ -189,16 +193,16 @@ export default function RegisterPage() {
             autoComplete="new-password"
             {...register("confirmPassword")}
           />
-          {errors.confirmPassword && <p className="text-xs text-danger">{errors.confirmPassword.message}</p>}
+          {errors.confirmPassword && <p className="text-xs text-danger mt-1">{errors.confirmPassword.message}</p>}
         </div>
 
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading && <Loader2 size={16} className="animate-spin" />}
+        <Button type="submit" className="w-full h-11" disabled={loading}>
+          {loading && <Loader2 size={15} className="animate-spin" />}
           {loading ? "Creando cuenta..." : "Crear cuenta"}
         </Button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-muted">
+      <p className="text-center text-sm text-muted">
         ¿Ya tenés cuenta?{" "}
         <Link href="/login" className="text-primary hover:text-primary-dark font-medium transition-colors">
           Ingresar

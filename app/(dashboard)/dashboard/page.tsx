@@ -96,7 +96,7 @@ export default async function DashboardPage() {
       {/* ── Métricas del mes ── */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-muted uppercase tracking-wider capitalize">
+          <p className="text-xs font-semibold text-muted uppercase tracking-wider">
             {formatMonth(month, year)}
           </p>
           <Link href="/movimientos" className="text-xs text-primary hover:underline flex items-center gap-0.5">

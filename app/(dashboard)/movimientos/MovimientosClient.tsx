@@ -273,11 +273,11 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
       <div className="space-y-3">
         <h1 className="text-2xl font-bold text-foreground">Movimientos</h1>
         <div className="grid grid-cols-2 gap-2">
-          <Button variant="success" onClick={() => openCreate("INCOME")} className="w-full">
-            <ArrowDownLeft size={16} className="mr-1.5" />Nuevo ingreso
+          <Button variant="income" onClick={() => openCreate("INCOME")} className="w-full">
+            <ArrowDownLeft size={15} />Nuevo ingreso
           </Button>
-          <Button variant="danger" onClick={() => openCreate("EXPENSE")} className="w-full">
-            <ArrowUpRight size={16} className="mr-1.5" />Nuevo gasto
+          <Button variant="expense" onClick={() => openCreate("EXPENSE")} className="w-full">
+            <ArrowUpRight size={15} />Nuevo gasto
           </Button>
         </div>
         <div className="flex items-center justify-between">
@@ -300,7 +300,7 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
           className="p-1.5 rounded-lg border border-border text-muted hover:text-foreground transition-colors disabled:opacity-40">
           <ChevronLeft size={16} />
         </button>
-        <span className="flex-1 text-center text-sm font-semibold text-foreground capitalize">
+        <span className="flex-1 text-center text-sm font-semibold text-foreground">
           {formatMonth(month, year)}
         </span>
         <button onClick={() => navigate(1)}
@@ -375,8 +375,8 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
             : "No hay movimientos con los filtros seleccionados."}
           action={!searchQuery && filterType === "ALL" && filterAccountId === "ALL" ? (
             <div className="flex gap-2">
-              <Button variant="success" onClick={() => openCreate("INCOME")}><ArrowDownLeft size={16} className="mr-1.5" />Ingreso</Button>
-              <Button variant="danger"  onClick={() => openCreate("EXPENSE")}><ArrowUpRight  size={16} className="mr-1.5" />Gasto</Button>
+              <Button variant="income" onClick={() => openCreate("INCOME")}><ArrowDownLeft size={15} />Ingreso</Button>
+              <Button variant="expense"  onClick={() => openCreate("EXPENSE")}><ArrowUpRight  size={15} />Gasto</Button>
             </div>
           ) : undefined}
         />

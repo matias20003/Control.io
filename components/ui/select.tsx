@@ -13,12 +13,14 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
         <select
           ref={ref}
           className={cn(
-            "w-full px-3 py-2.5 pr-9 rounded-xl",
+            "w-full h-11 px-3 pr-9 rounded-lg",
             "bg-surface border border-border",
-            "text-foreground text-sm",
-            "focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary",
-            "transition-all appearance-none cursor-pointer",
-            "disabled:opacity-50 disabled:cursor-not-allowed",
+            "text-sm text-foreground",
+            "transition-colors duration-150",
+            "hover:border-muted-2",
+            "focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/70",
+            "appearance-none cursor-pointer",
+            "disabled:opacity-40 disabled:cursor-not-allowed",
             className
           )}
           {...props}

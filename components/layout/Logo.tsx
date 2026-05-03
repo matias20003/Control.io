@@ -1,6 +1,11 @@
 import { cn } from "@/lib/utils";
 
+/**
+ * LogoIcon — standalone brand shield (icon-only, hand-crafted SVG).
+ * Used where only the symbol is needed at very small sizes (e.g. mobile header).
+ */
 export function LogoIcon({ size = 32, className }: { size?: number; className?: string }) {
+  const id = "cio";
   return (
     <svg
       width={size}
@@ -11,57 +16,69 @@ export function LogoIcon({ size = 32, className }: { size?: number; className?: 
       className={className}
       aria-label="control.io"
     >
-      {/* Shield outline */}
+      <defs>
+        <linearGradient id={`${id}-g`} x1="1" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#38CCFF" />
+          <stop offset="100%" stopColor="#1638E0" />
+        </linearGradient>
+      </defs>
+      {/* Shield — open at lower-right (C-shape brand motif) */}
       <path
-        d="M32 6 L10 13 L10 32 C10 46 19 55 32 60 C45 55 54 46 54 32 L54 13 Z"
-        stroke="#38BDF8"
-        strokeWidth="3"
-        strokeLinejoin="round"
+        d="M 52 36 L 52 18 L 44 8 L 32 4 L 20 8 L 12 18 L 12 36 Q 12 52 32 60 Q 44 56 50 46"
+        stroke={`url(#${id}-g)`}
+        strokeWidth="5.5"
         strokeLinecap="round"
+        strokeLinejoin="round"
         fill="none"
       />
-
-      {/* Top-right highlight */}
-      <path
-        d="M42 9 L53 13 L53 25 L46 22 Z"
-        fill="#7DD3FC"
-        opacity="0.55"
-      />
-
       {/* Checkmark */}
       <path
-        d="M18 30 L27 39 L44 22"
-        stroke="#38BDF8"
+        d="M 20 30 L 28 40 L 44 20"
+        stroke={`url(#${id}-g)`}
         strokeWidth="5"
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"
       />
-
-      {/* Circuit line 1 */}
-      <circle cx="17" cy="44" r="2.4" fill="currentColor" />
-      <line x1="19" y1="44" x2="40" y2="44" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-      <circle cx="42" cy="44" r="2.4" fill="currentColor" />
-
-      {/* Circuit line 2 */}
-      <circle cx="22" cy="51" r="2.4" fill="currentColor" />
-      <line x1="24" y1="51" x2="45" y2="51" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-      <circle cx="47" cy="51" r="2.4" fill="currentColor" />
+      {/* Circuit lines */}
+      <circle cx="20" cy="44" r="2.2" stroke="#6080B0" strokeWidth="1.5" fill="none" />
+      <line x1="22" y1="44" x2="40" y2="44" stroke="#6080B0" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="42" cy="44" r="2.2" stroke="#6080B0" strokeWidth="1.5" fill="none" />
+      <circle cx="24" cy="51" r="2.2" stroke="#6080B0" strokeWidth="1.5" fill="none" />
+      <line x1="26" y1="51" x2="40" y2="51" stroke="#6080B0" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="42" cy="51" r="2.2" stroke="#6080B0" strokeWidth="1.5" fill="none" />
     </svg>
   );
 }
 
-export function LogoFull({ className, size = "md" }: { className?: string; size?: "sm" | "md" | "lg" }) {
-  const textSizes = { sm: "text-sm", md: "text-lg", lg: "text-2xl" };
-  const iconSizes = { sm: 24, md: 30, lg: 40 };
+/**
+ * LogoFull — uses the real brand asset (logo-full.svg).
+ * The SVG is the full horizontal identity: shield + "control.io" + "SYSTEMATIC EFFICIENCY".
+ */
+export function LogoFull({
+  className,
+  size = "md",
+}: {
+  className?: string;
+  size?: "sm" | "md" | "lg";
+}) {
+  // Height drives the layout; width scales automatically via the SVG aspect ratio (577:433 ≈ 1.33)
+  const heights: Record<string, number> = { sm: 32, md: 44, lg: 60 };
+  const h = heights[size];
+  // Derived width from the SVG's native 577×433 aspect ratio
+  const w = Math.round(h * (577 / 433));
 
   return (
-    <div className={cn("flex items-center gap-2", className)}>
-      <LogoIcon size={iconSizes[size]} className="text-foreground" />
-      <span className={cn("font-bold tracking-tight", textSizes[size])}>
-        <span className="text-foreground">control</span>
-        <span className="text-primary">.io</span>
-      </span>
+    <div className={cn("flex items-center", className)}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/logo-full.svg"
+        alt="control.io"
+        width={w}
+        height={h}
+        style={{ width: w, height: h, objectFit: "contain" }}
+        draggable={false}
+      />
     </div>
   );
 }

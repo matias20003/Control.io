@@ -38,10 +38,12 @@ export function formatDateLong(date: Date | string): string {
 }
 
 export function formatMonth(month: number, year: number): string {
-  return new Intl.DateTimeFormat("es-AR", {
+  const s = new Intl.DateTimeFormat("es-AR", {
     month: "long",
     year: "numeric",
   }).format(new Date(year, month - 1));
+  // Capitalize only the first character (avoids "De" from CSS `capitalize`)
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export function getInitials(name: string): string {

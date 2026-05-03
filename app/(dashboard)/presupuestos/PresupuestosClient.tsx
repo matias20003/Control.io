@@ -110,7 +110,7 @@ export function PresupuestosClient({
         >
           <ChevronLeft size={16} />
         </button>
-        <span className="flex-1 text-center text-sm font-semibold text-foreground capitalize">
+        <span className="flex-1 text-center text-sm font-semibold text-foreground">
           {formatMonth(month, year)}
         </span>
         <button

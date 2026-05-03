@@ -55,19 +55,19 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-2">
           <Button
-            variant="success"
+            variant="income"
             onClick={() => openModal("INCOME")}
             className="w-full"
           >
-            <ArrowDownLeft size={16} className="mr-1.5" />
+            <ArrowDownLeft size={15} />
             Nuevo ingreso
           </Button>
           <Button
-            variant="danger"
+            variant="expense"
             onClick={() => openModal("EXPENSE")}
             className="w-full"
           >
-            <ArrowUpRight size={16} className="mr-1.5" />
+            <ArrowUpRight size={15} />
             Nuevo gasto
           </Button>
         </div>
