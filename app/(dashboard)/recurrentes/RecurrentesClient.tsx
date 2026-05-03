@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, RefreshCw, Power } from "lucide-react";
+import { Plus, Trash2, RefreshCw, Power, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
 import {
   createRecurrenteAction,
+  updateRecurrenteAction,
   toggleRecurrenteAction,
   deleteRecurrenteAction,
 } from "@/app/actions/recurrentes";
@@ -33,13 +34,12 @@ interface Props {
   categories: SerializedCategory[];
 }
 
-export function RecurrentesClient({
-  initialRecurrentes,
-  categories,
-}: Props) {
+export function RecurrentesClient({ initialRecurrentes, categories }: Props) {
   const [items, setItems] = useState<SerializedRecurring[]>(initialRecurrentes);
-  const [isOpen, setIsOpen] = useState(false);
-  const [txType, setTxType] = useState<"EXPENSE" | "INCOME">("EXPENSE");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<SerializedRecurring | null>(null);
+  const [createType, setCreateType] = useState<"EXPENSE" | "INCOME">("EXPENSE");
+  const [editType, setEditType] = useState<"EXPENSE" | "INCOME">("EXPENSE");
   const [isPending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -50,21 +50,19 @@ export function RecurrentesClient({
     .filter((r) => r.type === "EXPENSE")
     .reduce((s, r) => {
       const factor =
-        r.frequency === "DAILY"
-          ? 30
-          : r.frequency === "WEEKLY"
-          ? 4.3
-          : r.frequency === "BIWEEKLY"
-          ? 2
-          : r.frequency === "MONTHLY"
-          ? 1
-          : r.frequency === "QUARTERLY"
-          ? 1 / 3
-          : 1 / 12;
+        r.frequency === "DAILY" ? 30
+        : r.frequency === "WEEKLY" ? 4.3
+        : r.frequency === "BIWEEKLY" ? 2
+        : r.frequency === "MONTHLY" ? 1
+        : r.frequency === "QUARTERLY" ? 1 / 3
+        : 1 / 12;
       return s + r.amount * factor;
     }, 0);
 
-  const filteredCategories = categories.filter((c) => c.type === txType);
+  const createCategories = categories.filter((c) => c.type === createType);
+  const editCategories = categories.filter((c) => c.type === editType);
+
+  /* ── Handlers ── */
 
   const handleCreate = (formData: FormData) => {
     startTransition(async () => {
@@ -72,8 +70,28 @@ export function RecurrentesClient({
       if (result.error) toast.error(result.error);
       else if (result.success && result.recurrente) {
         setItems((prev) => [result.recurrente!, ...prev]);
-        setIsOpen(false);
+        setIsCreateOpen(false);
         toast.success("Recurrente creado");
+      }
+    });
+  };
+
+  const handleOpenEdit = (item: SerializedRecurring) => {
+    setEditingItem(item);
+    setEditType(item.type as "EXPENSE" | "INCOME");
+  };
+
+  const handleUpdate = (formData: FormData) => {
+    if (!editingItem) return;
+    startTransition(async () => {
+      const result = await updateRecurrenteAction(editingItem.id, formData);
+      if (result.error) toast.error(result.error);
+      else if (result.success && result.recurrente) {
+        setItems((prev) =>
+          prev.map((r) => (r.id === editingItem.id ? result.recurrente! : r))
+        );
+        setEditingItem(null);
+        toast.success("Recurrente actualizado");
       }
     });
   };
@@ -103,6 +121,157 @@ export function RecurrentesClient({
     });
   };
 
+  /* ── Form fields shared between create / edit ── */
+  function RecurringForm({
+    defaultValues,
+    txType,
+    onTypeChange,
+    filteredCats,
+    onSubmit,
+    onCancel,
+  }: {
+    defaultValues?: SerializedRecurring;
+    txType: "EXPENSE" | "INCOME";
+    onTypeChange: (t: "EXPENSE" | "INCOME") => void;
+    filteredCats: SerializedCategory[];
+    onSubmit: (fd: FormData) => void;
+    onCancel: () => void;
+  }) {
+    const startVal = defaultValues?.startDate
+      ? defaultValues.startDate.split("T")[0]
+      : new Date().toISOString().split("T")[0];
+    const endVal = defaultValues?.endDate
+      ? defaultValues.endDate.split("T")[0]
+      : "";
+
+    return (
+      <>
+        {/* Type tabs */}
+        <div className="flex rounded-xl overflow-hidden border border-border mb-4">
+          {(["EXPENSE", "INCOME"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => onTypeChange(t)}
+              className={`flex-1 py-2 text-xs font-semibold transition-colors ${
+                txType === t
+                  ? t === "EXPENSE"
+                    ? "bg-danger text-white"
+                    : "bg-success text-white"
+                  : "bg-surface text-muted hover:text-foreground"
+              }`}
+            >
+              {t === "EXPENSE" ? "Gasto" : "Ingreso"}
+            </button>
+          ))}
+        </div>
+
+        <form action={onSubmit} className="space-y-4">
+          <input type="hidden" name="type" value={txType} />
+
+          <div className="space-y-1.5">
+            <Label htmlFor="rec-desc">Descripción *</Label>
+            <Input
+              id="rec-desc"
+              name="description"
+              placeholder="Ej: Netflix, Alquiler, Sueldo"
+              defaultValue={defaultValues?.description ?? ""}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="rec-amount">Monto *</Label>
+              <Input
+                id="rec-amount"
+                name="amount"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                defaultValue={defaultValues?.amount ?? ""}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="rec-currency">Moneda</Label>
+              <Select
+                id="rec-currency"
+                name="currency"
+                defaultValue={defaultValues?.currency ?? "ARS"}
+              >
+                <option value="ARS">ARS</option>
+                <option value="USD">USD</option>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="rec-freq">Frecuencia *</Label>
+            <Select
+              id="rec-freq"
+              name="frequency"
+              defaultValue={defaultValues?.frequency ?? "MONTHLY"}
+              required
+            >
+              {Object.entries(FREQ_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="rec-cat">Categoría</Label>
+            <Select
+              id="rec-cat"
+              name="categoryId"
+              defaultValue={defaultValues?.categoryId ?? ""}
+            >
+              <option value="">Sin categoría</option>
+              {filteredCats.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.icon} {c.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="rec-start">Fecha de inicio *</Label>
+            <Input
+              id="rec-start"
+              name="startDate"
+              type="date"
+              defaultValue={startVal}
+              required
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="rec-end">Fecha de fin (opcional)</Label>
+            <Input
+              id="rec-end"
+              name="endDate"
+              type="date"
+              defaultValue={endVal}
+            />
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <Button type="button" variant="ghost" className="flex-1" onClick={onCancel}>
+              Cancelar
+            </Button>
+            <Button type="submit" className="flex-1" disabled={isPending}>
+              {isPending ? "Guardando..." : "Guardar"}
+            </Button>
+          </div>
+        </form>
+      </>
+    );
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-3xl">
       {/* Header */}
@@ -113,7 +282,7 @@ export function RecurrentesClient({
             {active.length} activo{active.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button size="sm" onClick={() => setIsOpen(true)}>
+        <Button size="sm" onClick={() => setIsCreateOpen(true)}>
           <Plus size={16} className="mr-1.5" />
           Nuevo
         </Button>
@@ -136,7 +305,7 @@ export function RecurrentesClient({
           title="Sin gastos recurrentes"
           description="Registrá subscripciones, alquileres y pagos periódicos."
           action={
-            <Button onClick={() => setIsOpen(true)}>
+            <Button onClick={() => setIsCreateOpen(true)}>
               <Plus size={16} className="mr-1.5" />
               Nuevo recurrente
             </Button>
@@ -151,6 +320,7 @@ export function RecurrentesClient({
             <RecurringRow
               key={r.id}
               item={r}
+              onEdit={handleOpenEdit}
               onToggle={handleToggle}
               onDelete={handleDelete}
               deletingId={deletingId}
@@ -170,6 +340,7 @@ export function RecurrentesClient({
             <RecurringRow
               key={r.id}
               item={r}
+              onEdit={handleOpenEdit}
               onToggle={handleToggle}
               onDelete={handleDelete}
               deletingId={deletingId}
@@ -180,115 +351,32 @@ export function RecurrentesClient({
       )}
 
       {/* Create dialog */}
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent title="Nuevo recurrente">
-          {/* Type tabs */}
-          <div className="flex rounded-xl overflow-hidden border border-border mb-4">
-            {(["EXPENSE", "INCOME"] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTxType(t)}
-                className={`flex-1 py-2 text-xs font-semibold transition-colors ${
-                  txType === t
-                    ? t === "EXPENSE"
-                      ? "bg-danger text-white"
-                      : "bg-success text-white"
-                    : "bg-surface text-muted hover:text-foreground"
-                }`}
-              >
-                {t === "EXPENSE" ? "Gasto" : "Ingreso"}
-              </button>
-            ))}
-          </div>
+          <RecurringForm
+            txType={createType}
+            onTypeChange={setCreateType}
+            filteredCats={createCategories}
+            onSubmit={handleCreate}
+            onCancel={() => setIsCreateOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
 
-          <form action={handleCreate} className="space-y-4">
-            <input type="hidden" name="type" value={txType} />
-
-            <div className="space-y-1.5">
-              <Label htmlFor="rec-desc">Descripción *</Label>
-              <Input
-                id="rec-desc"
-                name="description"
-                placeholder="Ej: Netflix, Alquiler, Sueldo"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="rec-amount">Monto *</Label>
-                <Input
-                  id="rec-amount"
-                  name="amount"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="rec-currency">Moneda</Label>
-                <Select id="rec-currency" name="currency" defaultValue="ARS">
-                  <option value="ARS">ARS</option>
-                  <option value="USD">USD</option>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="rec-freq">Frecuencia *</Label>
-              <Select
-                id="rec-freq"
-                name="frequency"
-                defaultValue="MONTHLY"
-                required
-              >
-                {Object.entries(FREQ_LABELS).map(([v, l]) => (
-                  <option key={v} value={v}>
-                    {l}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="rec-cat">Categoría</Label>
-              <Select id="rec-cat" name="categoryId" defaultValue="">
-                <option value="">Sin categoría</option>
-                {filteredCategories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.icon} {c.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="rec-start">Fecha de inicio *</Label>
-              <Input
-                id="rec-start"
-                name="startDate"
-                type="date"
-                defaultValue={new Date().toISOString().split("T")[0]}
-                required
-              />
-            </div>
-
-            <div className="flex gap-2 pt-1">
-              <Button
-                type="button"
-                variant="ghost"
-                className="flex-1"
-                onClick={() => setIsOpen(false)}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" className="flex-1" disabled={isPending}>
-                {isPending ? "Guardando..." : "Guardar"}
-              </Button>
-            </div>
-          </form>
+      {/* Edit dialog */}
+      <Dialog open={!!editingItem} onOpenChange={(o) => { if (!o) setEditingItem(null); }}>
+        <DialogContent title="Editar recurrente">
+          {editingItem && (
+            <RecurringForm
+              key={editingItem.id}
+              defaultValues={editingItem}
+              txType={editType}
+              onTypeChange={setEditType}
+              filteredCats={editCategories}
+              onSubmit={handleUpdate}
+              onCancel={() => setEditingItem(null)}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>
@@ -297,12 +385,14 @@ export function RecurrentesClient({
 
 function RecurringRow({
   item,
+  onEdit,
   onToggle,
   onDelete,
   deletingId,
   isPending,
 }: {
   item: SerializedRecurring;
+  onEdit: (item: SerializedRecurring) => void;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
   deletingId: string | null;
@@ -340,6 +430,14 @@ function RecurringRow({
           </p>
 
           <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={() => onEdit(item)}
+              disabled={isPending}
+              title="Editar"
+              className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+            >
+              <Pencil size={13} />
+            </button>
             <button
               onClick={() => onToggle(item.id)}
               disabled={isPending}

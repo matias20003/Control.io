@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import {
   createRecurrente,
+  updateRecurrente,
   toggleRecurrente,
   deleteRecurrente,
 } from "@/lib/db/recurrentes";
@@ -56,6 +57,37 @@ export async function createRecurrenteAction(formData: FormData) {
     return { success: true, recurrente: rec };
   } catch {
     return { error: "Error al crear el recurrente" };
+  }
+}
+
+export async function updateRecurrenteAction(id: string, formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autorizado" };
+
+  const raw = {
+    type: formData.get("type"),
+    amount: formData.get("amount"),
+    currency: formData.get("currency"),
+    description: formData.get("description"),
+    categoryId: formData.get("categoryId") || undefined,
+    frequency: formData.get("frequency"),
+    dayOfMonth: formData.get("dayOfMonth") || undefined,
+    startDate: formData.get("startDate"),
+    endDate: formData.get("endDate") || undefined,
+  };
+
+  const result = schema.safeParse(raw);
+  if (!result.success) return { error: result.error.issues[0].message };
+
+  try {
+    const rec = await updateRecurrente(user.id, id, result.data);
+    revalidatePath("/recurrentes");
+    return { success: true, recurrente: rec };
+  } catch {
+    return { error: "Error al actualizar el recurrente" };
   }
 }
 

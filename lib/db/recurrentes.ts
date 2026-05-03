@@ -115,6 +115,44 @@ export async function toggleRecurrente(
   return serialize(row);
 }
 
+export async function updateRecurrente(
+  userId: string,
+  id: string,
+  data: {
+    type: string;
+    amount: number;
+    currency: string;
+    description: string;
+    categoryId?: string;
+    frequency: string;
+    dayOfMonth?: number;
+    startDate: string;
+    endDate?: string;
+  }
+): Promise<SerializedRecurring> {
+  const existing = await prisma.recurringTransaction.findFirst({
+    where: { id, userId },
+  });
+  if (!existing) throw new Error("No encontrado");
+
+  const row = await prisma.recurringTransaction.update({
+    where: { id },
+    data: {
+      type: data.type as any,
+      amount: data.amount,
+      currency: data.currency,
+      description: data.description,
+      categoryId: data.categoryId || null,
+      frequency: data.frequency as any,
+      dayOfMonth: data.dayOfMonth ?? null,
+      startDate: new Date(data.startDate),
+      endDate: data.endDate ? new Date(data.endDate) : null,
+    },
+    include: INCLUDE,
+  });
+  return serialize(row);
+}
+
 export async function deleteRecurrente(
   userId: string,
   id: string
