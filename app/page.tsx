@@ -919,7 +919,14 @@ function SiteFooter() {
       <div className="border-t border-border">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 text-[10px] uppercase tracking-widest text-muted sm:px-8">
           <span>© {new Date().getFullYear()} control.io</span>
-          <span>Systematic efficiency</span>
+          <div className="flex items-center gap-4">
+            <Link href="/terminos" className="hover:text-foreground transition-colors">
+              Términos
+            </Link>
+            <Link href="/privacidad" className="hover:text-foreground transition-colors">
+              Privacidad
+            </Link>
+          </div>
         </div>
       </div>
     </footer>
