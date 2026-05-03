@@ -105,3 +105,45 @@ body {
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
+
+/* ── Auth — security animation ── */
+@keyframes auth-draw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes auth-ring-out {
+  0%   { transform: scale(1);   opacity: 0.6; }
+  100% { transform: scale(2.2); opacity: 0;   }
+}
+@keyframes auth-float {
+  0%, 100% { transform: translateY(0px);  opacity: 0.45; }
+  50%       { transform: translateY(-9px); opacity: 0.85; }
+}
+@keyframes auth-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Shield outline draws itself */
+.auth-shield {
+  stroke-dasharray: 320;
+  stroke-dashoffset: 320;
+  animation: auth-draw 1.8s cubic-bezier(0.4, 0, 0.2, 1) 0.3s forwards;
+}
+/* Checkmark draws after shield */
+.auth-check {
+  stroke-dasharray: 85;
+  stroke-dashoffset: 85;
+  animation: auth-draw 0.5s cubic-bezier(0.4, 0, 0.2, 1) 1.9s forwards;
+}
+/* Shield fill fades in last */
+.auth-fill {
+  animation: auth-fade-in 0.7s ease-out 2.2s both;
+}
+/* Expanding ring pulse */
+.auth-ring {
+  animation: auth-ring-out 3.8s ease-out var(--delay, 0s) infinite;
+}
+/* Floating ambient dots */
+.auth-float {
+  animation: auth-float var(--dur, 3s) ease-in-out var(--delay, 0s) infinite;
+}
