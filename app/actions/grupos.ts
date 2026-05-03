@@ -302,7 +302,21 @@ export async function eliminarGrupoAction(grupoId: string) {
   });
   if (!grupo) return { error: "Solo el creador puede eliminar el grupo" };
 
-  await prisma.grupoGasto.delete({ where: { id: grupoId } });
+  // Borrado manual en orden para respetar FKs:
+  // DivisionGasto → MiembroGrupo no tiene cascade, hay que borrar divisiones primero.
+  await prisma.$transaction([
+    // 1. Divisiones (FK a GastoGrupo y MiembroGrupo)
+    prisma.divisionGasto.deleteMany({ where: { gasto: { grupoId } } }),
+    // 2. Gastos
+    prisma.gastoGrupo.deleteMany({ where: { grupoId } }),
+    // 3. Invitaciones
+    prisma.grupoInvitacion.deleteMany({ where: { grupoId } }),
+    // 4. Miembros
+    prisma.miembroGrupo.deleteMany({ where: { grupoId } }),
+    // 5. Grupo
+    prisma.grupoGasto.delete({ where: { id: grupoId } }),
+  ]);
+
   revalidatePath("/grupos");
   redirect("/grupos");
 }
