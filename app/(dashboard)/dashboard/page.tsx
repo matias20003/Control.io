@@ -13,6 +13,7 @@ import { TrendingUp, TrendingDown, Scale, PiggyBank, ChevronRight, AlertTriangle
 import { DashboardQuickAdd } from "./DashboardQuickAdd";
 import { CategoryChart } from "./CategoryChart";
 import { TodayDate } from "./TodayDate";
+import { SendReportButton } from "./SendReportButton";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -68,9 +69,14 @@ export default async function DashboardPage() {
     <div className="p-4 md:p-6 space-y-6 max-w-3xl">
 
       {/* Greeting */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Hola, {name} 👋</h1>
-        <TodayDate />
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Hola, {name} 👋</h1>
+          <TodayDate />
+        </div>
+        <div className="pt-1 shrink-0">
+          <SendReportButton />
+        </div>
       </div>
 
       {/* Quick Add */}
