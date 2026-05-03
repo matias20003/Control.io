@@ -62,11 +62,9 @@ export function LogoFull({
   className?: string;
   size?: "sm" | "md" | "lg";
 }) {
-  // Height drives the layout; width scales automatically via the SVG aspect ratio (577:433 ≈ 1.33)
-  const heights: Record<string, number> = { sm: 32, md: 44, lg: 60 };
+  // Sizes aumentados — el SVG tiene padding interno, así que necesitamos altura generosa
+  const heights: Record<string, number> = { sm: 44, md: 64, lg: 96 };
   const h = heights[size];
-  // Derived width from the SVG's native 577×433 aspect ratio
-  const w = Math.round(h * (577 / 433));
 
   return (
     <div className={cn("flex items-center", className)}>
@@ -74,9 +72,8 @@ export function LogoFull({
       <img
         src="/logo-full.svg"
         alt="control.io"
-        width={w}
         height={h}
-        style={{ width: w, height: h, objectFit: "contain" }}
+        style={{ height: h, width: "auto", maxWidth: "none" }}
         draggable={false}
       />
     </div>

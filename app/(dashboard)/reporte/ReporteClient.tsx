@@ -20,11 +20,13 @@ interface Props {
 }
 
 function fmt(n: number) {
-  return new Intl.NumberFormat("es-AR", {
+  const s = new Intl.NumberFormat("es-AR", {
     style: "currency", currency: "ARS",
     minimumFractionDigits: 0, maximumFractionDigits: 0,
     notation: "compact",
   }).format(n);
+  // Normalize compact suffix case — Node.js and browser ICU differ (k vs K, m vs M)
+  return s.replace(/\b([kmbt])\b/gi, (c) => c.toUpperCase());
 }
 
 function ChangeTag({ value }: { value: number | null }) {
