@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ArrowUpRight,
   ArrowDownLeft,
   ArrowLeftRight,
@@ -78,6 +79,12 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
 
   const [isPending, startTransition]  = useTransition();
 
+  // Batch entry: remember last-used context so "guardar y otro" pre-fills form
+  const [formKey,      setFormKey]      = useState(0);
+  const [lastDefaults, setLastDefaults] = useState<{
+    accountId?: string; currency?: string; date?: string; categoryId?: string;
+  }>({});
+
   const openCreate = (type: TxType) => { setTxType(type); setIsOpen(true); };
   const openEdit   = (tx: SerializedTransaction) => {
     setEditingTx(tx);
@@ -121,6 +128,7 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
 
   // Handlers
   const handleCreate = (formData: FormData) => {
+    const saveAction = formData.get("save_action") as string;
     startTransition(async () => {
       const result = await createTransactionAction(formData);
       if (result.error) { toast.error(result.error); return; }
@@ -130,8 +138,20 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
         if (txDate.getMonth() + 1 === month && txDate.getFullYear() === year) {
           setTransactions((prev) => [tx, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
         }
-        setIsOpen(false);
         toast.success(`${TYPE_CONFIG[tx.type as TxType]?.label ?? "Movimiento"} registrado ✓`);
+        if (saveAction === "save_and_another") {
+          // Stay open — reset form but carry over account/currency/date/category
+          setLastDefaults({
+            accountId:  formData.get("accountId")  as string || undefined,
+            currency:   formData.get("currency")   as string || undefined,
+            date:       formData.get("date")       as string || undefined,
+            categoryId: formData.get("categoryId") as string || undefined,
+          });
+          setFormKey((k) => k + 1);
+        } else {
+          setIsOpen(false);
+          setLastDefaults({});
+        }
       }
     });
   };
@@ -164,108 +184,142 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
 
   // Reusable form fields for create/edit
   const TxForm = ({
-    onSubmit, type, setType, cats, defaultValues, submitLabel,
+    onSubmit, type, setType, cats, defaultValues, submitLabel, showAddAnother,
   }: {
     onSubmit: (fd: FormData) => void;
     type: TxType;
     setType: (t: TxType) => void;
     cats: typeof filteredCategories;
-    defaultValues?: Partial<SerializedTransaction>;
+    defaultValues?: Partial<SerializedTransaction> & { categoryId?: string };
     submitLabel: string;
-  }) => (
-    <>
-      <div className="flex rounded-xl overflow-hidden border border-border mb-5">
-        {(["EXPENSE", "INCOME", "TRANSFER"] as TxType[]).map((t) => (
-          <button key={t} type="button" onClick={() => setType(t)}
-            className={`flex-1 py-2 text-xs font-semibold transition-colors ${
-              type === t
-                ? t === "EXPENSE" ? "bg-danger text-white" : t === "INCOME" ? "bg-success text-white" : "bg-primary text-background"
-                : "bg-surface text-muted hover:text-foreground"
-            }`}>
-            {t === "EXPENSE" ? "Gasto" : t === "INCOME" ? "Ingreso" : "Transferencia"}
-          </button>
-        ))}
-      </div>
-      <form action={onSubmit} className="space-y-4">
-        <input type="hidden" name="type" value={type} />
-        <div className="grid grid-cols-2 gap-3">
+    showAddAnother?: boolean;
+  }) => {
+    // Auto-expand "más opciones" when editing a non-ARS tx or one with notes
+    const [showMore, setShowMore] = useState(
+      !!(defaultValues?.notes || (defaultValues?.currency && defaultValues.currency !== "ARS"))
+    );
+    return (
+      <>
+        <div className="flex rounded-xl overflow-hidden border border-border mb-5">
+          {(["EXPENSE", "INCOME", "TRANSFER"] as TxType[]).map((t) => (
+            <button key={t} type="button" onClick={() => setType(t)}
+              className={`flex-1 py-2 text-xs font-semibold transition-colors ${
+                type === t
+                  ? t === "EXPENSE" ? "bg-danger text-white" : t === "INCOME" ? "bg-success text-white" : "bg-primary text-background"
+                  : "bg-surface text-muted hover:text-foreground"
+              }`}>
+              {t === "EXPENSE" ? "Gasto" : t === "INCOME" ? "Ingreso" : "Transferencia"}
+            </button>
+          ))}
+        </div>
+        <form action={onSubmit} className="space-y-4">
+          <input type="hidden" name="type" value={type} />
+          {/* Currency: hidden input when collapsed, visible select when expanded */}
+          {!showMore && (
+            <input type="hidden" name="currency" value={defaultValues?.currency ?? "ARS"} />
+          )}
+
+          {/* Monto — autofocus para tipear directo al abrir */}
           <div className="space-y-1.5">
             <Label htmlFor="f-amount">Monto *</Label>
             <Input id="f-amount" name="amount" type="number" step="0.01" min="0.01" placeholder="0.00"
-              defaultValue={defaultValues?.amount ?? ""} required />
+              defaultValue={defaultValues?.amount ?? ""} required autoFocus />
           </div>
+
           <div className="space-y-1.5">
-            <Label htmlFor="f-currency">Moneda</Label>
-            <Select id="f-currency" name="currency" defaultValue={defaultValues?.currency ?? "ARS"}>
-              <option value="ARS">ARS</option>
-              <option value="USD">USD</option>
-              <option value="EUR">EUR</option>
-            </Select>
+            <Label htmlFor="f-date">Fecha</Label>
+            <Input id="f-date" name="date" type="date"
+              defaultValue={defaultValues?.date ? defaultValues.date.split("T")[0] : new Date().toISOString().split("T")[0]}
+              required />
           </div>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="f-date">Fecha *</Label>
-          <Input id="f-date" name="date" type="date"
-            defaultValue={defaultValues?.date ? defaultValues.date.split("T")[0] : new Date().toISOString().split("T")[0]}
-            required />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="f-description">Descripción</Label>
-          <Input id="f-description" name="description" placeholder="Ej: Almuerzo con clientes"
-            defaultValue={defaultValues?.description ?? ""} />
-        </div>
-        {type !== "TRANSFER" && (
+
           <div className="space-y-1.5">
-            <Label htmlFor="f-category">Categoría</Label>
-            <Select id="f-category" name="categoryId" defaultValue={defaultValues?.categoryId ?? ""}>
-              <option value="">Sin categoría</option>
-              {cats.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-            </Select>
+            <Label htmlFor="f-description">Descripción</Label>
+            <Input id="f-description" name="description" placeholder="Ej: Supermercado, almuerzo..."
+              defaultValue={defaultValues?.description ?? ""} />
           </div>
-        )}
-        {type !== "TRANSFER" ? (
-          <div className="space-y-1.5">
-            <Label htmlFor="f-account">Cuenta</Label>
-            <Select id="f-account" name="accountId" defaultValue={defaultValues?.accountId ?? ""}>
-              <option value="">Sin cuenta</option>
-              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
-            </Select>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3">
+
+          {type !== "TRANSFER" && (
             <div className="space-y-1.5">
-              <Label htmlFor="f-from">Desde *</Label>
-              <Select id="f-from" name="accountId" defaultValue={defaultValues?.accountId ?? ""}>
-                <option value="">Seleccionar</option>
-                {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              <Label htmlFor="f-category">Categoría</Label>
+              <Select id="f-category" name="categoryId" defaultValue={defaultValues?.categoryId ?? ""}>
+                <option value="">Sin categoría</option>
+                {cats.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
               </Select>
             </div>
+          )}
+
+          {type !== "TRANSFER" ? (
             <div className="space-y-1.5">
-              <Label htmlFor="f-to">Hacia *</Label>
-              <Select id="f-to" name="toAccountId" defaultValue={defaultValues?.toAccountId ?? ""}>
-                <option value="">Seleccionar</option>
-                {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              <Label htmlFor="f-account">Cuenta</Label>
+              <Select id="f-account" name="accountId" defaultValue={defaultValues?.accountId ?? ""}>
+                <option value="">Sin cuenta</option>
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
               </Select>
             </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="f-from">Desde *</Label>
+                <Select id="f-from" name="accountId" defaultValue={defaultValues?.accountId ?? ""}>
+                  <option value="">Seleccionar</option>
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="f-to">Hacia *</Label>
+                <Select id="f-to" name="toAccountId" defaultValue={defaultValues?.toAccountId ?? ""}>
+                  <option value="">Seleccionar</option>
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </Select>
+              </div>
+            </div>
+          )}
+
+          {/* Más opciones — moneda y notas colapsadas */}
+          <button type="button" onClick={() => setShowMore((v) => !v)}
+            className="flex items-center gap-1.5 text-xs text-muted hover:text-foreground transition-colors">
+            <ChevronDown size={13} className={`transition-transform duration-200 ${showMore ? "rotate-180" : ""}`} />
+            {showMore ? "Menos opciones" : "Más opciones"}
+          </button>
+
+          {showMore && (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="f-currency">Moneda</Label>
+                <Select id="f-currency" name="currency" defaultValue={defaultValues?.currency ?? "ARS"}>
+                  <option value="ARS">ARS</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="f-notes">Notas</Label>
+                <Textarea id="f-notes" name="notes" placeholder="Notas adicionales..." rows={2}
+                  defaultValue={defaultValues?.notes ?? ""} />
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <Button type="button" variant="ghost" className="flex-shrink-0 px-3"
+              onClick={() => { setIsOpen(false); setEditingTx(null); }}>
+              Cancelar
+            </Button>
+            {showAddAnother && (
+              <Button type="submit" name="save_action" value="save_and_another"
+                variant="outline" className="flex-1" disabled={isPending}>
+                + Otro
+              </Button>
+            )}
+            <Button type="submit" name="save_action" value="save" className="flex-1" disabled={isPending}>
+              {isPending ? "Guardando..." : submitLabel}
+            </Button>
           </div>
-        )}
-        <div className="space-y-1.5">
-          <Label htmlFor="f-notes">Notas</Label>
-          <Textarea id="f-notes" name="notes" placeholder="Notas adicionales..." rows={2}
-            defaultValue={defaultValues?.notes ?? ""} />
-        </div>
-        <div className="flex gap-2 pt-1">
-          <Button type="button" variant="ghost" className="flex-1"
-            onClick={() => { setIsOpen(false); setEditingTx(null); }}>
-            Cancelar
-          </Button>
-          <Button type="submit" className="flex-1" disabled={isPending}>
-            {isPending ? "Guardando..." : submitLabel}
-          </Button>
-        </div>
-      </form>
-    </>
-  );
+        </form>
+      </>
+    );
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-3xl">
@@ -433,10 +487,10 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
       )}
 
       {/* Create Dialog */}
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <Dialog open={isOpen} onOpenChange={(o) => { if (!o) { setIsOpen(false); setLastDefaults({}); } }}>
         <DialogContent title="Nuevo movimiento">
-          <TxForm onSubmit={handleCreate} type={txType} setType={setTxType}
-            cats={filteredCategories} submitLabel="Guardar" />
+          <TxForm key={formKey} onSubmit={handleCreate} type={txType} setType={setTxType}
+            cats={filteredCategories} defaultValues={lastDefaults} submitLabel="Guardar" showAddAnother />
         </DialogContent>
       </Dialog>
 
