@@ -166,7 +166,7 @@ function Hero({ isLogged }: { isLogged: boolean }) {
           <h1 className="mt-6 text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
             Tomá el control real de
             <br />
-            <span className="bg-gradient-to-r from-primary via-primary to-secondary bg-clip-text text-transparent">
+            <span className="text-primary">
               tu plata.
             </span>
           </h1>
