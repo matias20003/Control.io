@@ -36,8 +36,8 @@ export function Sidebar() {
   return (
     <aside className="hidden md:flex flex-col w-56 fixed left-0 top-0 bottom-0 z-30 bg-surface border-r border-border">
       {/* Logo */}
-      <div className="px-4 pt-5 pb-4 border-b border-border">
-        <LogoFull size="md" />
+      <div className="px-4 pt-4 pb-3 border-b border-border">
+        <LogoFull size="xs" />
       </div>
 
       {/* Nav */}

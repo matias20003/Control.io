@@ -63,9 +63,9 @@ export function LogoFull({
   size = "md",
 }: {
   className?: string;
-  size?: "sm" | "md" | "lg" | "full";
+  size?: "xs" | "sm" | "md" | "lg" | "full";
 }) {
-  const heights: Record<string, number> = { sm: 44, md: 64, lg: 96 };
+  const heights: Record<string, number> = { xs: 32, sm: 44, md: 64, lg: 96 };
   const isFull = size === "full";
   const h = isFull ? undefined : heights[size];
 
