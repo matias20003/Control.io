@@ -124,6 +124,13 @@ body {
   opacity: 0;
   animation: sparkline-fade-in 0.6s ease-out 0.5s forwards;
 }
+@keyframes sparkline-pulse {
+  0%, 100% { opacity: 1;   r: 3; }
+  50%       { opacity: 0.4; r: 5; }
+}
+.sparkline-dot {
+  animation: sparkline-pulse 1.2s ease-in-out infinite;
+}
 
 /* ── Auth — security animation ── */
 @keyframes auth-draw {
