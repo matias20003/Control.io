@@ -94,7 +94,7 @@ export function BottomNav() {
 
       {/* Barra inferior */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-border pb-safe overflow-visible">
-        <div className="flex items-center justify-around px-1 py-1.5">
+        <div className="grid grid-cols-5 py-1.5">
 
           {/* Izquierda: Inicio + Movimientos */}
           {leftItems.map((item) => {
@@ -106,7 +106,7 @@ export function BottomNav() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-150 min-w-[60px]",
+                  "flex flex-col items-center gap-1 py-2 rounded-xl transition-all duration-150",
                   isActive ? "text-primary" : "text-muted"
                 )}
               >
@@ -117,7 +117,7 @@ export function BottomNav() {
           })}
 
           {/* Centro: Cuentas — FAB elevado */}
-          <div className="flex flex-col items-center min-w-[64px] -translate-y-4">
+          <div className="flex flex-col items-center justify-end pb-2 -translate-y-4">
             <Link href="/cuentas" className="flex flex-col items-center gap-1.5">
               <div
                 className={cn(
@@ -150,7 +150,7 @@ export function BottomNav() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-150 min-w-[60px]",
+                  "flex flex-col items-center gap-1 py-2 rounded-xl transition-all duration-150",
                   isActive ? "text-primary" : "text-muted"
                 )}
               >
@@ -164,7 +164,7 @@ export function BottomNav() {
           <button
             onClick={() => setOpen(!open)}
             className={cn(
-              "flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-150 min-w-[60px]",
+              "flex flex-col items-center gap-1 py-2 rounded-xl transition-all duration-150",
               isMoreActive || open ? "text-primary" : "text-muted"
             )}
           >
