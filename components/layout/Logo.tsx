@@ -54,27 +54,33 @@ export function LogoIcon({ size = 32, className }: { size?: number; className?: 
 /**
  * LogoFull — uses the real brand asset (logo-full.svg).
  * The SVG is the full horizontal identity: shield + "control.io" + "SYSTEMATIC EFFICIENCY".
+ *
+ * size="full" → stretches to 100% of the container width (height auto).
+ * All other sizes set a fixed pixel height with auto width.
  */
 export function LogoFull({
   className,
   size = "md",
 }: {
   className?: string;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "full";
 }) {
-  // Sizes aumentados — el SVG tiene padding interno, así que necesitamos altura generosa
   const heights: Record<string, number> = { sm: 44, md: 64, lg: 96 };
-  const h = heights[size];
+  const isFull = size === "full";
+  const h = isFull ? undefined : heights[size];
 
   return (
-    <div className={cn("flex items-center", className)}>
+    <div className={cn("flex items-center", isFull && "w-full", className)}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/logo-full.svg"
         alt="control.io"
-        height={h}
-        style={{ height: h, width: "auto", maxWidth: "none" }}
         draggable={false}
+        style={
+          isFull
+            ? { width: "100%", height: "auto" }
+            : { height: h, width: "auto", maxWidth: "none" }
+        }
       />
     </div>
   );
