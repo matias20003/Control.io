@@ -7,10 +7,6 @@
     {
       "path": "/api/cron/budget-alerts",
       "schedule": "0 12 * * *"
-    },
-    {
-      "path": "/api/cron/weekly-report",
-      "schedule": "0 20 * * 0"
     }
   ]
 }
