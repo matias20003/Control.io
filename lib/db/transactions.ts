@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { startOfMonth, endOfMonth } from "date-fns";
+import { encrypt, decrypt } from "@/lib/crypto";
 
 export type SerializedTransaction = {
   id: string;
@@ -31,7 +32,7 @@ function serialize(tx: any): SerializedTransaction {
     type: tx.type,
     amount: toNum(tx.amount),
     currency: tx.currency,
-    description: tx.description,
+    description: decrypt(tx.description),           // ← decrypt on read
     date: tx.date instanceof Date ? tx.date.toISOString() : tx.date,
     categoryId: tx.categoryId,
     categoryName: tx.category?.name ?? null,
@@ -41,7 +42,7 @@ function serialize(tx: any): SerializedTransaction {
     accountName: tx.account?.name ?? null,
     toAccountId: tx.toAccountId,
     toAccountName: tx.toAccount?.name ?? null,
-    notes: tx.notes,
+    notes: decrypt(tx.notes),                       // ← decrypt on read
     createdAt: tx.createdAt instanceof Date ? tx.createdAt.toISOString() : tx.createdAt,
   };
 }
@@ -85,12 +86,12 @@ export async function createTransaction(userId: string, data: {
       type: data.type as any,
       amount: data.amount,
       currency: data.currency,
-      description: data.description || null,
+      description: encrypt(data.description || null), // ← encrypt on write
       date: new Date(data.date),
       categoryId: data.categoryId || null,
       accountId: data.accountId || null,
       toAccountId: data.toAccountId || null,
-      notes: data.notes || null,
+      notes: encrypt(data.notes || null),             // ← encrypt on write
     },
     include: {
       category: { select: { name: true, icon: true, color: true } },
@@ -145,12 +146,12 @@ export async function updateTransaction(
       type: data.type as any,
       amount: data.amount,
       currency: data.currency,
-      description: data.description || null,
+      description: encrypt(data.description || null), // ← encrypt on write
       date: new Date(data.date),
       categoryId: data.categoryId || null,
       accountId: data.accountId || null,
       toAccountId: data.toAccountId || null,
-      notes: data.notes || null,
+      notes: encrypt(data.notes || null),             // ← encrypt on write
     },
     include: {
       category: { select: { name: true, icon: true, color: true } },
