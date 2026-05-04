@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { decrypt } from "@/lib/crypto";
 import { addDays, startOfDay, format, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -87,7 +88,7 @@ export async function getAgenda(userId: string, days = 30): Promise<AgendaEvent[
     events.push({
       id: `debt-${debt.id}`,
       type: "debt",
-      title: debt.personName,
+      title: decrypt(debt.personName) ?? debt.personName,
       subtitle: debt.direction === "I_OWE" ? "Te deben" : "Debés",
       amount: toNum(debt.totalAmount) - toNum(debt.paidAmount),
       currency: debt.currency,

@@ -141,7 +141,7 @@ export async function updateTransaction(
 
   // Actualizar el movimiento
   const updated = await prisma.transaction.update({
-    where: { id: transactionId },
+    where: { id: transactionId, userId },
     data: {
       type: data.type as any,
       amount: data.amount,

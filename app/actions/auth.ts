@@ -103,7 +103,8 @@ export async function verifyOtpAction(email: string, token: string) {
 
 export async function forgotPasswordAction(formData: FormData) {
   const email = formData.get("email") as string;
-  if (!email?.includes("@")) return { error: "Email inválido" };
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || !emailRegex.test(email)) return { error: "Email inválido" };
 
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {

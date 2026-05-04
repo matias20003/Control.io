@@ -35,6 +35,14 @@ export async function importTransactionsAction(rows: ImportRow[]) {
   if (!rows.length) return { error: "No hay filas para importar" };
   if (rows.length > 500) return { error: "Máximo 500 filas por importación" };
 
+  // Pre-cargar IDs válidos del usuario para evitar IDOR en categoryId/accountId
+  const [validCategories, validAccounts] = await Promise.all([
+    prisma.category.findMany({ where: { userId: user.id }, select: { id: true } }),
+    prisma.account.findMany({ where: { userId: user.id }, select: { id: true } }),
+  ]);
+  const validCatIds = new Set(validCategories.map(c => c.id));
+  const validAccIds = new Set(validAccounts.map(a => a.id));
+
   let imported = 0;
   let errors = 0;
 
@@ -54,8 +62,8 @@ export async function importTransactionsAction(rows: ImportRow[]) {
           currency: "ARS",
           description: row.description?.slice(0, 255) || null,
           date,
-          categoryId: row.categoryId || null,
-          accountId: row.accountId || null,
+          categoryId: (row.categoryId && validCatIds.has(row.categoryId)) ? row.categoryId : null,
+          accountId: (row.accountId && validAccIds.has(row.accountId)) ? row.accountId : null,
           notes: row.notes || "Importado desde CSV",
         },
       });

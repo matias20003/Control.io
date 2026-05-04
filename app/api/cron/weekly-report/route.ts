@@ -10,9 +10,11 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 function authorized(req: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
   if (process.env.NODE_ENV !== "production") return true;
   const auth = req.headers.get("authorization");
-  return auth === `Bearer ${process.env.CRON_SECRET}`;
+  return auth === `Bearer ${secret}`;
 }
 
 export async function GET(req: NextRequest) {
