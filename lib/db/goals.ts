@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { encrypt, decrypt } from "@/lib/crypto";
 
 export type SerializedGoal = {
   id: string;
@@ -26,7 +27,7 @@ function serialize(g: any): SerializedGoal {
     target > 0 ? Math.min(Math.round((current / target) * 100), 100) : 0;
   return {
     id: g.id,
-    name: g.name,
+    name: decrypt(g.name) ?? g.name,
     targetAmount: target,
     currentAmount: current,
     currency: g.currency,
@@ -66,7 +67,7 @@ export async function createGoal(
   const row = await prisma.goal.create({
     data: {
       userId,
-      name: data.name,
+      name: encrypt(data.name) ?? data.name,
       targetAmount: data.targetAmount,
       currency: data.currency,
       currentAmount: data.currentAmount ?? 0,

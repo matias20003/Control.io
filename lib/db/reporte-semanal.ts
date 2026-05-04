@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { decrypt } from "@/lib/crypto";
 import { startOfWeek, endOfWeek, subWeeks, format, eachDayOfInterval } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -155,12 +156,12 @@ export async function getReporteSemanal(
     type:          tx.type,
     amount:        toNum(tx.amount),
     currency:      tx.currency,
-    description:   tx.description,
+    description:   decrypt(tx.description) ?? null,
     date:          tx.date instanceof Date ? tx.date.toISOString() : String(tx.date),
     categoryName:  tx.category?.name  ?? null,
     categoryIcon:  tx.category?.icon  ?? null,
     categoryColor: tx.category?.color ?? null,
-    accountName:   tx.account?.name   ?? null,
+    accountName:   decrypt(tx.account?.name) ?? null,
   });
 
   const weekLabel =

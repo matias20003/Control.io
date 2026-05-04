@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { encrypt, decrypt } from "@/lib/crypto";
 
 export type SerializedAccount = {
   id: string;
@@ -22,7 +23,7 @@ function serialize(a: any): SerializedAccount {
   return {
     id: a.id,
     userId: a.userId,
-    name: a.name,
+    name: decrypt(a.name) ?? a.name,
     type: a.type,
     currency: a.currency,
     balance: toNum(a.balance),
@@ -47,7 +48,7 @@ export async function createAccount(userId: string, data: {
   const row = await prisma.account.create({
     data: {
       userId,
-      name: data.name,
+      name: encrypt(data.name) ?? data.name,
       type: data.type as any,
       currency: data.currency,
       balance: data.balance,
@@ -64,7 +65,7 @@ export async function updateAccount(userId: string, accountId: string, data: {
   const row = await prisma.account.update({
     where: { id: accountId, userId },
     data: {
-      ...(data.name !== undefined && { name: data.name }),
+      ...(data.name !== undefined && { name: encrypt(data.name) ?? data.name }),
       ...(data.type !== undefined && { type: data.type as any }),
       ...(data.currency !== undefined && { currency: data.currency }),
       ...(data.balance !== undefined && { balance: data.balance }),

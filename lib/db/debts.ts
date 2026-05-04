@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { encrypt, decrypt } from "@/lib/crypto";
 
 export type SerializedDebt = {
   id: string;
@@ -25,8 +26,8 @@ function serialize(d: any): SerializedDebt {
   return {
     id: d.id,
     direction: d.direction,
-    personName: d.personName,
-    description: d.description ?? null,
+    personName: decrypt(d.personName) ?? d.personName,
+    description: decrypt(d.description) ?? null,
     totalAmount: total,
     currency: d.currency,
     paidAmount: paid,
@@ -62,8 +63,8 @@ export async function createDebt(
     data: {
       userId,
       direction: data.direction as any,
-      personName: data.personName,
-      description: data.description || null,
+      personName: encrypt(data.personName) ?? data.personName,
+      description: encrypt(data.description || null),
       totalAmount: data.totalAmount,
       currency: data.currency,
       dueDate: data.dueDate ? new Date(data.dueDate) : null,

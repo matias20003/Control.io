@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { decrypt } from "@/lib/crypto";
 import { startOfMonth, endOfMonth, subMonths, differenceInDays } from "date-fns";
 
 export type Insight = {
@@ -164,7 +165,7 @@ export async function getInsights(userId: string): Promise<Insight[]> {
       insights.push({
         type: pct >= 80 ? "success" : "info",
         icon: g.icon ?? "🎯",
-        title: `Meta "${g.name}" vence en ${daysLeft} días`,
+        title: `Meta "${decrypt(g.name) ?? g.name}" vence en ${daysLeft} días`,
         body: `Llevas el ${pct}% (${new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(current)} de ${new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 }).format(target)}).`,
       });
     }

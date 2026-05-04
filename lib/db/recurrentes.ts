@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { encrypt, decrypt } from "@/lib/crypto";
 
 export type SerializedRecurring = {
   id: string;
@@ -29,7 +30,7 @@ function serialize(r: any): SerializedRecurring {
     type: r.type,
     amount: toNum(r.amount),
     currency: r.currency,
-    description: r.description,
+    description: decrypt(r.description) ?? r.description,
     categoryId: r.categoryId ?? null,
     categoryName: r.category?.name ?? null,
     categoryIcon: r.category?.icon ?? null,
@@ -86,7 +87,7 @@ export async function createRecurrente(
       type: data.type as any,
       amount: data.amount,
       currency: data.currency,
-      description: data.description,
+      description: encrypt(data.description) ?? data.description,
       categoryId: data.categoryId || null,
       frequency: data.frequency as any,
       dayOfMonth: data.dayOfMonth ?? null,
@@ -141,7 +142,7 @@ export async function updateRecurrente(
       type: data.type as any,
       amount: data.amount,
       currency: data.currency,
-      description: data.description,
+      description: encrypt(data.description) ?? data.description,
       categoryId: data.categoryId || null,
       frequency: data.frequency as any,
       dayOfMonth: data.dayOfMonth ?? null,

@@ -39,9 +39,9 @@ function serialize(tx: any): SerializedTransaction {
     categoryIcon: tx.category?.icon ?? null,
     categoryColor: tx.category?.color ?? null,
     accountId: tx.accountId,
-    accountName: tx.account?.name ?? null,
+    accountName: decrypt(tx.account?.name) ?? null,
     toAccountId: tx.toAccountId,
-    toAccountName: tx.toAccount?.name ?? null,
+    toAccountName: decrypt(tx.toAccount?.name) ?? null,
     notes: decrypt(tx.notes),                       // ← decrypt on read
     createdAt: tx.createdAt instanceof Date ? tx.createdAt.toISOString() : tx.createdAt,
   };

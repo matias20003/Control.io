@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { encrypt, decrypt } from "@/lib/crypto";
 
 export type SerializedInvestment = {
   id: string;
@@ -29,7 +30,7 @@ function toNumOrNull(val: unknown): number | null {
 function serialize(inv: any): SerializedInvestment {
   return {
     id: inv.id,
-    name: inv.name,
+    name: decrypt(inv.name) ?? inv.name,
     type: inv.type,
     currency: inv.currency,
     amount: toNum(inv.amount),
@@ -40,7 +41,7 @@ function serialize(inv: any): SerializedInvestment {
       inv.purchaseDate instanceof Date
         ? inv.purchaseDate.toISOString()
         : inv.purchaseDate,
-    notes: inv.notes ?? null,
+    notes: decrypt(inv.notes) ?? null,
     isActive: inv.isActive,
     createdAt:
       inv.createdAt instanceof Date
@@ -76,7 +77,7 @@ export async function createInvestment(
   const row = await prisma.investment.create({
     data: {
       userId,
-      name: data.name,
+      name: encrypt(data.name) ?? data.name,
       type: data.type as any,
       currency: data.currency,
       amount: data.amount,
@@ -84,7 +85,7 @@ export async function createInvestment(
       ticker: data.ticker || null,
       units: data.units ?? null,
       purchaseDate: new Date(data.purchaseDate),
-      notes: data.notes || null,
+      notes: encrypt(data.notes || null),
     },
   });
   return serialize(row);
