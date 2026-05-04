@@ -1,11 +1,3 @@
-/**
- * One-time migration: encrypts all existing plaintext description/notes
- * in the transactions table. Safe to run multiple times (skips already-encrypted rows).
- *
- * Protected: only the ADMIN_EMAIL user can call this.
- * POST /api/admin/migrate-encrypt
- */
-
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { encrypt, isEncrypted } from "@/lib/crypto";
@@ -13,51 +5,65 @@ import { encrypt, isEncrypted } from "@/lib/crypto";
 const BATCH_SIZE = 100;
 
 export async function POST() {
-  // Auth check — only admin can run this
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  try {
+    // Verify ENCRYPTION_KEY is set
+    if (!process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_KEY.length !== 64) {
+      return Response.json(
+        { error: "ENCRYPTION_KEY no configurada en Vercel. Agregala en Settings → Environment Variables y redeploy." },
+        { status: 500 }
+      );
+    }
 
-  if (!user || user.email !== process.env.ADMIN_EMAIL) {
-    return Response.json({ error: "No autorizado" }, { status: 401 });
-  }
+    // Auth check
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || user.email !== process.env.ADMIN_EMAIL) {
+      return Response.json({ error: "No autorizado" }, { status: 401 });
+    }
 
-  let processed = 0;
-  let encrypted = 0;
-  let cursor: string | undefined;
+    let processed = 0;
+    let encrypted = 0;
+    let cursor: string | undefined;
 
-  // Process in batches to avoid memory issues with large datasets
-  while (true) {
-    const batch = await prisma.transaction.findMany({
-      take: BATCH_SIZE,
-      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-      select: { id: true, description: true, notes: true },
-      orderBy: { id: "asc" },
+    while (true) {
+      const batch = await prisma.transaction.findMany({
+        take: BATCH_SIZE,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        select: { id: true, description: true, notes: true },
+        orderBy: { id: "asc" },
+      });
+
+      if (batch.length === 0) break;
+      cursor = batch[batch.length - 1].id;
+      processed += batch.length;
+
+      for (const tx of batch) {
+        const needsDesc  = tx.description && !isEncrypted(tx.description);
+        const needsNotes = tx.notes       && !isEncrypted(tx.notes);
+        if (!needsDesc && !needsNotes) continue;
+
+        await prisma.transaction.update({
+          where: { id: tx.id },
+          data: {
+            ...(needsDesc  ? { description: encrypt(tx.description) } : {}),
+            ...(needsNotes ? { notes:       encrypt(tx.notes)       } : {}),
+          },
+        });
+        encrypted++;
+      }
+    }
+
+    return Response.json({
+      ok: true,
+      processed,
+      encrypted,
+      message: `${encrypted} de ${processed} registros encriptados.`,
     });
 
-    if (batch.length === 0) break;
-    cursor = batch[batch.length - 1].id;
-    processed += batch.length;
-
-    for (const tx of batch) {
-      const needsDesc  = tx.description && !isEncrypted(tx.description);
-      const needsNotes = tx.notes       && !isEncrypted(tx.notes);
-      if (!needsDesc && !needsNotes) continue;
-
-      await prisma.transaction.update({
-        where: { id: tx.id },
-        data: {
-          ...(needsDesc  ? { description: encrypt(tx.description) } : {}),
-          ...(needsNotes ? { notes:       encrypt(tx.notes)       } : {}),
-        },
-      });
-      encrypted++;
-    }
+  } catch (e: any) {
+    return Response.json(
+      { error: e?.message ?? "Error interno del servidor" },
+      { status: 500 }
+    );
   }
-
-  return Response.json({
-    ok: true,
-    processed,
-    encrypted,
-    message: `${encrypted} de ${processed} registros encriptados.`,
-  });
 }
