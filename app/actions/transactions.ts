@@ -107,13 +107,13 @@ export async function deleteTransactionAction(transactionId: string) {
 export async function getTransactionsAction(
   month: number,
   year: number,
-  filters: { type?: string; accountId?: string } = {}
+  filters: { type?: string; accountId?: string; take?: number; skip?: number } = {}
 ) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return [];
+  if (!user) return { items: [], total: 0, hasMore: false };
 
   return getTransactions(user.id, { ...filters, month, year });
 }

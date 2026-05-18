@@ -48,17 +48,21 @@ const TYPE_CONFIG: Record<TxType, { label: string; icon: React.ElementType; colo
 
 interface Props {
   initialTransactions: SerializedTransaction[];
+  initialTotal: number;
+  initialHasMore: boolean;
   accounts: SerializedAccount[];
   categories: SerializedCategory[];
   initialMonth: number;
   initialYear: number;
 }
 
-export function MovimientosClient({ initialTransactions, accounts, categories, initialMonth, initialYear }: Props) {
+export function MovimientosClient({ initialTransactions, initialTotal, initialHasMore, accounts, categories, initialMonth, initialYear }: Props) {
   const now = new Date();
   const [month, setMonth]             = useState(initialMonth);
   const [year, setYear]               = useState(initialYear);
   const [transactions, setTransactions] = useState<SerializedTransaction[]>(initialTransactions);
+  const [total, setTotal]             = useState(initialTotal);
+  const [hasMore, setHasMore]         = useState(initialHasMore);
   const [filterType, setFilterType]   = useState<string>("ALL");
   const [filterAccountId, setFilterAccountId] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
@@ -103,8 +107,18 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
     setMonth(newMonth);
     setYear(newYear);
     startTransition(async () => {
-      const data = await getTransactionsAction(newMonth, newYear);
-      setTransactions(data);
+      const page = await getTransactionsAction(newMonth, newYear);
+      setTransactions(page.items);
+      setTotal(page.total);
+      setHasMore(page.hasMore);
+    });
+  };
+
+  const loadMore = () => {
+    startTransition(async () => {
+      const page = await getTransactionsAction(month, year, { skip: transactions.length });
+      setTransactions((prev) => [...prev, ...page.items]);
+      setHasMore(page.hasMore);
     });
   };
 
@@ -483,6 +497,16 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
               </Card>
             );
           })}
+          {hasMore && filterType === "ALL" && filterAccountId === "ALL" && !searchQuery && (
+            <div className="pt-3 flex flex-col items-center gap-2">
+              <p className="text-xs text-muted">
+                Mostrando {transactions.length} de {total} movimientos del mes
+              </p>
+              <Button variant="outline" onClick={loadMore} disabled={isPending}>
+                {isPending ? "Cargando..." : "Cargar más"}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -522,8 +546,10 @@ export function MovimientosClient({ initialTransactions, accounts, categories, i
         accounts={accounts}
         categories={categories}
         onImported={async () => {
-          const data = await getTransactionsAction(month, year);
-          setTransactions(data);
+          const page = await getTransactionsAction(month, year);
+          setTransactions(page.items);
+          setTotal(page.total);
+          setHasMore(page.hasMore);
         }}
       />
     </div>

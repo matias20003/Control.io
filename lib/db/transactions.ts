@@ -48,33 +48,68 @@ function serialize(tx: any): SerializedTransaction {
   };
 }
 
+export type TransactionsPage = {
+  items: SerializedTransaction[];
+  total: number;
+  hasMore: boolean;
+};
+
+const DEFAULT_PAGE_SIZE = 100;
+
+/**
+ * Devuelve transacciones paginadas. Sin paginación una cuenta con 10k+
+ * movimientos hace que el dashboard tarde varios segundos y consuma RAM
+ * inecesaria del server. Default: 100 por página, ordenados por fecha desc.
+ */
 export async function getTransactions(
   userId: string,
-  filters: { type?: string; categoryId?: string; accountId?: string; month?: number; year?: number } = {}
-): Promise<SerializedTransaction[]> {
+  filters: {
+    type?: string;
+    categoryId?: string;
+    accountId?: string;
+    month?: number;
+    year?: number;
+    take?: number;
+    skip?: number;
+  } = {}
+): Promise<TransactionsPage> {
   const now = new Date();
   const m = filters.month ?? now.getMonth() + 1;
   const y = filters.year ?? now.getFullYear();
   const dateFrom = startOfMonth(new Date(y, m - 1));
   const dateTo = endOfMonth(new Date(y, m - 1));
 
-  const rows = await prisma.transaction.findMany({
-    where: {
-      userId,
-      ...(filters.type && { type: filters.type as any }),
-      ...(filters.categoryId && { categoryId: filters.categoryId }),
-      ...(filters.accountId && { accountId: filters.accountId }),
-      date: { gte: dateFrom, lte: dateTo },
-    },
-    include: {
-      category: { select: { name: true, icon: true, color: true } },
-      account:   { select: { name: true } },
-      toAccount: { select: { name: true } },
-    },
-    orderBy: { date: "desc" },
-  });
+  const take = filters.take ?? DEFAULT_PAGE_SIZE;
+  const skip = filters.skip ?? 0;
 
-  return rows.map(serialize);
+  const where = {
+    userId,
+    ...(filters.type && { type: filters.type as any }),
+    ...(filters.categoryId && { categoryId: filters.categoryId }),
+    ...(filters.accountId && { accountId: filters.accountId }),
+    date: { gte: dateFrom, lte: dateTo },
+  };
+
+  const [rows, total] = await Promise.all([
+    prisma.transaction.findMany({
+      where,
+      include: {
+        category: { select: { name: true, icon: true, color: true } },
+        account:   { select: { name: true } },
+        toAccount: { select: { name: true } },
+      },
+      orderBy: { date: "desc" },
+      take,
+      skip,
+    }),
+    prisma.transaction.count({ where }),
+  ]);
+
+  return {
+    items: rows.map(serialize),
+    total,
+    hasMore: skip + rows.length < total,
+  };
 }
 
 export async function createTransaction(userId: string, data: {
