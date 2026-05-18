@@ -105,9 +105,10 @@ body {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(60rem 40rem at 12% 8%,  oklch(0.67 0.19 258 / 14%), transparent 60%),
-    radial-gradient(50rem 36rem at 88% 18%, oklch(0.55 0.18 286 / 10%), transparent 60%),
-    radial-gradient(45rem 30rem at 60% 90%, oklch(0.62 0.15 232 / 09%), transparent 60%);
+    radial-gradient(56rem 40rem at 10% 6%,   oklch(0.67 0.19 258 / 26%), transparent 65%),
+    radial-gradient(48rem 36rem at 92% 14%,  oklch(0.55 0.18 286 / 22%), transparent 65%),
+    radial-gradient(50rem 34rem at 6% 78%,   oklch(0.62 0.15 232 / 18%), transparent 65%),
+    radial-gradient(44rem 32rem at 88% 92%,  oklch(0.67 0.19 258 / 16%), transparent 65%);
 }
 
 /* ── Glass utilities ────────────────────────────────────────────────

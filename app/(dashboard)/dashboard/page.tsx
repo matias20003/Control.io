@@ -110,7 +110,7 @@ export default async function DashboardPage() {
             Ver movimientos <ChevronRight size={12} />
           </Link>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-4">
           {metrics.map((m) => (
             <Card key={m.label} className="relative overflow-hidden">
               <CardContent className="p-4">
@@ -183,7 +183,7 @@ export default async function DashboardPage() {
               Ver todas <ChevronRight size={12} />
             </Link>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             {[oficial, blue].filter(Boolean).map((c) => (
               <Card key={c!.casa}>
                 <CardContent className="p-3.5">
