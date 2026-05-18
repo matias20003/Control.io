@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -36,12 +37,19 @@ const moreItems = [
 export function BottomNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  // Portalizamos el nav directo a document.body. Si algún ancestor del
+  // layout queda alguna vez con transform/filter/backdrop-filter,
+  // position: fixed se vuelve relativo a ESE ancestor — y la barra
+  // empieza a moverse con el scroll. Saliéndonos del árbol garantizamos
+  // que el fixed siempre quede anclado al viewport real.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const isMoreActive = moreItems.some((i) => pathname.startsWith(i.href));
   const isCuentasActive =
     pathname === "/cuentas" || pathname.startsWith("/cuentas/");
 
-  return (
+  const tree = (
     <>
       {open && (
         <>
@@ -183,4 +191,7 @@ export function BottomNav() {
       </nav>
     </>
   );
+
+  if (!mounted) return null;
+  return createPortal(tree, document.body);
 }
