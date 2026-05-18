@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { startOfMonth, endOfMonth } from "date-fns";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { startOfTodayArg, endOfTodayArg } from "@/lib/timezone";
+import { snapshotConversion } from "@/lib/exchange";
 
 export type SerializedTransaction = {
   id: string;
@@ -132,6 +133,10 @@ export async function createTransaction(userId: string, data: {
     if (!cat) throw new Error("Categoría inválida");
   }
 
+  // Snapshot del tipo de cambio. Si el movimiento es en USD lo dejamos
+  // expresado también en ARS para que los reportes puedan sumar todo.
+  const { amountARS, exchangeRate } = await snapshotConversion(data.amount, data.currency);
+
   // Todo el flujo en una sola tx para que crear el movimiento + actualizar saldos
   // sean atómicos: si una operación falla, ninguna persiste.
   return prisma.$transaction(async (db) => {
@@ -141,6 +146,8 @@ export async function createTransaction(userId: string, data: {
         type: data.type as any,
         amount: data.amount,
         currency: data.currency,
+        amountARS,
+        exchangeRate,
         description: encrypt(data.description || null), // ← encrypt on write
         date: new Date(data.date),
         categoryId: data.categoryId || null,
@@ -210,12 +217,18 @@ export async function updateTransaction(
       await db.account.update({ where: { id: existing.toAccountId, userId }, data: { balance: { increment: -toNum(existing.amount) } } });
     }
 
+    // Snapshot del rate también en update — el usuario puede haber cambiado
+    // el monto o la moneda y queremos que amountARS quede coherente.
+    const { amountARS, exchangeRate } = await snapshotConversion(data.amount, data.currency);
+
     const updated = await db.transaction.update({
       where: { id: transactionId, userId },
       data: {
         type: data.type as any,
         amount: data.amount,
         currency: data.currency,
+        amountARS,
+        exchangeRate,
         description: encrypt(data.description || null), // ← encrypt on write
         date: new Date(data.date),
         categoryId: data.categoryId || null,
