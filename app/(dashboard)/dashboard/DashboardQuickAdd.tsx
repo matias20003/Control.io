@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { createTransactionAction } from "@/app/actions/transactions";
+import { formatCurrency } from "@/lib/utils";
 import type { SerializedAccount } from "@/lib/db/accounts";
 import type { SerializedCategory } from "@/lib/db/categories";
 
@@ -54,7 +55,12 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
         EXPENSE: "Gasto registrado ✓",
         TRANSFER: "Transferencia registrada ✓",
       };
-      toast.success(labels[txType]);
+      // Mostramos el saldo nuevo en el toast para que el usuario tenga
+      // feedback inmediato del impacto de la operación.
+      const description = result.newBalance != null && result.accountCurrency
+        ? `Saldo: ${formatCurrency(result.newBalance, result.accountCurrency)}`
+        : undefined;
+      toast.success(labels[txType], description ? { description } : undefined);
       if (saveAction === "save_and_another") {
         setLastDefaults({
           accountId:  formData.get("accountId")  as string || undefined,

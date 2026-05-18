@@ -8,7 +8,13 @@ import {
   deleteTransaction,
   getTransactions,
 } from "@/lib/db/transactions";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+
+function toNum(v: unknown): number {
+  if (v === null || v === undefined) return 0;
+  return typeof v === "number" ? v : parseFloat(String(v));
+}
 
 const createTransactionSchema = z.object({
   type: z.enum(["INCOME", "EXPENSE", "TRANSFER"]),
@@ -46,10 +52,23 @@ export async function createTransactionAction(formData: FormData) {
 
   try {
     const tx = await createTransaction(user.id, result.data);
+    // Saldo nuevo de la cuenta para mostrarlo en el toast sin hacer otro round-trip.
+    let newBalance: number | null = null;
+    let accountCurrency: string | null = null;
+    if (tx.accountId) {
+      const acc = await prisma.account.findFirst({
+        where: { id: tx.accountId, userId: user.id },
+        select: { balance: true, currency: true },
+      });
+      if (acc) {
+        newBalance = toNum(acc.balance);
+        accountCurrency = acc.currency;
+      }
+    }
     revalidatePath("/movimientos");
     revalidatePath("/dashboard");
     revalidatePath("/cuentas");
-    return { success: true, transaction: tx };
+    return { success: true, transaction: tx, newBalance, accountCurrency };
   } catch {
     return { error: "Error al crear el movimiento" };
   }
