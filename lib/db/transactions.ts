@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { startOfMonth, endOfMonth } from "date-fns";
 import { encrypt, decrypt } from "@/lib/crypto";
+import { startOfTodayArg, endOfTodayArg } from "@/lib/timezone";
 
 export type SerializedTransaction = {
   id: string;
@@ -276,10 +277,10 @@ export async function getMonthSummary(userId: string, month?: number, year?: num
 }
 
 export async function hasTransactionToday(userId: string): Promise<boolean> {
-  const start = new Date(); start.setHours(0, 0, 0, 0);
-  const end = new Date();   end.setHours(23, 59, 59, 999);
+  // "Hoy" en hora Argentina: el server corre en UTC, así que sin esto el
+  // límite de día se mueve 3 horas y el cartel aparece cuando no debería.
   const count = await prisma.transaction.count({
-    where: { userId, createdAt: { gte: start, lte: end } },
+    where: { userId, createdAt: { gte: startOfTodayArg(), lte: endOfTodayArg() } },
   });
   return count > 0;
 }

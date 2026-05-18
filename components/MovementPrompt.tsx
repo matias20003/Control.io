@@ -17,7 +17,7 @@ export function MovementPrompt({ hasMovementToday }: Props) {
   useEffect(() => {
     if (hasMovementToday) return;
 
-    const today = new Date().toDateString();
+    const today = new Date().toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
     const lastPrompt = localStorage.getItem(STORAGE_KEY);
     if (lastPrompt === today) return;
 
@@ -26,7 +26,8 @@ export function MovementPrompt({ hasMovementToday }: Props) {
   }, [hasMovementToday]);
 
   const remember = () => {
-    localStorage.setItem(STORAGE_KEY, new Date().toDateString());
+    const today = new Date().toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
+    localStorage.setItem(STORAGE_KEY, today);
   };
 
   const dismiss = () => {

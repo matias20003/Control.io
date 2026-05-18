@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { differenceInDays, isAfter, isBefore, startOfDay } from "date-fns";
+import { differenceInDays, isAfter, isBefore } from "date-fns";
 import { sendPushToUser } from "@/lib/push/send";
 import { encrypt } from "@/lib/crypto";
+import { startOfTodayArg } from "@/lib/timezone";
 
 // Vercel Cron: diariamente a las 11:00 UTC (08:00 ARG)
 export const runtime = "nodejs";
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const today = startOfDay(new Date());
+  const today = startOfTodayArg();
 
   const recurrentes = await prisma.recurringTransaction.findMany({
     where: { isActive: true },
