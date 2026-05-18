@@ -87,6 +87,9 @@ export async function payInstallmentAction(installmentId: number) {
   try {
     await payInstallment(user.id, installmentId);
     revalidatePath("/cuotas");
+    revalidatePath("/movimientos");
+    revalidatePath("/cuentas");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch {
     return { error: "Error al marcar la cuota" };

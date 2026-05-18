@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { addMonths } from "date-fns";
+import { encrypt } from "@/lib/crypto";
 
 export type SerializedCreditInstallment = {
   id: number;
@@ -126,21 +127,61 @@ export async function payInstallment(
 ): Promise<void> {
   const installment = await prisma.creditInstallment.findUnique({
     where: { id: installmentId },
-    include: { creditPurchase: { select: { userId: true, id: true } } },
+    include: {
+      creditPurchase: {
+        select: {
+          userId: true,
+          id: true,
+          accountId: true,
+          categoryId: true,
+          currency: true,
+          description: true,
+          totalInstallments: true,
+        },
+      },
+    },
   });
   if (!installment || installment.creditPurchase.userId !== userId) {
     throw new Error("No encontrado");
   }
+  if (installment.isPaid) return; // idempotente: si ya estaba pagada, no duplicamos
 
-  await prisma.creditInstallment.update({
-    where: { id: installmentId },
-    data: { isPaid: true, paidAt: new Date() },
-  });
+  const purchase = installment.creditPurchase;
+  const now = new Date();
+  const amount = installment.amount; // Decimal, prisma lo acepta tal cual
+  const description =
+    `Cuota ${installment.installmentNumber}/${purchase.totalInstallments} · ${purchase.description}`;
 
-  await prisma.creditPurchase.update({
-    where: { id: installment.creditPurchaseId },
-    data: { paidInstallments: { increment: 1 } },
-  });
+  await prisma.$transaction([
+    prisma.creditInstallment.update({
+      where: { id: installmentId },
+      data: { isPaid: true, paidAt: now },
+    }),
+    prisma.creditPurchase.update({
+      where: { id: purchase.id },
+      data: { paidInstallments: { increment: 1 } },
+    }),
+    // Movimiento equivalente, queda visible en /movimientos.
+    // Se asocia a la compra vía creditPurchaseId para poder limpiarlo si se elimina.
+    prisma.transaction.create({
+      data: {
+        userId,
+        type: "EXPENSE",
+        amount,
+        currency: purchase.currency,
+        description: encrypt(description),
+        date: now,
+        categoryId: purchase.categoryId,
+        accountId: purchase.accountId,
+        creditPurchaseId: purchase.id,
+      },
+    }),
+    // Descontamos el saldo de la cuenta de pago.
+    prisma.account.update({
+      where: { id: purchase.accountId, userId },
+      data: { balance: { decrement: amount } },
+    }),
+  ]);
 }
 
 export async function updateCreditPurchase(
@@ -201,5 +242,14 @@ export async function deleteCreditPurchase(
   userId: string,
   purchaseId: string
 ): Promise<void> {
-  await prisma.creditPurchase.delete({ where: { id: purchaseId, userId } });
+  // Desvinculamos primero las transacciones generadas por las cuotas pagadas:
+  // se conservan en /movimientos (los pagos ya ocurrieron y afectaron saldo),
+  // pero dejan de apuntar a la compra que estamos por eliminar.
+  await prisma.$transaction([
+    prisma.transaction.updateMany({
+      where: { creditPurchaseId: purchaseId, userId },
+      data: { creditPurchaseId: null },
+    }),
+    prisma.creditPurchase.delete({ where: { id: purchaseId, userId } }),
+  ]);
 }
