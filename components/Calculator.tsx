@@ -43,6 +43,13 @@ export function Calculator() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  // Apertura externa: el botón del Header en mobile dispara este evento.
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener("calculator:open", handler);
+    return () => window.removeEventListener("calculator:open", handler);
+  }, []);
+
   // Soporte para usar teclas dentro de la calculadora cuando está abierta.
   useEffect(() => {
     if (!open) return;
@@ -144,7 +151,7 @@ export function Calculator() {
 
   return (
     <>
-      {/* Botón flotante: arriba al centro siempre. En desktop offset del sidebar (15rem / 2 = 7.5rem). */}
+      {/* FAB solo en desktop: en mobile el botón vive dentro del Header (al lado de la campana). */}
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -152,15 +159,15 @@ export function Calculator() {
         title="Calculadora (C)"
         className={cn(
           "fixed z-30",
-          "top-2 md:top-3",
-          "left-1/2 -translate-x-1/2",
-          "md:left-[calc(50%+7.5rem)]",
-          "h-9 w-9 md:h-10 md:w-10 rounded-full",
+          "top-3",
+          "left-[calc(50%+7.5rem)] -translate-x-1/2",
+          "h-10 w-10 rounded-full",
           "bg-primary text-background",
           "shadow-[0_4px_16px_oklch(0.67_0.19_258/35%)]",
           "hover:bg-primary-dark active:scale-95",
           "transition-all duration-150",
-          "flex items-center justify-center",
+          "items-center justify-center",
+          "hidden md:flex",
         )}
       >
         <CalculatorIcon size={16} strokeWidth={2.2} />
@@ -214,5 +221,21 @@ export function Calculator() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+// Botón compacto pensado para ir en barras de navegación (ej: Header mobile,
+// al lado del PushProvider). Dispara el evento que abre el modal de Calculator.
+export function CalculatorTrigger() {
+  return (
+    <button
+      type="button"
+      onClick={() => window.dispatchEvent(new CustomEvent("calculator:open"))}
+      title="Abrir calculadora"
+      aria-label="Abrir calculadora"
+      className="p-2 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+    >
+      <CalculatorIcon size={16} />
+    </button>
   );
 }
