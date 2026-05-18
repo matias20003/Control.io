@@ -97,10 +97,7 @@ body {
    Es lo que le da "vida" al fondo y hace que el liquid glass se vea como
    vidrio y no como gris translúcido. Mantiene la paleta índigo de la
    marca, sin colores estridentes. */
-.ambient-mesh {
-  position: relative;
-  isolation: isolate;
-}
+.ambient-mesh { position: relative; }
 .ambient-mesh::before {
   content: "";
   position: fixed;

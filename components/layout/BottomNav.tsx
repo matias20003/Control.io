@@ -52,7 +52,7 @@ export function BottomNav() {
           />
 
           {/* Sheet */}
-          <div className="md:hidden fixed left-0 right-0 bottom-[57px] z-50 glass-strong glass-highlight border-t border-[color:var(--glass-border)] rounded-t-2xl shadow-[0_-8px_32px_oklch(0_0_0/40%)] flex flex-col overflow-hidden" style={{ maxHeight: "calc(100dvh - 80px)" }}>
+          <div className="md:hidden fixed left-0 right-0 bottom-[57px] z-50 bg-surface/95 backdrop-blur-xl glass-highlight border-t border-[color:var(--glass-border)] rounded-t-2xl shadow-[0_-8px_32px_oklch(0_0_0/40%)] flex flex-col overflow-hidden" style={{ maxHeight: "calc(100dvh - 80px)" }}>
             {/* Header — fijo */}
             <div className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0 border-b border-border/50">
               <p className="text-xs font-semibold text-muted uppercase tracking-[0.08em]">
@@ -96,8 +96,11 @@ export function BottomNav() {
         </>
       )}
 
-      {/* Barra inferior */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass-strong glass-highlight border-t border-[color:var(--glass-border)] pb-safe overflow-visible">
+      {/* Barra inferior — fija al viewport en mobile. El bg-surface/95 actúa
+          como respaldo opaco para que la barra se vea sólida aunque el
+          backdrop-filter no se aplique correctamente (algunos mobile
+          browsers / WebViews lo deshabilitan en elementos position:fixed). */}
+      <nav className="md:hidden fixed inset-x-0 bottom-0 z-50 bg-surface/95 backdrop-blur-xl glass-highlight border-t border-[color:var(--glass-border)] pb-safe overflow-visible">
         <div className="grid grid-cols-5 py-1.5">
 
           {/* Izquierda: Inicio + Movimientos */}
