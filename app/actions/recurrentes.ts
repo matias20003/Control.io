@@ -16,6 +16,7 @@ const schema = z.object({
   currency: z.string().min(1),
   description: z.string().min(1, "La descripción es requerida"),
   categoryId: z.string().optional(),
+  accountId: z.string().optional(),
   frequency: z.enum([
     "DAILY",
     "WEEKLY",
@@ -42,6 +43,7 @@ export async function createRecurrenteAction(formData: FormData) {
     currency: formData.get("currency"),
     description: formData.get("description"),
     categoryId: formData.get("categoryId") || undefined,
+    accountId: formData.get("accountId") || undefined,
     frequency: formData.get("frequency"),
     dayOfMonth: formData.get("dayOfMonth") || undefined,
     startDate: formData.get("startDate"),
@@ -73,6 +75,7 @@ export async function updateRecurrenteAction(id: string, formData: FormData) {
     currency: formData.get("currency"),
     description: formData.get("description"),
     categoryId: formData.get("categoryId") || undefined,
+    accountId: formData.get("accountId") || undefined,
     frequency: formData.get("frequency"),
     dayOfMonth: formData.get("dayOfMonth") || undefined,
     startDate: formData.get("startDate"),

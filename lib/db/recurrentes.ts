@@ -10,6 +10,8 @@ export type SerializedRecurring = {
   categoryId: string | null;
   categoryName: string | null;
   categoryIcon: string | null;
+  accountId: string | null;
+  accountName: string | null;
   frequency: string;
   dayOfMonth: number | null;
   startDate: string;
@@ -34,6 +36,8 @@ function serialize(r: any): SerializedRecurring {
     categoryId: r.categoryId ?? null,
     categoryName: r.category?.name ?? null,
     categoryIcon: r.category?.icon ?? null,
+    accountId: r.accountId ?? null,
+    accountName: decrypt(r.account?.name ?? null),
     frequency: r.frequency,
     dayOfMonth: r.dayOfMonth ?? null,
     startDate:
@@ -54,6 +58,7 @@ function serialize(r: any): SerializedRecurring {
 
 const INCLUDE = {
   category: { select: { name: true, icon: true } },
+  account: { select: { name: true } },
 };
 
 export async function getRecurrentes(
@@ -75,12 +80,24 @@ export async function createRecurrente(
     currency: string;
     description: string;
     categoryId?: string;
+    accountId?: string;
     frequency: string;
     dayOfMonth?: number;
     startDate: string;
     endDate?: string;
   }
 ): Promise<SerializedRecurring> {
+  // Validamos ownership de la cuenta/categoría antes de guardar
+  // (evita guardar IDs spoofed que después harían fallar el cron).
+  if (data.accountId) {
+    const acc = await prisma.account.findFirst({ where: { id: data.accountId, userId }, select: { id: true } });
+    if (!acc) throw new Error("Cuenta inválida");
+  }
+  if (data.categoryId) {
+    const cat = await prisma.category.findFirst({ where: { id: data.categoryId, userId }, select: { id: true } });
+    if (!cat) throw new Error("Categoría inválida");
+  }
+
   const row = await prisma.recurringTransaction.create({
     data: {
       userId,
@@ -89,6 +106,7 @@ export async function createRecurrente(
       currency: data.currency,
       description: encrypt(data.description) ?? data.description,
       categoryId: data.categoryId || null,
+      accountId: data.accountId || null,
       frequency: data.frequency as any,
       dayOfMonth: data.dayOfMonth ?? null,
       startDate: new Date(data.startDate),
@@ -125,6 +143,7 @@ export async function updateRecurrente(
     currency: string;
     description: string;
     categoryId?: string;
+    accountId?: string;
     frequency: string;
     dayOfMonth?: number;
     startDate: string;
@@ -136,6 +155,15 @@ export async function updateRecurrente(
   });
   if (!existing) throw new Error("No encontrado");
 
+  if (data.accountId) {
+    const acc = await prisma.account.findFirst({ where: { id: data.accountId, userId }, select: { id: true } });
+    if (!acc) throw new Error("Cuenta inválida");
+  }
+  if (data.categoryId) {
+    const cat = await prisma.category.findFirst({ where: { id: data.categoryId, userId }, select: { id: true } });
+    if (!cat) throw new Error("Categoría inválida");
+  }
+
   const row = await prisma.recurringTransaction.update({
     where: { id },
     data: {
@@ -144,6 +172,7 @@ export async function updateRecurrente(
       currency: data.currency,
       description: encrypt(data.description) ?? data.description,
       categoryId: data.categoryId || null,
+      accountId: data.accountId || null,
       frequency: data.frequency as any,
       dayOfMonth: data.dayOfMonth ?? null,
       startDate: new Date(data.startDate),

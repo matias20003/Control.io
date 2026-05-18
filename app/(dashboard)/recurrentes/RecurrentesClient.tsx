@@ -19,6 +19,7 @@ import {
 } from "@/app/actions/recurrentes";
 import type { SerializedRecurring } from "@/lib/db/recurrentes";
 import type { SerializedCategory } from "@/lib/db/categories";
+import type { SerializedAccount } from "@/lib/db/accounts";
 
 const FREQ_LABELS: Record<string, string> = {
   DAILY: "Diario",
@@ -32,9 +33,10 @@ const FREQ_LABELS: Record<string, string> = {
 interface Props {
   initialRecurrentes: SerializedRecurring[];
   categories: SerializedCategory[];
+  accounts: SerializedAccount[];
 }
 
-export function RecurrentesClient({ initialRecurrentes, categories }: Props) {
+export function RecurrentesClient({ initialRecurrentes, categories, accounts }: Props) {
   const [items, setItems] = useState<SerializedRecurring[]>(initialRecurrentes);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<SerializedRecurring | null>(null);
@@ -236,6 +238,25 @@ export function RecurrentesClient({ initialRecurrentes, categories }: Props) {
                 </option>
               ))}
             </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="rec-account">Cuenta</Label>
+            <Select
+              id="rec-account"
+              name="accountId"
+              defaultValue={defaultValues?.accountId ?? ""}
+            >
+              <option value="">Sin cuenta (no afecta saldo)</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.icon ?? "🏦"} {a.name} ({a.currency})
+                </option>
+              ))}
+            </Select>
+            <p className="text-[11px] text-muted leading-snug">
+              Si elegís una cuenta, cuando se ejecute el recurrente se va a descontar/sumar al saldo automáticamente.
+            </p>
           </div>
 
           <div className="space-y-1.5">
