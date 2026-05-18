@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,17 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
   }>({});
 
   const openModal = (type: TxType) => { setTxType(type); setIsOpen(true); };
+
+  // Permite que otros componentes (ej: MovementPrompt) abran el modal disparando
+  // un CustomEvent en el window. Evita acoplar componentes vía props/refs.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ type?: TxType }>).detail;
+      openModal(detail?.type ?? "EXPENSE");
+    };
+    window.addEventListener("dashboard:open-quick-add", handler);
+    return () => window.removeEventListener("dashboard:open-quick-add", handler);
+  }, []);
 
   const filteredCategories = categories.filter((c) => c.type === txType);
 

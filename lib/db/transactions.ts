@@ -239,3 +239,12 @@ export async function getMonthSummary(userId: string, month?: number, year?: num
     byCategory: Object.values(catMap).sort((a, b) => b.total - a.total).slice(0, 8),
   };
 }
+
+export async function hasTransactionToday(userId: string): Promise<boolean> {
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const end = new Date();   end.setHours(23, 59, 59, 999);
+  const count = await prisma.transaction.count({
+    where: { userId, createdAt: { gte: start, lte: end } },
+  });
+  return count > 0;
+}

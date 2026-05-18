@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { getMonthSummary } from "@/lib/db/transactions";
+import { getMonthSummary, hasTransactionToday } from "@/lib/db/transactions";
 import { getAccounts } from "@/lib/db/accounts";
 import { getCategories } from "@/lib/db/categories";
 import { getInsights, getNetWorth } from "@/lib/db/insights";
@@ -13,6 +13,7 @@ import { TrendingUp, TrendingDown, Scale, PiggyBank, ChevronRight, AlertTriangle
 import { DashboardQuickAdd } from "./DashboardQuickAdd";
 import { CategoryChart } from "./CategoryChart";
 import { TodayDate } from "./TodayDate";
+import { MovementPrompt } from "@/components/MovementPrompt";
 // import { SendReportButton } from "./SendReportButton"; // TODO: activar cuando haya dominio verificado en Resend
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -28,13 +29,14 @@ export default async function DashboardPage() {
   const month = now.getMonth() + 1;
   const year  = now.getFullYear();
 
-  const [summary, accounts, categories, insights, netWorth, cotizaciones] = await Promise.all([
+  const [summary, accounts, categories, insights, netWorth, cotizaciones, movementToday] = await Promise.all([
     getMonthSummary(user.id, month, year),
     getAccounts(user.id),
     getCategories(user.id),
     getInsights(user.id).catch(() => []),
     getNetWorth(user.id).catch(() => null),
     getCotizaciones().catch(() => []),
+    hasTransactionToday(user.id).catch(() => true), // si falla, no molestamos al usuario
   ]);
 
   const { totalIncome, totalExpense, balance, byCategory } = summary;
@@ -67,6 +69,10 @@ export default async function DashboardPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-3xl">
+
+      {/* Cartel proactivo: solo aparece en mobile, una vez por día, después del mediodía,
+          y siempre que el usuario aún no haya registrado nada hoy. */}
+      <MovementPrompt hasMovementToday={movementToday} />
 
       {/* Greeting */}
       <div>
