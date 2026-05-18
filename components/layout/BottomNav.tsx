@@ -141,19 +141,22 @@ export function BottomNav() {
             );
           })}
 
-          {/* Centro: Cuentas — FAB elevado */}
-          <div className="flex flex-col items-center justify-end pb-2 -translate-y-4">
+          {/* Centro: Cuentas — FAB elevado. -translate-y-7 lo levanta lo
+              suficiente para que el medio del círculo quede por encima del
+              borde superior del zócalo. z-10 + relative aseguran que el
+              círculo y su sombra queden por encima del nav, no detrás. */}
+          <div className="relative z-10 flex flex-col items-center justify-end pb-2 -translate-y-7">
             <Link href="/cuentas" className="flex flex-col items-center gap-1.5">
               <div
                 className={cn(
-                  "w-14 h-14 rounded-full flex items-center justify-center transition-all duration-200",
-                  "ring-[3px] ring-surface shadow-lg",
+                  "w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200",
+                  "ring-[4px] ring-background shadow-lg",
                   isCuentasActive
-                    ? "bg-primary shadow-[0_4px_20px_oklch(0.67_0.19_258/50%)]"
-                    : "bg-primary/80 shadow-[0_4px_16px_oklch(0_0_0/40%)]"
+                    ? "bg-primary shadow-[0_8px_28px_oklch(0.67_0.19_258/55%)]"
+                    : "bg-primary/90 shadow-[0_8px_24px_oklch(0_0_0/45%)]"
                 )}
               >
-                <Wallet size={22} strokeWidth={2} className="text-white" />
+                <Wallet size={24} strokeWidth={2} className="text-white" />
               </div>
               <span
                 className={cn(

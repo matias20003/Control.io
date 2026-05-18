@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { LogoFull, LogoIcon } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/button";
@@ -42,7 +43,12 @@ export default async function LandingPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isLogged = Boolean(user);
+  // Si el usuario ya inició sesión, la landing es ruido — lo mandamos
+  // directo al dashboard. Si no está logueado, se queda en la página
+  // de marketing pública.
+  if (user) redirect("/dashboard");
+
+  const isLogged = false;
 
   return (
     <div className="relative min-h-dvh overflow-x-clip bg-background text-foreground">
