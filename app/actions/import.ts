@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { encrypt } from "@/lib/crypto";
 
 export type ImportRow = {
   date: string;         // ISO or "dd/mm/yyyy"
@@ -54,28 +55,34 @@ export async function importTransactionsAction(rows: ImportRow[]) {
       const amount = Math.abs(row.amount);
       if (!amount || amount <= 0) { errors++; continue; }
 
-      await prisma.transaction.create({
-        data: {
-          userId: user.id,
-          type: row.type,
-          amount,
-          currency: "ARS",
-          description: row.description?.slice(0, 255) || null,
-          date,
-          categoryId: (row.categoryId && validCatIds.has(row.categoryId)) ? row.categoryId : null,
-          accountId: (row.accountId && validAccIds.has(row.accountId)) ? row.accountId : null,
-          notes: row.notes || "Importado desde CSV",
-        },
-      });
+      const safeCatId = (row.categoryId && validCatIds.has(row.categoryId)) ? row.categoryId : null;
+      const safeAccId = (row.accountId && validAccIds.has(row.accountId)) ? row.accountId : null;
 
-      // Update account balance
-      if (row.accountId) {
-        const delta = row.type === "INCOME" ? amount : -amount;
-        await prisma.account.update({
-          where: { id: row.accountId, userId: user.id },
-          data: { balance: { increment: delta } },
-        }).catch(() => {});
-      }
+      // Crear + actualizar saldo en una sola tx para evitar inconsistencias
+      // si falla la segunda operación.
+      await prisma.$transaction(async (db) => {
+        await db.transaction.create({
+          data: {
+            userId: user.id,
+            type: row.type,
+            amount,
+            currency: "ARS",
+            description: encrypt(row.description?.slice(0, 255) || null),
+            date,
+            categoryId: safeCatId,
+            accountId: safeAccId,
+            notes: encrypt(row.notes || "Importado desde CSV"),
+          },
+        });
+
+        if (safeAccId) {
+          const delta = row.type === "INCOME" ? amount : -amount;
+          await db.account.update({
+            where: { id: safeAccId, userId: user.id },
+            data: { balance: { increment: delta } },
+          });
+        }
+      });
 
       imported++;
     } catch {

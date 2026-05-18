@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { startOfMonth, endOfMonth } from "date-fns";
+import { decrypt } from "@/lib/crypto";
 
 export const runtime = "nodejs";
 
@@ -55,13 +56,13 @@ export async function GET(req: NextRequest) {
       [
         new Date(tx.date).toLocaleDateString("es-AR"),
         TYPE_LABELS[tx.type] ?? tx.type,
-        esc(tx.description),
+        esc(decrypt(tx.description)),
         toNum(tx.amount).toFixed(2),
         tx.currency,
         esc(tx.category?.name),
-        esc(tx.account?.name),
-        esc(tx.toAccount?.name),
-        esc(tx.notes),
+        esc(decrypt(tx.account?.name ?? null)),
+        esc(decrypt(tx.toAccount?.name ?? null)),
+        esc(decrypt(tx.notes)),
       ].join(",")
     ),
   ].join("\n");

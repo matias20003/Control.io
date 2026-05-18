@@ -80,42 +80,61 @@ export async function createTransaction(userId: string, data: {
   type: string; amount: number; currency: string; description?: string;
   date: string; categoryId?: string; accountId?: string; toAccountId?: string; notes?: string;
 }) {
-  const tx = await prisma.transaction.create({
-    data: {
-      userId,
-      type: data.type as any,
-      amount: data.amount,
-      currency: data.currency,
-      description: encrypt(data.description || null), // ← encrypt on write
-      date: new Date(data.date),
-      categoryId: data.categoryId || null,
-      accountId: data.accountId || null,
-      toAccountId: data.toAccountId || null,
-      notes: encrypt(data.notes || null),             // ← encrypt on write
-    },
-    include: {
-      category: { select: { name: true, icon: true, color: true } },
-      account:   { select: { name: true } },
-      toAccount: { select: { name: true } },
-    },
-  });
-
-  // Actualizar saldo de cuenta
+  // Pre-validamos ownership de cuentas/categoría. Sin esto un cliente malicioso
+  // podría enviar IDs de otro usuario y, aunque Prisma rechace el update por la
+  // composite where, igual queda creada la Transaction con FKs inválidos.
   if (data.accountId) {
-    const delta = data.type === "INCOME" ? data.amount : -data.amount;
-    await prisma.account.update({
-      where: { id: data.accountId, userId },
-      data: { balance: { increment: delta } },
-    });
+    const acc = await prisma.account.findFirst({ where: { id: data.accountId, userId }, select: { id: true } });
+    if (!acc) throw new Error("Cuenta inválida");
   }
-  if (data.type === "TRANSFER" && data.toAccountId) {
-    await prisma.account.update({
-      where: { id: data.toAccountId, userId },
-      data: { balance: { increment: data.amount } },
-    });
+  if (data.toAccountId) {
+    const toAcc = await prisma.account.findFirst({ where: { id: data.toAccountId, userId }, select: { id: true } });
+    if (!toAcc) throw new Error("Cuenta destino inválida");
+  }
+  if (data.categoryId) {
+    const cat = await prisma.category.findFirst({ where: { id: data.categoryId, userId }, select: { id: true } });
+    if (!cat) throw new Error("Categoría inválida");
   }
 
-  return serialize(tx);
+  // Todo el flujo en una sola tx para que crear el movimiento + actualizar saldos
+  // sean atómicos: si una operación falla, ninguna persiste.
+  return prisma.$transaction(async (db) => {
+    const tx = await db.transaction.create({
+      data: {
+        userId,
+        type: data.type as any,
+        amount: data.amount,
+        currency: data.currency,
+        description: encrypt(data.description || null), // ← encrypt on write
+        date: new Date(data.date),
+        categoryId: data.categoryId || null,
+        accountId: data.accountId || null,
+        toAccountId: data.toAccountId || null,
+        notes: encrypt(data.notes || null),             // ← encrypt on write
+      },
+      include: {
+        category: { select: { name: true, icon: true, color: true } },
+        account:   { select: { name: true } },
+        toAccount: { select: { name: true } },
+      },
+    });
+
+    if (data.accountId) {
+      const delta = data.type === "INCOME" ? data.amount : -data.amount;
+      await db.account.update({
+        where: { id: data.accountId, userId },
+        data: { balance: { increment: delta } },
+      });
+    }
+    if (data.type === "TRANSFER" && data.toAccountId) {
+      await db.account.update({
+        where: { id: data.toAccountId, userId },
+        data: { balance: { increment: data.amount } },
+      });
+    }
+
+    return serialize(tx);
+  });
 }
 
 export async function updateTransaction(
@@ -129,70 +148,86 @@ export async function updateTransaction(
   const existing = await prisma.transaction.findFirst({ where: { id: transactionId, userId } });
   if (!existing) throw new Error("No encontrado");
 
-  // Revertir efectos del movimiento anterior
-  if (existing.accountId) {
-    const oldAmount = toNum(existing.amount);
-    const reverseDelta = existing.type === "INCOME" ? -oldAmount : oldAmount;
-    await prisma.account.update({ where: { id: existing.accountId, userId }, data: { balance: { increment: reverseDelta } } });
-  }
-  if (existing.type === "TRANSFER" && existing.toAccountId) {
-    await prisma.account.update({ where: { id: existing.toAccountId, userId }, data: { balance: { increment: -toNum(existing.amount) } } });
-  }
-
-  // Actualizar el movimiento
-  const updated = await prisma.transaction.update({
-    where: { id: transactionId, userId },
-    data: {
-      type: data.type as any,
-      amount: data.amount,
-      currency: data.currency,
-      description: encrypt(data.description || null), // ← encrypt on write
-      date: new Date(data.date),
-      categoryId: data.categoryId || null,
-      accountId: data.accountId || null,
-      toAccountId: data.toAccountId || null,
-      notes: encrypt(data.notes || null),             // ← encrypt on write
-    },
-    include: {
-      category: { select: { name: true, icon: true, color: true } },
-      account: { select: { name: true } },
-      toAccount: { select: { name: true } },
-    },
-  });
-
-  // Aplicar efectos del nuevo movimiento
+  // Validar ownership de las nuevas cuentas/categoría antes de tocar saldos.
   if (data.accountId) {
-    const delta = data.type === "INCOME" ? data.amount : -data.amount;
-    await prisma.account.update({ where: { id: data.accountId, userId }, data: { balance: { increment: delta } } });
+    const acc = await prisma.account.findFirst({ where: { id: data.accountId, userId }, select: { id: true } });
+    if (!acc) throw new Error("Cuenta inválida");
   }
-  if (data.type === "TRANSFER" && data.toAccountId) {
-    await prisma.account.update({ where: { id: data.toAccountId, userId }, data: { balance: { increment: data.amount } } });
+  if (data.toAccountId) {
+    const toAcc = await prisma.account.findFirst({ where: { id: data.toAccountId, userId }, select: { id: true } });
+    if (!toAcc) throw new Error("Cuenta destino inválida");
+  }
+  if (data.categoryId) {
+    const cat = await prisma.category.findFirst({ where: { id: data.categoryId, userId }, select: { id: true } });
+    if (!cat) throw new Error("Categoría inválida");
   }
 
-  return serialize(updated);
+  // Reverso + write + apply, todo atómico. Si algo falla, los saldos
+  // no quedan a medio actualizar.
+  return prisma.$transaction(async (db) => {
+    if (existing.accountId) {
+      const oldAmount = toNum(existing.amount);
+      const reverseDelta = existing.type === "INCOME" ? -oldAmount : oldAmount;
+      await db.account.update({ where: { id: existing.accountId, userId }, data: { balance: { increment: reverseDelta } } });
+    }
+    if (existing.type === "TRANSFER" && existing.toAccountId) {
+      await db.account.update({ where: { id: existing.toAccountId, userId }, data: { balance: { increment: -toNum(existing.amount) } } });
+    }
+
+    const updated = await db.transaction.update({
+      where: { id: transactionId, userId },
+      data: {
+        type: data.type as any,
+        amount: data.amount,
+        currency: data.currency,
+        description: encrypt(data.description || null), // ← encrypt on write
+        date: new Date(data.date),
+        categoryId: data.categoryId || null,
+        accountId: data.accountId || null,
+        toAccountId: data.toAccountId || null,
+        notes: encrypt(data.notes || null),             // ← encrypt on write
+      },
+      include: {
+        category: { select: { name: true, icon: true, color: true } },
+        account: { select: { name: true } },
+        toAccount: { select: { name: true } },
+      },
+    });
+
+    if (data.accountId) {
+      const delta = data.type === "INCOME" ? data.amount : -data.amount;
+      await db.account.update({ where: { id: data.accountId, userId }, data: { balance: { increment: delta } } });
+    }
+    if (data.type === "TRANSFER" && data.toAccountId) {
+      await db.account.update({ where: { id: data.toAccountId, userId }, data: { balance: { increment: data.amount } } });
+    }
+
+    return serialize(updated);
+  });
 }
 
 export async function deleteTransaction(userId: string, transactionId: string) {
   const tx = await prisma.transaction.findFirst({ where: { id: transactionId, userId } });
   if (!tx) throw new Error("No encontrado");
 
-  // Revertir saldo
-  if (tx.accountId) {
-    const amount = toNum(tx.amount);
-    const delta = tx.type === "INCOME" ? -amount : amount;
-    await prisma.account.update({
-      where: { id: tx.accountId, userId },
-      data: { balance: { increment: delta } },
-    });
-  }
-  if (tx.type === "TRANSFER" && tx.toAccountId) {
-    await prisma.account.update({
-      where: { id: tx.toAccountId, userId },
-      data: { balance: { increment: -toNum(tx.amount) } },
-    });
-  }
-
-  await prisma.transaction.delete({ where: { id: transactionId } });
+  // Reverso de saldo + borrado, atómico.
+  await prisma.$transaction(async (db) => {
+    if (tx.accountId) {
+      const amount = toNum(tx.amount);
+      const delta = tx.type === "INCOME" ? -amount : amount;
+      await db.account.update({
+        where: { id: tx.accountId, userId },
+        data: { balance: { increment: delta } },
+      });
+    }
+    if (tx.type === "TRANSFER" && tx.toAccountId) {
+      await db.account.update({
+        where: { id: tx.toAccountId, userId },
+        data: { balance: { increment: -toNum(tx.amount) } },
+      });
+    }
+    await db.transaction.delete({ where: { id: transactionId } });
+  });
 }
 
 export type MonthSummary = {
