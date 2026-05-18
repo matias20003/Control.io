@@ -7,4 +7,7 @@ export function getResend(): Resend {
   return _resend;
 }
 
-export const FROM = process.env.RESEND_FROM ?? "control.io <noreply@control.io>";
+// Sender por defecto. Override en producción via la env var RESEND_FROM en
+// Vercel para no hardcodear emails personales en el repo.
+export const FROM =
+  process.env.RESEND_FROM ?? "control.io <control.io.oficial@gmail.com>";
