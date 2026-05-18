@@ -1,6 +1,7 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Header } from "@/components/layout/Header";
+import { Calculator } from "@/components/Calculator";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getOrCreateProfile } from "@/lib/db/profile";
@@ -31,6 +32,7 @@ export default async function DashboardLayout({
     <div className="min-h-dvh bg-background">
       <Sidebar />
       <Header />
+      <Calculator />
       <main className="md:ml-60 pb-20 md:pb-0 min-h-dvh">{children}</main>
       <BottomNav />
     </div>
