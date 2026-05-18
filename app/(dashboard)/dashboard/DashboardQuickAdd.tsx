@@ -212,8 +212,11 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
           </Button>
         </div>
         <button onClick={() => openModal("TRANSFER")}
-          className="flex items-center gap-1.5 text-xs text-muted hover:text-primary transition-colors">
-          <ArrowLeftRight size={12} />Nueva transferencia
+          className="group inline-flex items-center gap-1.5 text-xs font-medium text-muted-2 hover:text-primary transition-colors py-1">
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-surface-2 text-muted group-hover:bg-primary/15 group-hover:text-primary transition-colors">
+            <ArrowLeftRight size={11} />
+          </span>
+          Nueva transferencia
         </button>
       </div>
 

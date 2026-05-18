@@ -29,11 +29,13 @@ const buttonVariants = cva(
           "bg-success text-white rounded-lg shadow-[0_2px_8px_oklch(0.67_0.17_148/25%)] hover:opacity-90",
         muted:
           "text-muted rounded-lg hover:text-foreground hover:bg-surface-2",
-        /* ── Soft semantic variants — for quick-action income/expense buttons ── */
+        /* ── Soft semantic variants — for quick-action income/expense buttons.
+           Sutil gradient interno + glow al hover para que se sientan vivos
+           sin perder la sutileza de "soft semantic". */
         income:
-          "bg-success/10 text-success border border-success/20 rounded-lg hover:bg-success/16 hover:border-success/30 active:bg-success/20",
+          "bg-gradient-to-br from-success/15 to-success/[0.06] text-success border border-success/25 rounded-lg shadow-[inset_0_1px_0_oklch(0.96_0.005_258/8%)] hover:from-success/22 hover:to-success/10 hover:border-success/40 hover:shadow-[inset_0_1px_0_oklch(0.96_0.005_258/12%),0_8px_24px_oklch(0.67_0.17_148/22%)] active:scale-[0.985] transition-all duration-200",
         expense:
-          "bg-danger/10 text-danger border border-danger/20 rounded-lg hover:bg-danger/16 hover:border-danger/30 active:bg-danger/20",
+          "bg-gradient-to-br from-danger/15 to-danger/[0.06] text-danger border border-danger/25 rounded-lg shadow-[inset_0_1px_0_oklch(0.96_0.005_258/8%)] hover:from-danger/22 hover:to-danger/10 hover:border-danger/40 hover:shadow-[inset_0_1px_0_oklch(0.96_0.005_258/12%),0_8px_24px_oklch(0.62_0.22_27/22%)] active:scale-[0.985] transition-all duration-200",
       },
       size: {
         default:  "h-11 px-5 text-sm",
