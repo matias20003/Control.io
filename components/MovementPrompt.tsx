@@ -10,7 +10,6 @@ interface Props {
 }
 
 const STORAGE_KEY = "control:lastMovementPrompt";
-const MIN_HOUR = 12;
 
 export function MovementPrompt({ hasMovementToday }: Props) {
   const [open, setOpen] = useState(false);
@@ -21,12 +20,6 @@ export function MovementPrompt({ hasMovementToday }: Props) {
     const today = new Date().toDateString();
     const lastPrompt = localStorage.getItem(STORAGE_KEY);
     if (lastPrompt === today) return;
-
-    const hour = new Date().getHours();
-    if (hour < MIN_HOUR) return;
-
-    const isMobile = window.matchMedia("(max-width: 767px)").matches;
-    if (!isMobile) return;
 
     const t = setTimeout(() => setOpen(true), 400);
     return () => clearTimeout(t);
