@@ -108,18 +108,22 @@ export function BottomNav() {
           Pasamos position/inset/zIndex como style inline para que NINGÚN
           stylesheet posterior los pueda sobrescribir, y duplicamos con
           Tailwind para que también funcione en build estática. */}
+      {/* IMPORTANTE: NO usar .glass-highlight en este nav. Esa clase agrega
+          overflow:hidden para contener su línea decorativa superior — y eso
+          rompe el FAB de Cuentas que necesita sobresalir por arriba. */}
       <nav
-        data-bottom-nav="v2"
+        data-bottom-nav="v3"
         style={{
           position: "fixed",
           left: 0,
           right: 0,
           bottom: 0,
           zIndex: 50,
+          overflow: "visible",
         }}
-        className="md:hidden bg-surface/95 backdrop-blur-xl glass-highlight border-t border-[color:var(--glass-border)] pb-safe overflow-visible"
+        className="md:hidden bg-surface/95 backdrop-blur-xl border-t border-[color:var(--glass-border)] pb-safe"
       >
-        <div className="grid grid-cols-5 py-1.5">
+        <div className="grid grid-cols-5 py-1.5 overflow-visible">
 
           {/* Izquierda: Inicio + Movimientos */}
           {leftItems.map((item) => {
