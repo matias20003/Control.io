@@ -86,7 +86,7 @@ export default async function DashboardPage() {
       {/* ── Reporte semanal CTA ── */}
       <Link
         href="/reporte"
-        className="flex items-center justify-between w-full glass-panel glass-highlight hover:border-primary rounded-xl px-4 py-3.5 transition-colors group shadow-[0_8px_32px_oklch(0_0_0/40%)]"
+        className="flex items-center justify-between w-full bg-surface border border-border hover:border-primary rounded-xl px-4 py-3.5 transition-colors group"
       >
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -112,7 +112,7 @@ export default async function DashboardPage() {
         </div>
         <div className="grid grid-cols-2 gap-3">
           {metrics.map((m) => (
-            <Card key={m.label} variant="glass" className="relative overflow-hidden">
+            <Card key={m.label} className="relative overflow-hidden">
               <CardContent className="p-4">
                 <div className={`inline-flex p-2 rounded-lg ${m.bg} mb-3`}>
                   <m.icon size={16} className={m.color} />
@@ -132,7 +132,7 @@ export default async function DashboardPage() {
           {insights.map((ins, i) => {
             const Icon = INSIGHT_ICONS[ins.type] ?? Info;
             return (
-              <div key={i} className="glass-panel glass-highlight rounded-xl p-3.5 flex gap-3 shadow-[0_4px_16px_oklch(0_0_0/30%)]">
+              <div key={i} className="bg-surface rounded-xl border border-border p-3.5 flex gap-3">
                 <span className="text-lg shrink-0 mt-0.5">{ins.icon}</span>
                 <div>
                   <p className={`text-sm font-semibold ${INSIGHT_COLORS[ins.type]}`}>{ins.title}</p>
@@ -153,7 +153,7 @@ export default async function DashboardPage() {
               Ver cuentas <ChevronRight size={12} />
             </Link>
           </div>
-          <Card variant="glass">
+          <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs text-muted">Activos (cuentas ARS)</p>
@@ -185,7 +185,7 @@ export default async function DashboardPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             {[oficial, blue].filter(Boolean).map((c) => (
-              <Card key={c!.casa} variant="glass">
+              <Card key={c!.casa}>
                 <CardContent className="p-3.5">
                   <p className="text-xs text-muted mb-2">{c!.casa === "blue" ? "💵 Blue" : "🏦 Oficial"}</p>
                   <div className="flex justify-between text-xs text-muted mb-0.5">
@@ -218,7 +218,7 @@ export default async function DashboardPage() {
           </div>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {accounts.map((account) => (
-              <Card key={account.id} variant="glass">
+              <Card key={account.id}>
                 <CardContent className="p-3.5 flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <div
