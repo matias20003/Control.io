@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { differenceInDays, isAfter, isBefore, startOfDay } from "date-fns";
 import { sendPushToUser } from "@/lib/push/send";
+import { encrypt } from "@/lib/crypto";
 
 // Vercel Cron: diariamente a las 11:00 UTC (08:00 ARG)
 export const runtime = "nodejs";
@@ -79,25 +80,38 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-      // Crear transacción automática
-      await prisma.transaction.create({
-        data: {
-          userId: r.userId,
-          type: r.type,
-          amount: r.amount,
-          currency: r.currency,
-          description: r.description,
-          date: today,
-          categoryId: r.categoryId ?? null,
-          notes: "✅ Ejecutado automáticamente",
-        },
-      });
+      // Validar que la categoría sigue siendo del mismo user (puede haber sido
+      // eliminada o reasignada). Si no lo está, dejamos la transacción sin
+      // categoría en vez de propagar un FK inválido.
+      let safeCategoryId: string | null = null;
+      if (r.categoryId) {
+        const cat = await prisma.category.findFirst({
+          where: { id: r.categoryId, userId: r.userId },
+          select: { id: true },
+        });
+        safeCategoryId = cat?.id ?? null;
+      }
 
-      // Actualizar lastExecuted
-      await prisma.recurringTransaction.update({
-        where: { id: r.id },
-        data: { lastExecuted: today },
-      });
+      // Crear transacción + marcar lastExecuted en una sola tx para no quedar
+      // ejecutándola dos veces si falla el update del recurrente.
+      await prisma.$transaction([
+        prisma.transaction.create({
+          data: {
+            userId: r.userId,
+            type: r.type,
+            amount: r.amount,
+            currency: r.currency,
+            description: encrypt(r.description),
+            date: today,
+            categoryId: safeCategoryId,
+            notes: encrypt("✅ Ejecutado automáticamente"),
+          },
+        }),
+        prisma.recurringTransaction.update({
+          where: { id: r.id },
+          data: { lastExecuted: today },
+        }),
+      ]);
 
       // Enviar push notification
       await sendPushToUser(r.userId, {
