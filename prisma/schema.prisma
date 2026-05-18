@@ -425,6 +425,18 @@ model GrupoInvitacion {
   @@map("grupo_invitaciones")
 }
 
+model WaitlistEntry {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  profile   String   // "organize" | "save_goals" | "invest" | "other"
+  source    String?  // canal de adquisición opcional (twitter, reddit, etc.)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("waitlist_entries")
+}
+
 model ExchangeRate {
   id        String   @id @default(cuid())
   type      String
