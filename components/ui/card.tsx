@@ -1,14 +1,24 @@
 import { forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
-const Card = forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
+type CardVariant = "default" | "glass";
+
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  variant?: CardVariant;
+}
+
+const VARIANT_CLASSES: Record<CardVariant, string> = {
+  default: "border border-border bg-surface",
+  // Glass: superficie translúcida + blur + borde de "vidrio".
+  // El sombreado se vuelve más sutil (todo el efecto está en el blur).
+  glass: "glass-panel glass-highlight shadow-[0_8px_32px_oklch(0_0_0/40%)]",
+};
+
+const Card = forwardRef<HTMLDivElement, CardProps>(
+  ({ className, variant = "default", ...props }, ref) => (
     <div
       ref={ref}
-      className={cn(
-        "rounded-xl border border-border bg-surface",
-        className
-      )}
+      className={cn("rounded-xl", VARIANT_CLASSES[variant], className)}
       {...props}
     />
   )

@@ -34,9 +34,9 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden md:flex flex-col w-56 fixed left-0 top-0 bottom-0 z-30 bg-surface border-r border-border">
+    <aside className="hidden md:flex flex-col w-56 fixed left-0 top-0 bottom-0 z-30 glass-panel border-r border-r-[color:var(--glass-border)] border-l-0 border-t-0 border-b-0">
       {/* Logo */}
-      <div className="px-4 pt-4 pb-3 border-b border-border">
+      <div className="px-4 pt-4 pb-3 border-b border-[color:var(--glass-border)]">
         <LogoFull size="xs" />
       </div>
 
@@ -72,7 +72,7 @@ export function Sidebar() {
       </nav>
 
       {/* Sign out */}
-      <div className="px-2.5 py-3 border-t border-border">
+      <div className="px-2.5 py-3 border-t border-[color:var(--glass-border)]">
         <form action={signOutAction}>
           <button
             type="submit"

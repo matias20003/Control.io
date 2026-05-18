@@ -56,6 +56,16 @@
   --shadow-md:  0 4px 12px oklch(0 0 0 / 35%);
   --shadow-lg:  0 8px 24px oklch(0 0 0 / 40%);
   --shadow-xl:  0 16px 48px oklch(0 0 0 / 50%);
+
+  /* ── Liquid Glass ──
+     Tonos translúcidos sobre el background. El blur exige que haya algo de
+     color/textura detrás (ver .ambient-mesh debajo) para que se note el
+     efecto vidrio: si la página queda con fondo plano, el glass parece
+     simplemente un gris claro. */
+  --glass-bg:        oklch(0.18 0.012 258 / 55%);
+  --glass-bg-strong: oklch(0.22 0.014 258 / 70%);
+  --glass-border:    oklch(0.96 0.005 258 / 8%);
+  --glass-highlight: oklch(0.96 0.005 258 / 14%);
 }
 
 /* ── Reset + base ── */
@@ -81,6 +91,72 @@ body {
   color: var(--color-foreground);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Ambient mesh: gradientes radiales tonales detrás de toda la app.
+   Es lo que le da "vida" al fondo y hace que el liquid glass se vea como
+   vidrio y no como gris translúcido. Mantiene la paleta índigo de la
+   marca, sin colores estridentes. */
+.ambient-mesh {
+  position: relative;
+  isolation: isolate;
+}
+.ambient-mesh::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 40rem at 12% 8%,  oklch(0.67 0.19 258 / 14%), transparent 60%),
+    radial-gradient(50rem 36rem at 88% 18%, oklch(0.55 0.18 286 / 10%), transparent 60%),
+    radial-gradient(45rem 30rem at 60% 90%, oklch(0.62 0.15 232 / 09%), transparent 60%);
+}
+
+/* ── Glass utilities ────────────────────────────────────────────────
+   .glass-panel:  superficie translúcida básica con blur fuerte.
+   .glass-strong: para modales / elementos más opacos.
+   .glass-highlight: pseudo-elemento opcional que dibuja una línea sutil
+                     arriba (simula la luz reflejada en el borde superior). */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--glass-border);
+}
+.glass-strong {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid var(--glass-border);
+}
+.glass-highlight {
+  position: relative;
+  overflow: hidden;
+}
+.glass-highlight::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--glass-highlight),
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* Respetar preferencias de reduced motion / poca performance:
+   si el browser no soporta backdrop-filter, caemos a una superficie
+   sólida en lugar de algo translúcido sobre el mesh (sería ilegible). */
+@supports not (backdrop-filter: blur(1px)) {
+  .glass-panel,
+  .glass-strong {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+  }
 }
 
 /* ── Números financieros: siempre monospace ── */

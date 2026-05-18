@@ -29,7 +29,7 @@ export default async function DashboardLayout({
   await getOrCreateProfile(user.id, user.email!, user.user_metadata?.name);
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="ambient-mesh min-h-dvh bg-background">
       <Sidebar />
       <Header />
       <Calculator />

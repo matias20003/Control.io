@@ -42,7 +42,7 @@ export function DialogContent({
       <DialogPrimitive.Overlay
         className={cn(
           "fixed inset-0 z-40",
-          "bg-background/80 backdrop-blur-[6px]",
+          "bg-background/70 backdrop-blur-[10px]",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
           "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
           "duration-200"
@@ -52,7 +52,7 @@ export function DialogContent({
         className={cn(
           "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50",
           "w-[calc(100vw-2rem)] max-w-md",
-          "bg-surface border border-border rounded-2xl",
+          "glass-strong glass-highlight rounded-2xl",
           "shadow-[0_24px_64px_oklch(0_0_0/60%)]",
           "p-6",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
