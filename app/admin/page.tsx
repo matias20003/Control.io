@@ -41,6 +41,14 @@ async function getStats() {
     recentProfiles,
     // Active users: distinct userIds with a tx in last 30 days
     activeUserIds,
+    // Activación: distinct userIds con AL MENOS 1 transacción (cualquier fecha)
+    activatedUserIds,
+    // Waitlist: gente pre-registrada esperando acceso
+    waitlistTotal,
+    waitlistWeek,
+    waitlistByProfile,
+    // Push: cuántos tienen notificaciones activas
+    pushSubsCount,
   ] = await Promise.all([
     prisma.profile.count(),
     prisma.profile.count({ where: { createdAt: { gte: d7  } } }),
@@ -62,9 +70,18 @@ async function getStats() {
       by: ["userId"],
       where: { createdAt: { gte: d30 } },
     }),
+    prisma.transaction.groupBy({
+      by: ["userId"],
+    }),
+    // Waitlist puede fallar si la tabla aún no migró. Lo tolerable.
+    prisma.waitlistEntry.count().catch(() => 0),
+    prisma.waitlistEntry.count({ where: { createdAt: { gte: d7 } } }).catch(() => 0),
+    prisma.waitlistEntry.groupBy({ by: ["profile"], _count: true }).catch(() => []),
+    prisma.pushSubscription.count().catch(() => 0),
   ]);
 
   const activeUsers = activeUserIds.length;
+  const activatedUsers = activatedUserIds.length;
 
   // Build day-by-day registration count (last 30 days)
   const dayCounts: Record<string, number> = {};
@@ -80,11 +97,19 @@ async function getStats() {
 
   return {
     users: {
-      total:      totalUsers,
-      newWeek:    newUsersWeek,
-      newMonth:   newUsersMonth,
-      active:     activeUsers,
-      activePct:  pct(activeUsers, totalUsers),
+      total:        totalUsers,
+      newWeek:      newUsersWeek,
+      newMonth:     newUsersMonth,
+      active:       activeUsers,
+      activePct:    pct(activeUsers, totalUsers),
+      activated:    activatedUsers,
+      activatedPct: pct(activatedUsers, totalUsers),
+      pushOn:       pushSubsCount,
+    },
+    waitlist: {
+      total:     waitlistTotal,
+      newWeek:   waitlistWeek,
+      byProfile: waitlistByProfile as Array<{ profile: string; _count: number }>,
     },
     transactions: {
       total:      totalTx,
@@ -102,6 +127,13 @@ async function getStats() {
     dailyRegistrations,
   };
 }
+
+const PROFILE_LABELS: Record<string, string> = {
+  organize:   "Organizar gastos",
+  save_goals: "Ahorrar para metas",
+  invest:     "Inversiones",
+  other:      "Otro",
+};
 
 /* ── mini bar chart (server-rendered SVG) ── */
 function MiniBarChart({ data }: { data: { date: string; count: number }[] }) {
@@ -182,15 +214,63 @@ export default async function AdminPage() {
           </p>
         </div>
 
+        {/* Waitlist — primera sección porque es lo que se llena ahora */}
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
+            Lista de espera (/waitlist)
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Tile label="Anotados total" value={s.waitlist.total.toLocaleString("es-AR")} accent="text-primary" />
+            <Tile label="Esta semana"    value={s.waitlist.newWeek.toLocaleString("es-AR")}  accent="text-primary" />
+          </div>
+
+          {s.waitlist.byProfile.length > 0 && (
+            <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
+              <p className="text-[10px] uppercase tracking-widest text-muted mb-2">
+                Distribución por interés
+              </p>
+              {s.waitlist.byProfile.map((p) => {
+                const pctOfTotal = s.waitlist.total ? (p._count / s.waitlist.total) * 100 : 0;
+                return (
+                  <div key={p.profile} className="flex items-center gap-3 text-sm">
+                    <span className="w-40 text-muted truncate">
+                      {PROFILE_LABELS[p.profile] ?? p.profile}
+                    </span>
+                    <div className="flex-1 h-2 rounded-full bg-surface-2 overflow-hidden">
+                      <div className="h-full bg-primary" style={{ width: `${pctOfTotal}%` }} />
+                    </div>
+                    <span className="w-16 text-right font-mono tabular-nums text-foreground">
+                      {p._count}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
         {/* Users */}
         <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">Usuarios</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">Usuarios registrados</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Tile label="Total registrados"  value={s.users.total.toLocaleString("es-AR")} />
             <Tile label="Nuevos esta semana" value={s.users.newWeek.toLocaleString("es-AR")}  accent="text-primary" />
             <Tile label="Nuevos este mes"    value={s.users.newMonth.toLocaleString("es-AR")} accent="text-primary" />
             <Tile label="Activos últimos 30d" value={s.users.active.toLocaleString("es-AR")}
               sub={`${s.users.activePct} del total`} accent="text-success" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Tile
+              label="Activación"
+              value={s.users.activatedPct}
+              sub={`${s.users.activated}/${s.users.total} cargaron al menos 1 movimiento`}
+              accent={s.users.activated > 0 ? "text-success" : "text-muted"}
+            />
+            <Tile
+              label="Push activadas"
+              value={s.users.pushOn.toLocaleString("es-AR")}
+              sub={`${pct(s.users.pushOn, s.users.total)} del total`}
+            />
           </div>
         </section>
 
