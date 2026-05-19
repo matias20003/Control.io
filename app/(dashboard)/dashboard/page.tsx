@@ -14,6 +14,8 @@ import { DashboardQuickAdd } from "./DashboardQuickAdd";
 import { CategoryChart } from "./CategoryChart";
 import { TodayDate } from "./TodayDate";
 import { MovementPrompt } from "@/components/MovementPrompt";
+import { OnboardingChecklist } from "@/components/OnboardingChecklist";
+import { getOnboardingState } from "@/lib/db/onboarding";
 // import { SendReportButton } from "./SendReportButton"; // TODO: activar cuando haya dominio verificado en Resend
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -29,7 +31,7 @@ export default async function DashboardPage() {
   const month = now.getMonth() + 1;
   const year  = now.getFullYear();
 
-  const [summary, accounts, categories, insights, netWorth, cotizaciones, movementToday] = await Promise.all([
+  const [summary, accounts, categories, insights, netWorth, cotizaciones, movementToday, onboarding] = await Promise.all([
     getMonthSummary(user.id, month, year),
     getAccounts(user.id),
     getCategories(user.id),
@@ -37,6 +39,7 @@ export default async function DashboardPage() {
     getNetWorth(user.id).catch(() => null),
     getCotizaciones().catch(() => []),
     hasTransactionToday(user.id).catch(() => true), // si falla, no molestamos al usuario
+    getOnboardingState(user.id),
   ]);
 
   const { totalIncome, totalExpense, balance, byCategory } = summary;
@@ -79,6 +82,10 @@ export default async function DashboardPage() {
         <h1 className="text-2xl font-bold text-foreground">Hola, {name} 👋</h1>
         <TodayDate />
       </div>
+
+      {/* Onboarding checklist (se auto-oculta cuando el usuario completa los pasos
+          o cuando hace click en X — flag en localStorage). */}
+      <OnboardingChecklist state={onboarding} />
 
       {/* Quick Add */}
       <DashboardQuickAdd accounts={accounts} categories={categories} />
