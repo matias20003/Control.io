@@ -20,7 +20,8 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: { default: "control.io", template: "%s — control.io" },
   description: "Tu sistema de finanzas personales. Systematic efficiency.",
-  icons: { icon: "/favicon.ico" },
+  // Sin override de icons: Next.js detecta automáticamente app/icon.svg.
+  // Si hubiera "icons: { icon: ... }" acá, ese gana sobre la convención.
 };
 
 export const viewport: Viewport = {
