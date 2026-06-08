@@ -23,15 +23,9 @@ export function OnboardingChecklist({ state }: Props) {
   // Mientras leemos localStorage, NO renderizamos nada para evitar parpadeo.
   if (dismissed === null) return null;
 
-  // Si ya completó todo, mostramos un mini "completaste el tutorial" por 1
-  // sesión y después desaparece. Si ya lo descartó manualmente, nada.
+  // Si ya lo descartó, o si ya completó todos los pasos, no mostramos nada.
   if (dismissed) return null;
-  if (state.isComplete) {
-    return <CompletedBanner onDismiss={() => {
-      localStorage.setItem(SKIP_KEY, "1");
-      setDismissed(true);
-    }} />;
-  }
+  if (state.isComplete) return null;
 
   const pct = Math.round((state.completedCount / state.totalSteps) * 100);
 
@@ -145,29 +139,6 @@ export function OnboardingChecklist({ state }: Props) {
           </li>
         ))}
       </ol>
-    </section>
-  );
-}
-
-function CompletedBanner({ onDismiss }: { onDismiss: () => void }) {
-  return (
-    <section className="relative rounded-2xl border border-success/30 bg-success/5 p-4 overflow-hidden flex items-center gap-3">
-      <div className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-success/15 text-success shrink-0">
-        <CheckCircle2 className="h-5 w-5" strokeWidth={2.2} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-foreground">Tutorial completo 🎉</p>
-        <p className="text-xs text-muted mt-0.5">
-          Ya tenés todo configurado. Cualquier feature que descubras la encontrás en el menú.
-        </p>
-      </div>
-      <button
-        onClick={onDismiss}
-        className="shrink-0 p-1 rounded-lg text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
-        aria-label="Cerrar"
-      >
-        <X className="h-4 w-4" />
-      </button>
     </section>
   );
 }

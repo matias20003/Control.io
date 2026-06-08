@@ -32,6 +32,12 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["web-push", "resend", "@prisma/client", "pg"],
+  experimental: {
+    // Cachea en el navegador las páginas ya visitadas: volver a una pantalla
+    // reciente es instantáneo (sin re-fetch). Las acciones hacen revalidatePath,
+    // así que tras crear/editar un movimiento se ven los datos frescos igual.
+    staleTimes: { dynamic: 30, static: 180 },
+  },
   async headers() {
     return [
       {
