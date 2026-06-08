@@ -9,6 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { updateWhatsappNumberAction, removeWhatsappNumberAction } from "@/app/actions/whatsapp";
 
+// Número del bot (solo dígitos, con código de país) para el link click-to-chat.
+const BOT_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_BOT_NUMBER;
+const CHAT_HREF = BOT_NUMBER
+  ? `https://wa.me/${BOT_NUMBER}?text=${encodeURIComponent("Hola! Quiero registrar un movimiento 💸")}`
+  : null;
+
 export function WhatsappCard({ initialNumber }: { initialNumber: string | null }) {
   const [number, setNumber] = useState(initialNumber ?? "");
   const [saved, setSaved] = useState(initialNumber);
@@ -86,6 +92,19 @@ export function WhatsappCard({ initialNumber }: { initialNumber: string | null }
         </form>
 
         {saved && <p className="text-xs text-success">✓ Vinculado a +{saved}</p>}
+
+        {saved && CHAT_HREF && (
+          <a
+            href={CHAT_HREF}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ backgroundColor: "#25D366" }}
+          >
+            <MessageCircle size={16} />
+            Abrir asistente en WhatsApp
+          </a>
+        )}
       </CardContent>
     </Card>
   );
