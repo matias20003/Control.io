@@ -1,0 +1,56 @@
+"use client";
+
+import posthog from "posthog-js";
+import { PostHogProvider as PHProvider, usePostHog } from "posthog-js/react";
+import { Suspense, useEffect } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+
+// Se activa solo si hay key configurada (NEXT_PUBLIC_POSTHOG_KEY en Vercel).
+const KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+const HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com";
+
+/** Registra un pageview en cada navegación (App Router no lo hace solo). */
+function PageViewTracker() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const ph = usePostHog();
+
+  useEffect(() => {
+    if (!ph || !pathname) return;
+    let url = window.origin + pathname;
+    const qs = searchParams?.toString();
+    if (qs) url += `?${qs}`;
+    ph.capture("$pageview", { $current_url: url });
+  }, [pathname, searchParams, ph]);
+
+  return null;
+}
+
+export function PostHogProvider({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    if (!KEY || typeof window === "undefined") return;
+    if ((posthog as unknown as { __loaded?: boolean }).__loaded) return;
+    posthog.init(KEY, {
+      api_host: HOST,
+      capture_pageview: false, // lo manejamos manualmente (App Router)
+      capture_pageleave: true,
+      autocapture: true, // captura clicks/inputs automáticamente
+      persistence: "localStorage+cookie",
+      session_recording: {
+        // Privacidad: nunca grabamos lo que se tipea (contraseñas, montos, etc.)
+        maskAllInputs: true,
+      },
+    });
+  }, []);
+
+  if (!KEY) return <>{children}</>;
+
+  return (
+    <PHProvider client={posthog}>
+      <Suspense fallback={null}>
+        <PageViewTracker />
+      </Suspense>
+      {children}
+    </PHProvider>
+  );
+}
