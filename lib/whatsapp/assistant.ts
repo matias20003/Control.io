@@ -50,6 +50,7 @@ interface Action {
   date?: string;
   category?: string | null;
   account?: string | null;
+  reportOnly?: boolean;
   fromAccount?: string | null;
   toAccount?: string | null;
   name?: string;
@@ -251,6 +252,12 @@ TIPOS de cuenta válidos: ${ACCOUNT_TYPES.join(", ")}
 Jerga argentina de montos: "5 lucas"/"5k"=5000, "un palo"=1.000.000, "500 mangos"=500.
 Sin aclarar moneda → ARS. "dólares"/"usd"/"verdes" → USD.
 
+SOLO REGISTRO (no afecta el saldo): poné "reportOnly": true cuando el usuario quiera dejar
+asentado un gasto/ingreso SIN que modifique el saldo ni el patrimonio. Ej: "cargá estos del mes
+solo para el registro", "no toques el saldo", "esto ya está en mi plata actual", o cuando importa
+movimientos históricos de un mes ya pasado. En ese caso NO se asocia a ninguna cuenta. Para un
+movimiento normal de ahora (que SÍ debe descontar/sumar a la cuenta), dejá reportOnly en false.
+
 FECHAS: el campo "date" (formato "YYYY-MM-DD") es opcional. Si el usuario dice CUÁNDO fue el
 movimiento ("ayer", "anteayer", "el lunes", "el mes pasado", "el 5 de mayo", "la semana pasada"),
 calculá la fecha respecto de HOY (${c.today}) y ponela en "date". Si solo dice el mes sin día,
@@ -275,7 +282,7 @@ Respondé SIEMPRE en JSON válido:
 }
 
 TIPOS DE ACCIÓN (campo "type"):
-- "expense" / "income": { amount, currency, description, category, account, date }
+- "expense" / "income": { amount, currency, description, category, account, date, reportOnly }
 - "transfer": { amount, currency, description, fromAccount, toAccount, date }
 - "create_account": { name, accountType, currency, balance }   // accountType de la lista
 - "create_debt": { direction: "i_owe"|"they_owe", personName, amount, currency, description }
@@ -349,7 +356,8 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       const type = a.type === "expense" ? "EXPENSE" : "INCOME";
       if (!a.amount || a.amount <= 0) throw new Error("monto inválido");
       const cat = findCategory(c, a.category, type);
-      const acc = findAccount(c, a.account) ?? defaultAccount(c);
+      // "reportOnly" → sin cuenta: queda en el reporte pero no mueve el saldo/patrimonio.
+      const acc = a.reportOnly ? null : findAccount(c, a.account) ?? defaultAccount(c);
       const txDate = resolveDate(a.date, isoDate);
       await createTransaction(userId, {
         type,
@@ -366,7 +374,8 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       const dateTxt = a.date && txDate.slice(0, 10) !== isoDate.slice(0, 10)
         ? ` 📅 ${new Date(txDate).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}`
         : "";
-      return `${emoji} ${sign}${money(a.amount, cur)} — ${a.description ?? ""}${cat ? ` · ${cat.icon ?? ""} ${cat.name}` : ""}${acc ? ` (${acc.name})` : ""}${dateTxt}`.trim();
+      const noteTxt = a.reportOnly ? " 📝 (solo registro, no afecta el saldo)" : "";
+      return `${emoji} ${sign}${money(a.amount, cur)} — ${a.description ?? ""}${cat ? ` · ${cat.icon ?? ""} ${cat.name}` : ""}${acc ? ` (${acc.name})` : ""}${dateTxt}${noteTxt}`.trim();
     }
 
     case "transfer": {
