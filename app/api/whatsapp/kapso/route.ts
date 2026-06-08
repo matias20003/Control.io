@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { sendText, verifySignature } from "@/lib/whatsapp/kapso";
+import { sendText, markReadAndType, verifySignature } from "@/lib/whatsapp/kapso";
 import { findProfileByPhone } from "@/lib/whatsapp/users";
 import { handleUserMessage } from "@/lib/whatsapp/assistant";
 
@@ -77,6 +77,9 @@ export async function POST(req: NextRequest) {
       );
       return Response.json({ ok: true, linked: false });
     }
+
+    // Feedback inmediato: marca leído + "escribiendo..." mientras procesamos.
+    if (message.id) void markReadAndType(message.id);
 
     const text = getText(message);
     if (!text) {

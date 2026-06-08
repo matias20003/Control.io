@@ -38,6 +38,31 @@ export async function sendText(to: string, text: string): Promise<void> {
 }
 
 /**
+ * Marca el mensaje como leído y muestra "escribiendo..." al usuario.
+ * Da feedback instantáneo mientras procesamos (la IA tarda unos segundos).
+ * Best-effort: si falla, no rompe el flujo.
+ */
+export async function markReadAndType(messageId: string): Promise<void> {
+  const apiKey = process.env.KAPSO_API_KEY;
+  const phoneId = process.env.KAPSO_PHONE_NUMBER_ID;
+  if (!apiKey || !phoneId || !messageId) return;
+  try {
+    await fetch(`${apiUrl()}/meta/whatsapp/v24.0/${phoneId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: messageId,
+        typing_indicator: { type: "text" },
+      }),
+    });
+  } catch {
+    // best-effort
+  }
+}
+
+/**
  * Verifica la firma HMAC-SHA256 del webhook de Kapso.
  * Si no hay KAPSO_WEBHOOK_SECRET configurado, no bloquea (modo dev).
  */
