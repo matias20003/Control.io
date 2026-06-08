@@ -34,17 +34,28 @@ export function WhatsappPromoModal({ isLinked }: { isLinked: boolean }) {
 
   if (!CHAT_HREF) return null;
 
-  const handleOpen = () => {
+  // Una vez visto (lo cierre como lo cierre), no se muestra más.
+  const markSeen = () => {
     try {
       localStorage.setItem(WA_PROMO_KEY, "1");
     } catch {
       // ignore
     }
+  };
+
+  const dismiss = () => {
+    markSeen();
     setOpen(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) markSeen();
+        setOpen(o);
+      }}
+    >
       <DialogContent title="Registrá tus gastos por WhatsApp 🤖">
         <div className="space-y-4">
           <p className="text-sm text-muted">
@@ -77,7 +88,7 @@ export function WhatsappPromoModal({ isLinked }: { isLinked: boolean }) {
             href={CHAT_HREF}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={handleOpen}
+            onClick={dismiss}
             className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: "#25D366" }}
           >
@@ -86,7 +97,7 @@ export function WhatsappPromoModal({ isLinked }: { isLinked: boolean }) {
           </a>
 
           <button
-            onClick={() => setOpen(false)}
+            onClick={dismiss}
             className="w-full text-xs text-muted hover:text-foreground transition-colors"
           >
             Más tarde
