@@ -67,16 +67,17 @@ export function BottomNav() {
                 Más opciones
               </p>
               <button
+                aria-label="Cerrar menú"
                 onClick={() => setOpen(false)}
-                className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
+                className="p-2.5 rounded-lg text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
               >
-                <X size={16} strokeWidth={2} />
+                <X size={18} strokeWidth={2} />
               </button>
             </div>
 
             {/* Grid — scrollable */}
             <div className="overflow-y-auto overscroll-contain flex-1 px-2 pt-2 pb-8">
-              <div className="grid grid-cols-4 gap-0.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 {moreItems.map((item) => {
                   const isActive = pathname.startsWith(item.href);
                   return (
@@ -85,14 +86,14 @@ export function BottomNav() {
                       href={item.href}
                       onClick={() => setOpen(false)}
                       className={cn(
-                        "flex flex-col items-center gap-2 px-1 py-4 rounded-xl transition-all duration-150",
+                        "flex flex-col items-center gap-2 px-2 py-4 rounded-xl transition-all duration-150",
                         isActive
                           ? "bg-primary/10 text-primary"
                           : "text-muted hover:text-foreground hover:bg-surface-2"
                       )}
                     >
-                      <item.icon size={20} strokeWidth={isActive ? 2.2 : 1.7} />
-                      <span className="text-[10px] font-medium text-center leading-tight">
+                      <item.icon size={22} strokeWidth={isActive ? 2.2 : 1.7} />
+                      <span className="text-xs font-medium text-center leading-tight">
                         {item.label}
                       </span>
                     </Link>
@@ -140,7 +141,7 @@ export function BottomNav() {
                 )}
               >
                 <item.icon size={20} strokeWidth={isActive ? 2.2 : 1.7} />
-                <span className="text-[10px] font-medium">{item.label}</span>
+                <span className="text-xs font-medium">{item.label}</span>
               </Link>
             );
           })}
@@ -164,7 +165,7 @@ export function BottomNav() {
               </div>
               <span
                 className={cn(
-                  "text-[10px] font-medium leading-tight",
+                  "text-xs font-medium leading-tight",
                   isCuentasActive ? "text-primary" : "text-muted"
                 )}
               >
@@ -187,7 +188,7 @@ export function BottomNav() {
                 )}
               >
                 <item.icon size={20} strokeWidth={isActive ? 2.2 : 1.7} />
-                <span className="text-[10px] font-medium">{item.label}</span>
+                <span className="text-xs font-medium">{item.label}</span>
               </Link>
             );
           })}
@@ -201,7 +202,7 @@ export function BottomNav() {
             )}
           >
             <MoreHorizontal size={20} strokeWidth={isMoreActive || open ? 2.2 : 1.7} />
-            <span className="text-[10px] font-medium">Más</span>
+            <span className="text-xs font-medium">Más</span>
           </button>
 
         </div>

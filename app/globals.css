@@ -13,8 +13,8 @@
   --color-border-subtle:oklch(0.20  0.010 258);
 
   --color-foreground:   oklch(0.955 0.005 258);
-  --color-muted:        oklch(0.52  0.011 258);
-  --color-muted-2:      oklch(0.40  0.009 258);
+  --color-muted:        oklch(0.62  0.012 258);
+  --color-muted-2:      oklch(0.46  0.010 258);
 
   /* Acento principal: azul-índigo confiante */
   --color-primary:      oklch(0.67  0.19  258);

@@ -81,13 +81,14 @@ export function DialogContent({
           </div>
           <DialogPrimitive.Close asChild>
             <button
+              aria-label="Cerrar"
               className={cn(
-                "ml-4 -mt-0.5 -mr-0.5 p-1.5 rounded-lg",
+                "ml-4 -mt-0.5 -mr-0.5 p-2.5 rounded-lg",
                 "text-muted hover:text-foreground hover:bg-surface-2",
                 "transition-colors duration-150 flex-shrink-0"
               )}
             >
-              <X size={15} strokeWidth={2} />
+              <X size={18} strokeWidth={2} />
             </button>
           </DialogPrimitive.Close>
         </div>

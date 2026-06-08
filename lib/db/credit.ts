@@ -95,11 +95,14 @@ export async function createCreditPurchase(
   const baseAmount = data.totalAmount / data.totalInstallments;
   const rounded = parseFloat(baseAmount.toFixed(2));
 
+  // La última cuota absorbe el resto del redondeo para que la suma dé el total exacto
+  // (ej: 1000/3 → 333,33 + 333,33 + 333,34 = 1000, en vez de 999,99).
+  const lastAmount = parseFloat((data.totalAmount - rounded * (data.totalInstallments - 1)).toFixed(2));
   const installmentsData = Array.from(
     { length: data.totalInstallments },
     (_, i) => ({
       installmentNumber: i + 1,
-      amount: rounded,
+      amount: i === data.totalInstallments - 1 ? lastAmount : rounded,
       dueDate: addMonths(firstDate, i),
     })
   );
