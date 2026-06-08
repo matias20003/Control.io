@@ -65,9 +65,9 @@ export async function getBudgets(
     return {
       id: b.id,
       categoryId: b.categoryId,
-      categoryName: b.category.name,
-      categoryIcon: b.category.icon ?? null,
-      categoryColor: b.category.color ?? null,
+      categoryName: b.category?.name ?? "Sin categoría",
+      categoryIcon: b.category?.icon ?? null,
+      categoryColor: b.category?.color ?? null,
       amount,
       currency: b.currency,
       month: b.month,

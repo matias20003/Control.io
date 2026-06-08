@@ -117,6 +117,10 @@ export async function createTransaction(userId: string, data: {
   type: string; amount: number; currency: string; description?: string;
   date: string; categoryId?: string; accountId?: string; toAccountId?: string; notes?: string;
 }) {
+  // Las transferencias no llevan categoría (evita relaciones huérfanas que
+  // luego confunden a reportes y presupuestos).
+  if (data.type === "TRANSFER") data.categoryId = undefined;
+
   // Pre-validamos ownership de cuentas/categoría. Sin esto un cliente malicioso
   // podría enviar IDs de otro usuario y, aunque Prisma rechace el update por la
   // composite where, igual queda creada la Transaction con FKs inválidos.
