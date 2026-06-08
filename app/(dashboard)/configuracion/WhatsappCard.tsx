@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { updateWhatsappNumberAction, removeWhatsappNumberAction } from "@/app/actions/whatsapp";
+import { WA_PROMO_KEY } from "@/components/WhatsappPromoModal";
 
 // Número del bot (solo dígitos, con código de país) para el link click-to-chat.
 const BOT_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_BOT_NUMBER;
@@ -98,6 +99,13 @@ export function WhatsappCard({ initialNumber }: { initialNumber: string | null }
             href={CHAT_HREF}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => {
+              try {
+                localStorage.setItem(WA_PROMO_KEY, "1");
+              } catch {
+                // ignore
+              }
+            }}
             className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: "#25D366" }}
           >

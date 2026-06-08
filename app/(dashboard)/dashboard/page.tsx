@@ -15,7 +15,9 @@ import { CategoryChart } from "./CategoryChart";
 import { TodayDate } from "./TodayDate";
 import { MovementPrompt } from "@/components/MovementPrompt";
 import { OnboardingChecklist } from "@/components/OnboardingChecklist";
+import { WhatsappPromoModal } from "@/components/WhatsappPromoModal";
 import { getOnboardingState } from "@/lib/db/onboarding";
+import { getProfileWhatsapp } from "@/lib/db/profile";
 // import { SendReportButton } from "./SendReportButton"; // TODO: activar cuando haya dominio verificado en Resend
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -31,7 +33,7 @@ export default async function DashboardPage() {
   const month = now.getMonth() + 1;
   const year  = now.getFullYear();
 
-  const [summary, accounts, categories, insights, netWorth, cotizaciones, movementToday, onboarding] = await Promise.all([
+  const [summary, accounts, categories, insights, netWorth, cotizaciones, movementToday, onboarding, whatsappNumber] = await Promise.all([
     getMonthSummary(user.id, month, year),
     getAccounts(user.id),
     getCategories(user.id),
@@ -40,6 +42,7 @@ export default async function DashboardPage() {
     getCotizaciones().catch(() => []),
     hasTransactionToday(user.id).catch(() => true), // si falla, no molestamos al usuario
     getOnboardingState(user.id),
+    getProfileWhatsapp(user.id).catch(() => null),
   ]);
 
   const { totalIncome, totalExpense, balance, byCategory } = summary;
@@ -76,6 +79,10 @@ export default async function DashboardPage() {
       {/* Cartel proactivo: solo aparece en mobile, una vez por día, después del mediodía,
           y siempre que el usuario aún no haya registrado nada hoy. */}
       <MovementPrompt hasMovementToday={movementToday} />
+
+      {/* Popup de bienvenida del asistente de WhatsApp: aparece una vez y se
+          oculta para siempre cuando el usuario abre el bot (flag en localStorage). */}
+      <WhatsappPromoModal isLinked={!!whatsappNumber} />
 
       {/* Greeting */}
       <div>
