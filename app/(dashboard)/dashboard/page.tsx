@@ -2,26 +2,46 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { getMonthSummary, hasTransactionToday } from "@/lib/db/transactions";
+import { getMonthSummary, hasTransactionToday, getTransactions } from "@/lib/db/transactions";
 import { getAccounts } from "@/lib/db/accounts";
 import { getCategories } from "@/lib/db/categories";
-import { getInsights, getNetWorth } from "@/lib/db/insights";
-import { getCotizaciones } from "@/lib/cotizaciones";
+import { getInsights } from "@/lib/db/insights";
+import { getTrends } from "@/lib/db/trends";
+import { getGoals } from "@/lib/db/goals";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatCurrency, formatMonth, percentageOf } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Scale, PiggyBank, ChevronRight, AlertTriangle, CheckCircle2, Info, ClipboardList, CalendarClock } from "lucide-react";
+import { formatCurrency, percentageOf } from "@/lib/utils";
+import {
+  TrendingUp, TrendingDown, PiggyBank, ChevronRight, ArrowUpRight, ArrowDownRight,
+  AlertTriangle, CheckCircle2, Info, Target, CalendarClock, Wallet,
+} from "lucide-react";
 import { getAgenda } from "@/lib/db/agenda";
 import { DashboardQuickAdd } from "./DashboardQuickAdd";
 import { CategoryChart } from "./CategoryChart";
+import { IncomeExpenseChart, BalanceSparkline } from "./DashboardCharts";
 import { TodayDate } from "./TodayDate";
 import { MovementPrompt } from "@/components/MovementPrompt";
 import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 import { WhatsappPromoModal } from "@/components/WhatsappPromoModal";
 import { getOnboardingState } from "@/lib/db/onboarding";
 import { getProfileWhatsapp } from "@/lib/db/profile";
-// import { SendReportButton } from "./SendReportButton"; // TODO: activar cuando haya dominio verificado en Resend
 
 export const metadata: Metadata = { title: "Dashboard" };
+
+function pctDelta(a?: number, b?: number): number | null {
+  if (a == null || b == null || b === 0) return null;
+  return Math.round(((a - b) / Math.abs(b)) * 100);
+}
+
+function relTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+  const yest = new Date(now);
+  yest.setDate(now.getDate() - 1);
+  if (d.toDateString() === yest.toDateString()) return "Ayer";
+  return d.toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
+}
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -32,106 +52,358 @@ export default async function DashboardPage() {
 
   const now = new Date();
   const month = now.getMonth() + 1;
-  const year  = now.getFullYear();
+  const year = now.getFullYear();
 
-  const [summary, accounts, categories, insights, netWorth, cotizaciones, movementToday, onboarding, whatsappNumber] = await Promise.all([
-    getMonthSummary(user.id, month, year),
-    getAccounts(user.id),
-    getCategories(user.id),
-    getInsights(user.id).catch(() => []),
-    getNetWorth(user.id).catch(() => null),
-    getCotizaciones().catch(() => []),
-    hasTransactionToday(user.id).catch(() => true), // si falla, no molestamos al usuario
-    getOnboardingState(user.id),
-    getProfileWhatsapp(user.id).catch(() => null),
-  ]);
+  const [summary, accounts, categories, insights, trends, goals, recent, movementToday, onboarding, whatsappNumber] =
+    await Promise.all([
+      getMonthSummary(user.id, month, year),
+      getAccounts(user.id),
+      getCategories(user.id),
+      getInsights(user.id).catch(() => []),
+      getTrends(user.id, 6).catch(() => null),
+      getGoals(user.id).catch(() => []),
+      getTransactions(user.id, { take: 6 }).then((r) => r.items).catch(() => []),
+      hasTransactionToday(user.id).catch(() => true),
+      getOnboardingState(user.id),
+      getProfileWhatsapp(user.id).catch(() => null),
+    ]);
 
   const agenda = await getAgenda(user.id, 30).catch(() => []);
 
   const { totalIncome, totalExpense, balance, byCategory } = summary;
   const savingsRate = totalIncome > 0 ? percentageOf(balance, totalIncome) : 0;
 
+  // Series mensuales (para charts + comparativas vs mes anterior)
+  const series = trends?.months ?? [];
+  const cur = series[series.length - 1];
+  const prev = series[series.length - 2];
+  const balanceSeries = series.map((m) => ({ label: m.label, balance: m.balance }));
+  const ieSeries = series.map((m) => ({ label: m.label, income: m.income, expense: m.expense, balance: m.balance }));
+  const balanceDelta = cur && prev ? cur.balance - prev.balance : null;
+  const incomeDelta = pctDelta(cur?.income, prev?.income);
+  const expenseDelta = pctDelta(cur?.expense, prev?.expense);
+  const savingsDelta = cur && prev ? Math.round(cur.savingsRate - prev.savingsRate) : null;
+
   const totalBalanceARS = accounts
     .filter((a) => a.currency === "ARS")
     .reduce((s, a) => s + a.balance, 0);
 
-  const blue    = cotizaciones.find((c) => c.casa === "blue");
-  const oficial = cotizaciones.find((c) => c.casa === "oficial");
+  // Objetivo principal: el de mayor avance sin completar
+  const topGoal =
+    goals.filter((g) => !g.isCompleted).sort((a, b) => b.percentage - a.percentage)[0] ?? null;
 
-  const metrics = [
-    { label: "Balance del mes", value: formatCurrency(balance, "ARS"),       icon: Scale,       color: balance >= 0 ? "text-success" : "text-danger", bg: balance >= 0 ? "bg-success/10" : "bg-danger/10" },
-    { label: "Ingresos",        value: formatCurrency(totalIncome, "ARS"),    icon: TrendingUp,  color: "text-success", bg: "bg-success/10" },
-    { label: "Gastos",          value: formatCurrency(totalExpense, "ARS"),   icon: TrendingDown, color: "text-danger",  bg: "bg-danger/10"  },
-    { label: "Tasa de ahorro",  value: `${savingsRate}%`,                     icon: PiggyBank,   color: savingsRate >= 20 ? "text-primary" : "text-warning", bg: savingsRate >= 20 ? "bg-primary/10" : "bg-warning/10" },
+  const resumen = [
+    { label: "Ingresos", value: totalIncome, icon: TrendingUp, color: "text-success", bg: "bg-success/10", delta: incomeDelta, deltaGood: (incomeDelta ?? 0) >= 0 },
+    { label: "Gastos", value: totalExpense, icon: TrendingDown, color: "text-danger", bg: "bg-danger/10", delta: expenseDelta, deltaGood: (expenseDelta ?? 0) <= 0 },
+    { label: "Ahorro", value: balance, icon: PiggyBank, color: "text-primary", bg: "bg-primary/10", delta: savingsDelta, deltaGood: (savingsDelta ?? 0) >= 0, isPts: true },
   ];
 
-  const INSIGHT_ICONS: Record<string, React.ElementType> = {
-    warning: AlertTriangle,
-    success: CheckCircle2,
-    info:    Info,
-  };
-  const INSIGHT_COLORS: Record<string, string> = {
-    warning: "text-warning",
-    success: "text-success",
-    info:    "text-primary",
-  };
+  const INSIGHT_ICONS: Record<string, React.ElementType> = { warning: AlertTriangle, success: CheckCircle2, info: Info };
+  const INSIGHT_COLORS: Record<string, string> = { warning: "text-warning", success: "text-success", info: "text-primary" };
+
+  const balanceBetter = balanceDelta != null && balanceDelta >= 0;
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-5">
 
-      {/* Cartel proactivo: solo aparece en mobile, una vez por día, después del mediodía,
-          y siempre que el usuario aún no haya registrado nada hoy. */}
       <MovementPrompt hasMovementToday={movementToday} />
-
-      {/* Popup de bienvenida del asistente de WhatsApp: aparece una vez y se
-          oculta para siempre cuando el usuario abre el bot (flag en localStorage). */}
       <WhatsappPromoModal isLinked={!!whatsappNumber} />
 
       {/* Greeting */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Hola, {name} 👋</h1>
-        <TodayDate />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Hola, {name} 👋</h1>
+          <TodayDate />
+        </div>
       </div>
 
-      {/* Onboarding checklist (se auto-oculta cuando el usuario completa los pasos
-          o cuando hace click en X — flag en localStorage). */}
       <OnboardingChecklist state={onboarding} />
-
-      {/* Quick Add */}
       <DashboardQuickAdd accounts={accounts} categories={categories} />
 
-      {/* ── Reporte semanal CTA ── */}
-      <Link
-        href="/reporte"
-        className="flex items-center justify-between w-full bg-surface border border-border hover:border-primary rounded-xl px-4 py-3.5 transition-colors group"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-            <ClipboardList size={18} className="text-primary" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-foreground leading-tight">Ver reporte semanal</p>
-            <p className="text-xs text-muted">Gastos, categorías y comparativa</p>
-          </div>
-        </div>
-        <ChevronRight size={16} className="text-muted group-hover:text-primary transition-colors" />
-      </Link>
+      {/* Banner comparativo del mes */}
+      {balanceDelta != null && (
+        <Card>
+          <CardContent className="px-4 py-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${balanceBetter ? "bg-success/10" : "bg-danger/10"}`}>
+                {balanceBetter ? <TrendingUp size={18} className="text-success" /> : <TrendingDown size={18} className="text-danger" />}
+              </span>
+              <p className="text-sm font-medium text-foreground">
+                {balanceBetter ? "Este mes viene mejor que el anterior" : "Este mes vas por debajo del anterior"}
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className={`text-sm font-bold font-mono ${balanceBetter ? "text-success" : "text-danger"}`}>
+                {balanceBetter ? "+" : ""}{formatCurrency(balanceDelta, "ARS")}
+              </p>
+              <p className="text-[11px] text-muted">vs. mes anterior</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* ── Próximos vencimientos (agenda) ── */}
-      {agenda.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider flex items-center gap-1.5">
-              <CalendarClock size={13} /> Próximos vencimientos
+      {/* ── HERO ROW ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        {/* Disponible para gastar */}
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Disponible este mes</p>
+            <p className={`text-3xl md:text-4xl font-bold font-mono mt-2 ${balance >= 0 ? "text-foreground" : "text-danger"}`}>
+              {formatCurrency(balance, "ARS")}
             </p>
-          </div>
+            <p className="text-xs text-muted mt-1">ingresos menos gastos</p>
+            {balanceDelta != null && (
+              <div className={`inline-flex items-center gap-1.5 mt-3 px-2.5 py-1.5 rounded-lg text-xs font-medium ${balanceBetter ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
+                {balanceBetter ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                {formatCurrency(Math.abs(balanceDelta), "ARS")} {balanceBetter ? "más" : "menos"} que el mes pasado
+              </div>
+            )}
+            {balanceSeries.length > 1 && (
+              <div className="mt-3">
+                <BalanceSparkline data={balanceSeries} />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Objetivo principal */}
+        <Card>
+          <CardContent className="p-5 h-full flex flex-col">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-muted uppercase tracking-wider">Objetivo principal</p>
+              <Link href="/metas" className="text-xs text-primary hover:underline flex items-center gap-0.5">
+                Ver metas <ChevronRight size={12} />
+              </Link>
+            </div>
+            {topGoal ? (
+              <div className="mt-2 flex-1 flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">{topGoal.icon || "🎯"}</span>
+                  <p className="text-lg font-bold text-foreground leading-tight">{topGoal.name}</p>
+                </div>
+                <p className="text-3xl font-bold font-mono mt-3" style={{ color: topGoal.color || "var(--color-primary)" }}>
+                  {topGoal.percentage}%
+                </p>
+                <p className="text-xs text-muted mt-1">
+                  {formatCurrency(topGoal.currentAmount, topGoal.currency)} de {formatCurrency(topGoal.targetAmount, topGoal.currency)}
+                </p>
+                <div className="h-2 rounded-full bg-surface-2 overflow-hidden mt-3">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${topGoal.percentage}%`, backgroundColor: topGoal.color || "var(--color-primary)" }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <Link href="/metas" className="mt-4 flex-1 flex flex-col items-center justify-center text-center gap-2 rounded-xl border border-dashed border-border py-6 hover:border-primary transition-colors">
+                <Target size={22} className="text-muted" />
+                <p className="text-sm font-medium text-foreground">Creá tu primer objetivo</p>
+                <p className="text-xs text-muted">Definí una meta de ahorro y seguí tu avance</p>
+              </Link>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Resumen del mes */}
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Resumen del mes</p>
+            <div className="mt-3 space-y-3">
+              {resumen.map((r) => (
+                <div key={r.label} className="flex items-center gap-3">
+                  <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${r.bg}`}>
+                    <r.icon size={17} className={r.color} />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted leading-tight">{r.label}</p>
+                    <p className="text-base font-bold font-mono text-foreground leading-tight">
+                      {formatCurrency(r.value, "ARS")}
+                    </p>
+                  </div>
+                  {r.delta != null && (
+                    <div className={`flex items-center gap-0.5 text-xs font-semibold shrink-0 ${r.deltaGood ? "text-success" : "text-danger"}`}>
+                      {r.deltaGood ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+                      {Math.abs(r.delta)}{r.isPts ? " p.p." : "%"}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── CHARTS ROW ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* Evolución ingresos vs gastos */}
+        {ieSeries.length > 0 && (
           <Card>
-            <CardContent className="p-3 space-y-1">
-              {agenda.slice(0, 4).map((e) => (
-                <div key={e.id} className="flex items-center gap-3 py-1.5">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-foreground">Evolución de ingresos vs gastos</p>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="flex items-center gap-1.5 text-muted"><span className="w-2.5 h-2.5 rounded-sm bg-success" /> Ingresos</span>
+                  <span className="flex items-center gap-1.5 text-muted"><span className="w-2.5 h-2.5 rounded-sm bg-danger" /> Gastos</span>
+                </div>
+              </div>
+              <IncomeExpenseChart data={ieSeries} />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Gastos por categoría */}
+        {byCategory.length > 0 ? (
+          <CategoryChart data={byCategory} totalExpense={totalExpense} />
+        ) : (
+          <Card>
+            <CardContent className="p-5 h-full flex flex-col items-center justify-center text-center gap-2 min-h-[240px]">
+              <span className="text-3xl opacity-70">📊</span>
+              <p className="text-sm font-medium text-foreground">Sin gastos este mes</p>
+              <p className="text-xs text-muted">Cargá movimientos para ver el desglose por categoría</p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* ── THREE CARDS ROW ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        {/* Movimientos recientes */}
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-foreground">Movimientos recientes</p>
+              <Link href="/movimientos" className="text-xs text-primary hover:underline">Ver todos</Link>
+            </div>
+            {recent.length > 0 ? (
+              <div className="space-y-1">
+                {recent.map((t) => {
+                  const isIncome = t.type === "INCOME";
+                  const isTransfer = t.type === "TRANSFER";
+                  const sign = isIncome ? "+" : isTransfer ? "" : "−";
+                  const amtColor = isIncome ? "text-success" : isTransfer ? "text-primary" : "text-danger";
+                  return (
+                    <div key={t.id} className="flex items-center gap-3 py-2">
+                      <span
+                        className="w-9 h-9 rounded-xl flex items-center justify-center text-sm shrink-0"
+                        style={{ backgroundColor: t.categoryColor ? `${t.categoryColor}22` : "var(--color-surface-2)" }}
+                      >
+                        {t.categoryIcon || (isTransfer ? "🔁" : isIncome ? "💰" : "💸")}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground leading-tight truncate">
+                          {t.description || t.categoryName || (isTransfer ? "Transferencia" : isIncome ? "Ingreso" : "Gasto")}
+                        </p>
+                        <p className="text-xs text-muted truncate">{t.categoryName || t.accountName || "—"}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className={`text-sm font-bold font-mono ${amtColor}`}>
+                          {sign}{formatCurrency(t.amount, t.currency)}
+                        </p>
+                        <p className="text-[11px] text-muted">{relTime(t.date)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-muted py-6 text-center">Todavía no hay movimientos este mes.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Insights para vos */}
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-foreground">Insights para vos</p>
+              <Link href="/reporte" className="text-xs text-primary hover:underline">Ver más</Link>
+            </div>
+            {insights.length > 0 ? (
+              <div className="space-y-2.5">
+                {insights.slice(0, 4).map((ins, i) => {
+                  const Icon = INSIGHT_ICONS[ins.type] ?? Info;
+                  return (
+                    <div key={i} className="flex gap-3">
+                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-surface-2 ${INSIGHT_COLORS[ins.type]}`}>
+                        <Icon size={15} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className={`text-sm font-medium leading-tight ${INSIGHT_COLORS[ins.type]}`}>{ins.title}</p>
+                        <p className="text-xs text-muted mt-0.5 leading-snug">{ins.body}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-muted py-6 text-center">Cargá más movimientos para generar insights.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Tus cuentas */}
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-foreground">Tus cuentas</p>
+              <Link href="/cuentas" className="text-xs text-primary hover:underline">Ver todas</Link>
+            </div>
+            {accounts.length > 0 ? (
+              <>
+                <div className="space-y-1">
+                  {accounts.slice(0, 4).map((account) => (
+                    <div key={account.id} className="flex items-center gap-3 py-2">
+                      <span
+                        className="w-9 h-9 rounded-xl flex items-center justify-center text-sm shrink-0"
+                        style={{ backgroundColor: account.color ? `${account.color}22` : "var(--color-surface-2)" }}
+                      >
+                        {account.icon || "🏦"}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground leading-tight truncate">{account.name}</p>
+                        <p className="text-xs text-muted">{account.currency}</p>
+                      </div>
+                      <p className={`text-sm font-bold font-mono shrink-0 ${account.balance >= 0 ? "text-foreground" : "text-danger"}`}>
+                        {formatCurrency(account.balance, account.currency)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                {accounts.length > 1 && (
+                  <div className="border-t border-border mt-2 pt-3 flex items-center justify-between">
+                    <p className="text-xs text-muted">Total en ARS</p>
+                    <p className="text-sm font-bold font-mono text-foreground">{formatCurrency(totalBalanceARS, "ARS")}</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <Link href="/cuentas" className="flex flex-col items-center justify-center text-center gap-2 py-6 text-muted hover:text-primary transition-colors">
+                <Wallet size={20} />
+                <p className="text-xs">Agregá tu primera cuenta</p>
+              </Link>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── PRÓXIMOS PAGOS ── */}
+      {agenda.length > 0 && (
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                <CalendarClock size={15} className="text-muted" /> Próximos pagos
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              {agenda.slice(0, 6).map((e) => (
+                <div key={e.id} className="flex items-center gap-3 rounded-xl bg-surface-2/50 px-3 py-2.5">
                   <span
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0"
-                    style={{ backgroundColor: `${e.color}20` }}
+                    className="w-9 h-9 rounded-xl flex items-center justify-center text-sm shrink-0"
+                    style={{ backgroundColor: `${e.color}22` }}
                   >
                     {e.icon}
                   </span>
@@ -147,157 +419,9 @@ export default async function DashboardPage() {
                   </div>
                 </div>
               ))}
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* ── Métricas del mes ── */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-muted uppercase tracking-wider">
-            {formatMonth(month, year)}
-          </p>
-          <Link href="/movimientos" className="text-xs text-primary hover:underline flex items-center gap-0.5">
-            Ver movimientos <ChevronRight size={12} />
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {metrics.map((m) => (
-            <Card key={m.label} className="relative overflow-hidden">
-              <CardContent className="p-4">
-                <div className={`inline-flex p-2 rounded-lg ${m.bg} mb-3`}>
-                  <m.icon size={16} className={m.color} />
-                </div>
-                <p className="text-xs text-muted font-medium leading-tight">{m.label}</p>
-                <p className={`text-lg font-bold font-mono mt-1 ${m.color} leading-tight`}>{m.value}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Smart Insights ── */}
-      {insights.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-muted uppercase tracking-wider">💡 Insights</p>
-          {insights.map((ins, i) => {
-            const Icon = INSIGHT_ICONS[ins.type] ?? Info;
-            return (
-              <div key={i} className="bg-surface rounded-xl border border-border p-3.5 flex gap-3">
-                <span className="text-lg shrink-0 mt-0.5">{ins.icon}</span>
-                <div>
-                  <p className={`text-sm font-semibold ${INSIGHT_COLORS[ins.type]}`}>{ins.title}</p>
-                  <p className="text-xs text-muted mt-0.5">{ins.body}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Patrimonio Neto ── */}
-      {netWorth && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider">💰 Patrimonio Neto</p>
-            <Link href="/cuentas" className="text-xs text-primary hover:underline flex items-center gap-0.5">
-              Ver cuentas <ChevronRight size={12} />
-            </Link>
-          </div>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs text-muted">Activos (cuentas ARS)</p>
-                <p className="text-sm font-mono text-success">{formatCurrency(netWorth.totalAssets, "ARS")}</p>
-              </div>
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs text-muted">Pasivos (deudas + cuotas)</p>
-                <p className="text-sm font-mono text-danger">{formatCurrency(netWorth.totalLiabilities, "ARS")}</p>
-              </div>
-              <div className="border-t border-border pt-3 flex items-center justify-between">
-                <p className="text-sm font-semibold text-foreground">Patrimonio neto</p>
-                <p className={`text-lg font-bold font-mono ${netWorth.netWorth >= 0 ? "text-success" : "text-danger"}`}>
-                  {formatCurrency(netWorth.netWorth, "ARS")}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* ── Cotización del día ── */}
-      {(blue || oficial) && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider">💱 Dólar hoy</p>
-            <Link href="/cotizaciones" className="text-xs text-primary hover:underline flex items-center gap-0.5">
-              Ver todas <ChevronRight size={12} />
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            {[oficial, blue].filter(Boolean).map((c) => (
-              <Card key={c!.casa}>
-                <CardContent className="p-3.5">
-                  <p className="text-xs text-muted mb-2">{c!.casa === "blue" ? "💵 Blue" : "🏦 Oficial"}</p>
-                  <div className="flex justify-between text-xs text-muted mb-0.5">
-                    <span>Compra</span><span>Venta</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <p className="text-sm font-bold font-mono text-success">{formatCurrency(c!.compra, "ARS")}</p>
-                    <p className="text-sm font-bold font-mono text-danger">{formatCurrency(c!.venta, "ARS")}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Gastos por categoría ── */}
-      {byCategory.length > 0 && (
-        <CategoryChart data={byCategory} totalExpense={totalExpense} />
-      )}
-
-      {/* ── Cuentas ── */}
-      {accounts.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Tus cuentas</p>
-            <Link href="/cuentas" className="text-xs text-primary hover:underline flex items-center gap-0.5">
-              Ver todas <ChevronRight size={12} />
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
-            {accounts.map((account) => (
-              <Card key={account.id}>
-                <CardContent className="p-3.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-sm"
-                      style={{ backgroundColor: account.color ? `${account.color}20` : "var(--color-surface-2)" }}
-                    >
-                      {account.icon || "🏦"}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground leading-tight">{account.name}</p>
-                      <p className="text-xs text-muted">{account.currency}</p>
-                    </div>
-                  </div>
-                  <p className={`text-sm font-bold font-mono ${account.balance >= 0 ? "text-foreground" : "text-danger"}`}>
-                    {formatCurrency(account.balance, account.currency)}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          {accounts.length > 1 && (
-            <p className="text-xs text-muted text-right">
-              Total en ARS:{" "}
-              <span className="font-mono text-foreground font-semibold">{formatCurrency(totalBalanceARS, "ARS")}</span>
-            </p>
-          )}
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
     </div>
