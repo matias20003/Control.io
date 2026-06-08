@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, ArrowUpDown, Wallet, TrendingUp,
+  LayoutDashboard, ArrowUpDown, Wallet,
   MoreHorizontal, X, BarChart2, CreditCard, Target, HandCoins, Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,7 +24,6 @@ const rightItems: NavItem[] = [
 const moreItems: NavItem[] = [
   { href: "/deudas",       icon: HandCoins,  label: "Deudas" },
   { href: "/cuotas",       icon: CreditCard, label: "Cuotas" },
-  { href: "/inversiones",  icon: TrendingUp, label: "Inversiones" },
   { href: "/reporte",      icon: BarChart2,  label: "Análisis", match: ["/reporte", "/tendencias"] },
   { href: "/configuracion",icon: Settings,   label: "Configuración" },
 ];
