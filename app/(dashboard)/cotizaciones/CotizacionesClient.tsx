@@ -60,7 +60,7 @@ export function CotizacionesClient({ initial }: Props) {
   const spread  = blue && oficial ? Math.round(((blue.venta - oficial.venta) / oficial.venta) * 100) : null;
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-3xl">
+    <div className="p-4 md:p-6 space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>

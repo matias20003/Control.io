@@ -336,7 +336,7 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-5 max-w-3xl">
+    <div className="p-4 md:p-6 space-y-5">
       {/* Header */}
       <div className="space-y-3">
         <h1 className="text-2xl font-bold text-foreground">Movimientos</h1>
