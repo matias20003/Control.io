@@ -49,6 +49,9 @@ async function getStats() {
     waitlistByProfile,
     // Push: cuántos tienen notificaciones activas
     pushSubsCount,
+    // WhatsApp: usuarios con número vinculado + mensajes procesados este mes
+    usersWithWhatsapp,
+    waRows,
   ] = await Promise.all([
     prisma.profile.count(),
     prisma.profile.count({ where: { createdAt: { gte: d7  } } }),
@@ -78,7 +81,16 @@ async function getStats() {
     prisma.waitlistEntry.count({ where: { createdAt: { gte: d7 } } }).catch(() => 0),
     prisma.waitlistEntry.groupBy({ by: ["profile"], _count: true }).catch(() => []),
     prisma.pushSubscription.count().catch(() => 0),
+    prisma.profile.count({ where: { whatsappNumber: { not: null } } }).catch(() => 0),
+    prisma
+      .$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM "whatsapp_processed_messages" WHERE created_at >= ${monthStart}`
+      .catch(() => [{ n: 0 }]),
   ]);
+
+  const waMessages = waRows[0]?.n ?? 0;
+  const waEstimated = waMessages * 2; // entrante + respuesta (aprox)
+  const waLimit = 2000;
+  const waPercent = Math.min(Math.round((waEstimated / waLimit) * 100), 100);
 
   const activeUsers = activeUserIds.length;
   const activatedUsers = activatedUserIds.length;
@@ -105,6 +117,13 @@ async function getStats() {
       activated:    activatedUsers,
       activatedPct: pct(activatedUsers, totalUsers),
       pushOn:       pushSubsCount,
+      withWhatsapp: usersWithWhatsapp,
+    },
+    whatsapp: {
+      messages:  waMessages,
+      estimated: waEstimated,
+      limit:     waLimit,
+      percent:   waPercent,
     },
     waitlist: {
       total:     waitlistTotal,
@@ -189,6 +208,8 @@ export default async function AdminPage() {
   const s = await getStats();
   const now = new Date();
   const monthName = now.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
+  const waAccent = s.whatsapp.percent >= 80 ? "text-danger" : s.whatsapp.percent >= 60 ? "text-warning" : "text-success";
+  const waBar = s.whatsapp.percent >= 80 ? "bg-danger" : s.whatsapp.percent >= 60 ? "bg-warning" : "bg-success";
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
@@ -271,6 +292,28 @@ export default async function AdminPage() {
               value={s.users.pushOn.toLocaleString("es-AR")}
               sub={`${pct(s.users.pushOn, s.users.total)} del total`}
             />
+          </div>
+        </section>
+
+        {/* Bot de WhatsApp */}
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
+            Bot de WhatsApp — {monthName}
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Tile label="Usuarios con WhatsApp" value={s.users.withWhatsapp.toLocaleString("es-AR")} accent="text-primary" />
+            <Tile label="Mensajes entrantes (mes)" value={s.whatsapp.messages.toLocaleString("es-AR")} />
+            <Tile label="Estimado total (in+out)" value={`${s.whatsapp.estimated.toLocaleString("es-AR")} / ${s.whatsapp.limit}`} accent={waAccent} />
+            <Tile label="Uso del plan" value={`${s.whatsapp.percent}%`} accent={waAccent} />
+          </div>
+          <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
+            <div className="h-2.5 rounded-full bg-surface-2 overflow-hidden">
+              <div className={`h-full ${waBar} transition-all`} style={{ width: `${s.whatsapp.percent}%` }} />
+            </div>
+            <p className="text-xs text-muted">
+              Plan gratis de Kapso: {s.whatsapp.limit} mensajes/mes (todos los usuarios juntos). El número exacto está en el panel de Kapso.
+              {s.whatsapp.percent >= 80 ? " ⚠️ Cerca del límite del plan." : ""}
+            </p>
           </div>
         </section>
 
