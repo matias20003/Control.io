@@ -74,7 +74,7 @@ export default async function DashboardPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-3xl">
+    <div className="p-4 md:p-6 space-y-6">
 
       {/* Cartel proactivo: solo aparece en mobile, una vez por día, después del mediodía,
           y siempre que el usuario aún no haya registrado nada hoy. */}
@@ -124,7 +124,7 @@ export default async function DashboardPage() {
             Ver movimientos <ChevronRight size={12} />
           </Link>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {metrics.map((m) => (
             <Card key={m.label} className="relative overflow-hidden">
               <CardContent className="p-4">
@@ -230,7 +230,7 @@ export default async function DashboardPage() {
               Ver todas <ChevronRight size={12} />
             </Link>
           </div>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
             {accounts.map((account) => (
               <Card key={account.id}>
                 <CardContent className="p-3.5 flex items-center justify-between">
