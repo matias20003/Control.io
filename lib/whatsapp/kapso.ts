@@ -46,14 +46,10 @@ export function verifySignature(rawBody: string, signature: string | null): bool
   if (!secret) return true;
   if (!signature) return false;
 
-  const expected = crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
   const received = signature.replace(/^sha256=/, "").trim();
+  const hmac = crypto.createHmac("sha256", secret).update(rawBody, "utf8");
+  const expectedHex = hmac.digest("hex");
+  const expectedB64 = crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");
 
-  // Comparación en tiempo constante (longitudes deben coincidir)
-  if (received.length !== expected.length) return false;
-  try {
-    return crypto.timingSafeEqual(Buffer.from(received, "hex"), Buffer.from(expected, "hex"));
-  } catch {
-    return false;
-  }
+  return received === expectedHex || received === expectedB64;
 }
