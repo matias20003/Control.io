@@ -9,7 +9,8 @@ import { getInsights, getNetWorth } from "@/lib/db/insights";
 import { getCotizaciones } from "@/lib/cotizaciones";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatMonth, percentageOf } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Scale, PiggyBank, ChevronRight, AlertTriangle, CheckCircle2, Info, ClipboardList } from "lucide-react";
+import { TrendingUp, TrendingDown, Scale, PiggyBank, ChevronRight, AlertTriangle, CheckCircle2, Info, ClipboardList, CalendarClock } from "lucide-react";
+import { getAgenda } from "@/lib/db/agenda";
 import { DashboardQuickAdd } from "./DashboardQuickAdd";
 import { CategoryChart } from "./CategoryChart";
 import { TodayDate } from "./TodayDate";
@@ -44,6 +45,8 @@ export default async function DashboardPage() {
     getOnboardingState(user.id),
     getProfileWhatsapp(user.id).catch(() => null),
   ]);
+
+  const agenda = await getAgenda(user.id, 30).catch(() => []);
 
   const { totalIncome, totalExpense, balance, byCategory } = summary;
   const savingsRate = totalIncome > 0 ? percentageOf(balance, totalIncome) : 0;
@@ -113,6 +116,41 @@ export default async function DashboardPage() {
         </div>
         <ChevronRight size={16} className="text-muted group-hover:text-primary transition-colors" />
       </Link>
+
+      {/* ── Próximos vencimientos (agenda) ── */}
+      {agenda.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider flex items-center gap-1.5">
+              <CalendarClock size={13} /> Próximos vencimientos
+            </p>
+          </div>
+          <Card>
+            <CardContent className="p-3 space-y-1">
+              {agenda.slice(0, 4).map((e) => (
+                <div key={e.id} className="flex items-center gap-3 py-1.5">
+                  <span
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0"
+                    style={{ backgroundColor: `${e.color}20` }}
+                  >
+                    {e.icon}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground leading-tight truncate">{e.title}</p>
+                    <p className="text-xs text-muted">{e.subtitle}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-bold font-mono" style={{ color: e.color }}>
+                      {formatCurrency(e.amount, e.currency)}
+                    </p>
+                    <p className="text-[11px] text-muted">{e.daysUntil === 0 ? "Hoy" : `en ${e.daysUntil}d`}</p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* ── Métricas del mes ── */}
       <div className="space-y-3">

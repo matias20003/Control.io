@@ -1,4 +1,5 @@
 "use client";
+import { SectionTabs } from "@/components/layout/SectionTabs";
 
 import { useRouter } from "next/navigation";
 import {
@@ -69,6 +70,7 @@ export function ReporteClient({ reporte: r, currentOffset }: Props) {
 
   return (
     <div className="p-4 md:p-6 space-y-5">
+      <SectionTabs />
 
       {/* ── Header + nav ── */}
       <div className="flex items-center gap-3">

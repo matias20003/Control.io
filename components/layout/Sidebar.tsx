@@ -3,30 +3,22 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, ArrowUpDown, Wallet, TrendingUp,
-  HandCoins, CreditCard, Target, Repeat2, Settings,
-  LogOut, PiggyBank, BarChart3, DollarSign, CalendarClock,
-  ClipboardList, Users,
+  LayoutDashboard, ArrowUpDown, Wallet, Target, HandCoins,
+  CreditCard, TrendingUp, BarChart3, Settings, LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
 import { signOutAction } from "@/app/actions/auth";
 
 const navItems = [
-  { href: "/dashboard",     icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/dashboard",     icon: LayoutDashboard, label: "Inicio" },
   { href: "/movimientos",   icon: ArrowUpDown,     label: "Movimientos" },
   { href: "/cuentas",       icon: Wallet,          label: "Cuentas" },
-  { href: "/reporte",       icon: ClipboardList,   label: "Reporte semanal" },
-  { href: "/tendencias",    icon: BarChart3,       label: "Tendencias" },
-  { href: "/agenda",        icon: CalendarClock,   label: "Agenda" },
-  { href: "/cotizaciones",  icon: DollarSign,      label: "Cotizaciones" },
-  { href: "/inversiones",   icon: TrendingUp,      label: "Inversiones" },
-  { href: "/grupos",        icon: Users,           label: "Grupos" },
+  { href: "/presupuestos",  icon: Target,          label: "Planificá", match: ["/presupuestos", "/metas", "/recurrentes"] },
   { href: "/deudas",        icon: HandCoins,       label: "Deudas" },
   { href: "/cuotas",        icon: CreditCard,      label: "Cuotas" },
-  { href: "/presupuestos",  icon: Target,          label: "Presupuestos" },
-  { href: "/metas",         icon: PiggyBank,       label: "Metas" },
-  { href: "/recurrentes",   icon: Repeat2,         label: "Recurrentes" },
+  { href: "/inversiones",   icon: TrendingUp,      label: "Inversiones" },
+  { href: "/reporte",       icon: BarChart3,       label: "Análisis", match: ["/reporte", "/tendencias"] },
   { href: "/configuracion", icon: Settings,        label: "Configuración" },
 ];
 
@@ -43,9 +35,10 @@ export function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 px-2.5 py-3 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          const isActive = item.match
+            ? item.match.some((m) => pathname.startsWith(m))
+            : pathname === item.href ||
+              (item.href !== "/dashboard" && pathname.startsWith(item.href));
           return (
             <Link
               key={item.href}

@@ -1,4 +1,5 @@
 "use client";
+import { SectionTabs } from "@/components/layout/SectionTabs";
 
 import {
   BarChart, Bar, LineChart, Line,
@@ -64,6 +65,7 @@ export function TendenciasClient({ trends }: Props) {
 
   return (
     <div className="p-4 md:p-6 space-y-6">
+      <SectionTabs />
       <div>
         <h1 className="text-2xl font-bold text-foreground">Tendencias</h1>
         <p className="text-sm text-muted mt-0.5">Últimos 6 meses de actividad financiera</p>

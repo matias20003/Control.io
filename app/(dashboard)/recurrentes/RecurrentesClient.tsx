@@ -1,4 +1,5 @@
 "use client";
+import { SectionTabs } from "@/components/layout/SectionTabs";
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -295,6 +296,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
 
   return (
     <div className="p-4 md:p-6 space-y-6">
+      <SectionTabs />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

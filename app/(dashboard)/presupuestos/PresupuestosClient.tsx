@@ -1,4 +1,5 @@
 "use client";
+import { SectionTabs } from "@/components/layout/SectionTabs";
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -91,6 +92,7 @@ export function PresupuestosClient({
 
   return (
     <div className="p-4 md:p-6 space-y-5">
+      <SectionTabs />
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-foreground">Presupuestos</h1>

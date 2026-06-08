@@ -6,31 +6,26 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ArrowUpDown, Wallet, TrendingUp,
-  MoreHorizontal, X, BarChart2, Calendar, DollarSign,
-  CreditCard, Target, PiggyBank, Repeat, Settings, BookOpen, Users,
+  MoreHorizontal, X, BarChart2, CreditCard, Target, HandCoins, Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const leftItems = [
+type NavItem = { href: string; icon: React.ElementType; label: string; match?: string[] };
+
+const leftItems: NavItem[] = [
   { href: "/dashboard",   icon: LayoutDashboard, label: "Inicio" },
   { href: "/movimientos", icon: ArrowUpDown,      label: "Movimientos" },
 ];
 
-const rightItems = [
-  { href: "/grupos",      icon: Users,      label: "Grupos" },
+const rightItems: NavItem[] = [
+  { href: "/presupuestos", icon: Target, label: "Planificá", match: ["/presupuestos", "/metas", "/recurrentes"] },
 ];
 
-const moreItems = [
-  { href: "/inversiones",  icon: TrendingUp, label: "Inversiones" },
-  { href: "/reporte",      icon: BookOpen,   label: "Reporte semanal" },
-  { href: "/tendencias",   icon: BarChart2,  label: "Tendencias" },
-  { href: "/agenda",       icon: Calendar,   label: "Agenda" },
-  { href: "/cotizaciones", icon: DollarSign, label: "Cotizaciones" },
-  { href: "/deudas",       icon: CreditCard, label: "Deudas" },
+const moreItems: NavItem[] = [
+  { href: "/deudas",       icon: HandCoins,  label: "Deudas" },
   { href: "/cuotas",       icon: CreditCard, label: "Cuotas" },
-  { href: "/presupuestos", icon: PiggyBank,  label: "Presupuestos" },
-  { href: "/metas",        icon: Target,     label: "Metas" },
-  { href: "/recurrentes",  icon: Repeat,     label: "Recurrentes" },
+  { href: "/inversiones",  icon: TrendingUp, label: "Inversiones" },
+  { href: "/reporte",      icon: BarChart2,  label: "Análisis", match: ["/reporte", "/tendencias"] },
   { href: "/configuracion",icon: Settings,   label: "Configuración" },
 ];
 
@@ -45,7 +40,7 @@ export function BottomNav() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const isMoreActive = moreItems.some((i) => pathname.startsWith(i.href));
+  const isMoreActive = moreItems.some((i) => (i.match ?? [i.href]).some((m) => pathname.startsWith(m)));
   const isCuentasActive =
     pathname === "/cuentas" || pathname.startsWith("/cuentas/");
 
@@ -79,7 +74,7 @@ export function BottomNav() {
             <div className="overflow-y-auto overscroll-contain flex-1 px-2 pt-2 pb-8">
               <div className="grid grid-cols-3 gap-1.5">
                 {moreItems.map((item) => {
-                  const isActive = pathname.startsWith(item.href);
+                  const isActive = (item.match ?? [item.href]).some((m) => pathname.startsWith(m));
                   return (
                     <Link
                       key={item.href}
@@ -176,8 +171,9 @@ export function BottomNav() {
 
           {/* Derecha: Grupos */}
           {rightItems.map((item) => {
-            const isActive =
-              pathname === item.href || pathname.startsWith(item.href + "/");
+            const isActive = item.match
+              ? item.match.some((m) => pathname.startsWith(m))
+              : pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <Link
                 key={item.href}
