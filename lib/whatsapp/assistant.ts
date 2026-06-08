@@ -28,6 +28,7 @@ import { getDebts, createDebt, payDebt, type SerializedDebt } from "@/lib/db/deb
 import { getBudgets, createOrUpdateBudget, type SerializedBudget } from "@/lib/db/budgets";
 import { getGoals, createGoal, addFundsToGoal, type SerializedGoal } from "@/lib/db/goals";
 import { getInvestments, type SerializedInvestment } from "@/lib/db/investments";
+import { getChatHistory, saveChatTurn, getMemory, addMemory, type ChatTurn } from "@/lib/whatsapp/memory";
 
 type Intent = "action" | "query" | "chat";
 
@@ -62,6 +63,7 @@ interface Action {
   currentAmount?: number;
   goalName?: string;
   ref?: number;
+  fact?: string;
 }
 
 interface AssistantOutput {
@@ -80,6 +82,7 @@ interface FinancialContext {
   goals: SerializedGoal[];
   investments: SerializedInvestment[];
   recent: SerializedTransaction[];
+  memory: string[];
   today: string;
   monthLabel: string;
   month: number;
@@ -228,22 +231,45 @@ function formatFinancialState(c: FinancialContext): string {
   return s.join("\n\n");
 }
 
-async function interpret(message: string, c: FinancialContext, imageUrl?: string): Promise<AssistantOutput> {
+async function interpret(
+  message: string,
+  c: FinancialContext,
+  imageUrl?: string,
+  history: ChatTurn[] = []
+): Promise<AssistantOutput> {
   const apiKey = process.env.OPENAI_API_KEY ?? fail("OPENAI_API_KEY no configurada");
   const model = process.env.CHAT_MODEL ?? "gpt-4o-mini";
 
   const expenseCats = c.categories.filter((x) => x.type === "EXPENSE").map((x) => x.name);
   const incomeCats = c.categories.filter((x) => x.type === "INCOME").map((x) => x.name);
 
-  const system = `Sos el asistente financiero de "control.io", una app de finanzas personales argentina.
-Hoy es ${c.today}. Moneda por defecto: ARS.
+  const system = `Sos un ASESOR FINANCIERO profesional (Argentina) dentro de "control.io", una app de
+finanzas personales. Hablás claro, cercano y práctico, sin jerga innecesaria. Hoy es ${c.today}.
+Moneda por defecto: ARS.
 
-Podés: responder preguntas sobre las finanzas, y EJECUTAR acciones (registrar gastos/ingresos,
-transferencias, crear cuentas, deudas, presupuestos, metas, y editar/borrar movimientos).
+Sabés de finanzas personales y de negocios. Cuando te preguntan o piden análisis, DIAGNOSTICÁS con
+los DATOS REALES del usuario (los de abajo) y das recomendaciones CONCRETAS y accionables — no
+respuestas genéricas. Principios que aplicás:
+- Regla 50/30/20 (necesidades / gustos / ahorro-deuda).
+- Fondo de emergencia: 3 a 6 meses de gastos.
+- Tasa de ahorro saludable: apuntar a >20% de los ingresos.
+- Deudas: estrategia "bola de nieve" (saldar primero la más chica, motiva) vs "avalancha"
+  (primero la de mayor interés, óptima). Recomendá según el caso.
+- Controlar gastos hormiga, automatizar el ahorro, presupuestar por categoría.
+- Contexto argentino: inflación alta → conviene proteger excedentes (dólar/USD, plazo fijo UVA,
+  etc.), pero aclarando que es ORIENTACIÓN GENERAL, no asesoramiento de inversión formal.
+Sé honesto: nunca inventes números, usá solo los del sistema. Si falta info, decilo. Respuestas
+BREVES (es WhatsApp), claras y útiles.
+
+También EJECUTÁS acciones: registrar gastos/ingresos, transferencias, crear cuentas, deudas,
+presupuestos, metas, editar/borrar movimientos, y recordar datos del usuario.
 
 ═══════════ ESTADO FINANCIERO (datos reales) ═══════════
 ${formatFinancialState(c)}
 ════════════════════════════════════════════════════════
+
+LO QUE SABÉS DEL USUARIO (memoria de charlas anteriores):
+${c.memory.length ? c.memory.map((m) => `- ${m}`).join("\n") : "- (todavía no tenés notas guardadas)"}
 
 CATEGORÍAS de gasto: ${expenseCats.join(", ") || "ninguna"}
 CATEGORÍAS de ingreso: ${incomeCats.join(", ") || "ninguna"}
@@ -292,13 +318,18 @@ TIPOS DE ACCIÓN (campo "type"):
 - "add_to_goal": { goalName, amount }
 - "delete_transaction": { ref }                                // ref = número [#N] de la lista
 - "update_transaction": { ref, amount, description, category, account }  // solo los campos a cambiar
+- "remember": { fact }   // guardar un dato DURABLE del usuario en tu memoria
 
 REGLAS:
 - "intent":"action" cuando hay que ejecutar algo (llená "actions"). Podés poner varias acciones.
-- "intent":"query" para preguntas sobre las finanzas: "actions" vacío, respondé en "answer" BREVE y concreto con los datos reales (montos con $ y miles).
+- "intent":"query" para preguntas, análisis o consejos: "actions" vacío, respondé en "answer" usando los datos reales (montos con $ y miles), con diagnóstico + recomendación concreta.
 - "intent":"chat" para saludos/fuera de tema: "actions" vacío, "answer" cordial.
+- "remember": usalo cuando el usuario comparta algo DURABLE para tener en cuenta a futuro
+  ("acordate que cobro el día 1", "mi meta es comprar un auto", "soy freelance", "no me gusta endeudarme").
+  Guardá el dato como una frase corta en "fact". NO guardes movimientos puntuales ni datos triviales.
 - "category"/"account" SOLO de las listas/cuentas dadas, o null. Para borrar/editar, usá el "ref" [#N] de ÚLTIMOS MOVIMIENTOS.
 - Pedidos destructivos (borrar/editar): hacelos solo si el usuario lo pide claramente.
+- Usá el HISTORIAL de la charla para entender referencias ("¿y comparado con el mes pasado?", "sí, hacelo").
 - NUNCA inventes datos ni acciones que el usuario no pidió. "answer" siempre presente (vacío si no aplica).`;
 
   // Contenido del usuario: texto, o texto + imagen (multimodal) si hay foto.
@@ -318,6 +349,7 @@ REGLAS:
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: system },
+        ...history.map((h) => ({ role: h.role, content: h.content })),
         { role: "user", content: userContent },
       ],
     }),
@@ -496,6 +528,12 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       return `✏️ Actualicé: ${money(a.amount ?? tx.amount, tx.currency)} — ${a.description ?? tx.description ?? "movimiento"}`;
     }
 
+    case "remember": {
+      if (!a.fact) throw new Error("falta el dato a recordar");
+      await addMemory(userId, a.fact);
+      return `🧠 Anotado en tu memoria: ${a.fact}`;
+    }
+
     default:
       throw new Error(`acción no soportada: ${a.type}`);
   }
@@ -512,17 +550,20 @@ export async function handleUserMessage(userId: string, message: string, imageUr
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage] = await Promise.all([
-    getAccounts(userId),
-    getCategories(userId),
-    getMonthSummary(userId),
-    getNetWorth(userId).catch(() => null),
-    getDebts(userId).catch(() => [] as SerializedDebt[]),
-    getBudgets(userId, month, year).catch(() => [] as SerializedBudget[]),
-    getGoals(userId).catch(() => [] as SerializedGoal[]),
-    getInvestments(userId).catch(() => [] as SerializedInvestment[]),
-    getTransactions(userId, { take: 15 }).catch(() => ({ items: [], total: 0, hasMore: false })),
-  ]);
+  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage, history, memory] =
+    await Promise.all([
+      getAccounts(userId),
+      getCategories(userId),
+      getMonthSummary(userId),
+      getNetWorth(userId).catch(() => null),
+      getDebts(userId).catch(() => [] as SerializedDebt[]),
+      getBudgets(userId, month, year).catch(() => [] as SerializedBudget[]),
+      getGoals(userId).catch(() => [] as SerializedGoal[]),
+      getInvestments(userId).catch(() => [] as SerializedInvestment[]),
+      getTransactions(userId, { take: 15 }).catch(() => ({ items: [], total: 0, hasMore: false })),
+      getChatHistory(userId).catch(() => [] as ChatTurn[]),
+      getMemory(userId).catch(() => [] as string[]),
+    ]);
 
   const today = now.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const monthLabel = now.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
@@ -537,14 +578,30 @@ export async function handleUserMessage(userId: string, message: string, imageUr
     goals,
     investments,
     recent: txPage.items,
+    memory,
     today,
     monthLabel,
     month,
     year,
   };
 
-  const result = await interpret(clean, ctx, imageUrl);
+  const result = await interpret(clean, ctx, imageUrl, history);
 
+  const reply = await buildReply(userId, result, ctx, now);
+
+  // Guardamos el turno para que el bot recuerde la conversación.
+  await saveChatTurn(userId, clean || "[imagen/audio]", reply);
+
+  return reply;
+}
+
+/** Ejecuta las acciones (si las hay) y arma el texto de respuesta. */
+async function buildReply(
+  userId: string,
+  result: AssistantOutput,
+  ctx: FinancialContext,
+  now: Date
+): Promise<string> {
   if (result.intent !== "action" || result.actions.length === 0) {
     return result.answer || "Listo 👍";
   }
