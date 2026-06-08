@@ -14,6 +14,7 @@ interface Props {
   profileEmail: string;
   mfaEnabled: boolean;
   recoveryCodesRemaining: number;
+  whatsappNumber: string | null;
 }
 
 export function ConfiguracionClient({
@@ -22,6 +23,7 @@ export function ConfiguracionClient({
   profileEmail,
   mfaEnabled,
   recoveryCodesRemaining,
+  whatsappNumber,
 }: Props) {
   const [tab, setTab] = useState<Tab>("categorias");
 
@@ -60,6 +62,7 @@ export function ConfiguracionClient({
           profileEmail={profileEmail}
           mfaEnabled={mfaEnabled}
           recoveryCodesRemaining={recoveryCodesRemaining}
+          whatsappNumber={whatsappNumber}
         />
       )}
     </div>

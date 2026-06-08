@@ -50,3 +50,36 @@ export async function getOrCreateProfile(userId: string, email: string, name?: s
 
   return profile;
 }
+
+/** Normaliza un número de WhatsApp a solo dígitos (con código de país). */
+export function normalizeWhatsapp(input: string): string {
+  return input.replace(/\D/g, "");
+}
+
+export async function getProfileWhatsapp(userId: string): Promise<string | null> {
+  const p = await prisma.profile.findUnique({
+    where: { id: userId },
+    select: { whatsappNumber: true },
+  });
+  return p?.whatsappNumber ?? null;
+}
+
+/**
+ * Vincula (o desvincula con null) el número de WhatsApp del usuario.
+ * Lanza error con code "P2002" si el número ya está en uso por otra cuenta.
+ */
+export async function setWhatsappNumber(
+  userId: string,
+  email: string,
+  name: string | undefined,
+  number: string | null
+): Promise<string | null> {
+  await getOrCreateProfile(userId, email, name);
+  const value = number ? normalizeWhatsapp(number) : null;
+  const updated = await prisma.profile.update({
+    where: { id: userId },
+    data: { whatsappNumber: value },
+    select: { whatsappNumber: true },
+  });
+  return updated.whatsappNumber;
+}

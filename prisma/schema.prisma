@@ -62,11 +62,12 @@ enum RecurringFrequency {
 // ─────────────────────────────────────────────
 
 model Profile {
-  id        String   @id
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id
+  email          String   @unique
+  name           String?
+  whatsappNumber String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   accounts              Account[]
   categories            Category[]

@@ -11,17 +11,20 @@ import { signOutAction, updatePasswordAction } from "@/app/actions/auth";
 import { deleteAllDataAction } from "@/app/actions/data";
 import { NotificacionesCard } from "./NotificacionesCard";
 import { TwoFactorCard } from "./TwoFactorCard";
+import { WhatsappCard } from "./WhatsappCard";
 
 export function ProfileTab({
   profileName,
   profileEmail,
   mfaEnabled,
   recoveryCodesRemaining,
+  whatsappNumber,
 }: {
   profileName: string | null;
   profileEmail: string;
   mfaEnabled: boolean;
   recoveryCodesRemaining: number;
+  whatsappNumber: string | null;
 }) {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
@@ -86,6 +89,8 @@ export function ProfileTab({
       </Card>
 
       <NotificacionesCard />
+
+      <WhatsappCard initialNumber={whatsappNumber} />
 
       <TwoFactorCard mfaEnabled={mfaEnabled} recoveryCodesRemaining={recoveryCodesRemaining} />
 
