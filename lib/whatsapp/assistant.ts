@@ -47,6 +47,7 @@ interface Action {
   amount?: number;
   currency?: "ARS" | "USD";
   description?: string;
+  date?: string;
   category?: string | null;
   account?: string | null;
   fromAccount?: string | null;
@@ -103,6 +104,16 @@ function money(n: number, currency = "ARS"): string {
 
 function fail(msg: string): never {
   throw new Error(msg);
+}
+
+/** Devuelve la fecha de la acción (ISO) si es válida y no futura, sino hoy. */
+function resolveDate(date: string | undefined, isoDate: string): string {
+  if (!date) return isoDate;
+  const t = Date.parse(date);
+  if (isNaN(t)) return isoDate;
+  // No permitimos fechas futuras (un movimiento no puede ser de mañana).
+  if (t > Date.parse(isoDate)) return isoDate;
+  return new Date(t).toISOString();
 }
 
 // ─────────────────────────── Resolución nombre → entidad ───────────────────────────
@@ -240,6 +251,11 @@ TIPOS de cuenta válidos: ${ACCOUNT_TYPES.join(", ")}
 Jerga argentina de montos: "5 lucas"/"5k"=5000, "un palo"=1.000.000, "500 mangos"=500.
 Sin aclarar moneda → ARS. "dólares"/"usd"/"verdes" → USD.
 
+FECHAS: el campo "date" (formato "YYYY-MM-DD") es opcional. Si el usuario dice CUÁNDO fue el
+movimiento ("ayer", "anteayer", "el lunes", "el mes pasado", "el 5 de mayo", "la semana pasada"),
+calculá la fecha respecto de HOY (${c.today}) y ponela en "date". Si solo dice el mes sin día,
+usá el día 15 de ese mes. Si no menciona fecha, OMITÍ "date" (se usa hoy). Nunca uses fechas futuras.
+
 Si te mandan una IMAGEN (ticket, recibo, factura, captura de transferencia o de Mercado Pago):
 leé los montos y conceptos y generá las acciones correspondientes (normalmente "expense", o
 "income" si es un cobro/ingreso). Si hay varios ítems en un ticket, podés sumarlos en un solo
@@ -253,8 +269,8 @@ Respondé SIEMPRE en JSON válido:
 }
 
 TIPOS DE ACCIÓN (campo "type"):
-- "expense" / "income": { amount, currency, description, category, account }
-- "transfer": { amount, currency, description, fromAccount, toAccount }
+- "expense" / "income": { amount, currency, description, category, account, date }
+- "transfer": { amount, currency, description, fromAccount, toAccount, date }
 - "create_account": { name, accountType, currency, balance }   // accountType de la lista
 - "create_debt": { direction: "i_owe"|"they_owe", personName, amount, currency, description }
 - "pay_debt": { personName, amount }
@@ -328,19 +344,23 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       if (!a.amount || a.amount <= 0) throw new Error("monto inválido");
       const cat = findCategory(c, a.category, type);
       const acc = findAccount(c, a.account) ?? defaultAccount(c);
+      const txDate = resolveDate(a.date, isoDate);
       await createTransaction(userId, {
         type,
         amount: a.amount,
         currency: cur,
         description: a.description || (type === "EXPENSE" ? "Gasto" : "Ingreso"),
-        date: isoDate,
+        date: txDate,
         categoryId: cat?.id,
         accountId: acc?.id,
         notes: "Registrado por WhatsApp",
       });
       const emoji = type === "EXPENSE" ? "🔴" : "🟢";
       const sign = type === "EXPENSE" ? "-" : "+";
-      return `${emoji} ${sign}${money(a.amount, cur)} — ${a.description ?? ""}${cat ? ` · ${cat.icon ?? ""} ${cat.name}` : ""}${acc ? ` (${acc.name})` : ""}`.trim();
+      const dateTxt = a.date && txDate.slice(0, 10) !== isoDate.slice(0, 10)
+        ? ` 📅 ${new Date(txDate).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}`
+        : "";
+      return `${emoji} ${sign}${money(a.amount, cur)} — ${a.description ?? ""}${cat ? ` · ${cat.icon ?? ""} ${cat.name}` : ""}${acc ? ` (${acc.name})` : ""}${dateTxt}`.trim();
     }
 
     case "transfer": {
@@ -353,7 +373,7 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
         amount: a.amount,
         currency: cur,
         description: a.description || "Transferencia",
-        date: isoDate,
+        date: resolveDate(a.date, isoDate),
         accountId: from.id,
         toAccountId: to.id,
       });
