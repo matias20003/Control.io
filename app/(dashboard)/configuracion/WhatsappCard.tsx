@@ -20,9 +20,14 @@ export function WhatsappCard({ initialNumber }: { initialNumber: string | null }
   const [number, setNumber] = useState(initialNumber ?? "");
   const [saved, setSaved] = useState(initialNumber);
   const [loading, setLoading] = useState(false);
+  const [accepted, setAccepted] = useState(false);
 
   const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!saved && !accepted) {
+      toast.error("Tenés que aceptar la política de privacidad para vincular tu número.");
+      return;
+    }
     setLoading(true);
     try {
       const result = await updateWhatsappNumberAction(new FormData(e.currentTarget));
@@ -79,8 +84,26 @@ export function WhatsappCard({ initialNumber }: { initialNumber: string | null }
               required
             />
           </div>
+          {!saved && (
+            <label className="flex items-start gap-2 text-xs text-muted cursor-pointer">
+              <input
+                type="checkbox"
+                checked={accepted}
+                onChange={(e) => setAccepted(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-primary)]"
+              />
+              <span>
+                Entiendo que mis mensajes con el asistente se procesan y guardan (encriptados) para
+                registrar mis finanzas. Acepto la{" "}
+                <a href="/privacidad" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  política de privacidad
+                </a>
+                .
+              </span>
+            </label>
+          )}
           <div className="flex gap-2">
-            <Button type="submit" className="flex-1" disabled={loading}>
+            <Button type="submit" className="flex-1" disabled={loading || (!saved && !accepted)}>
               {loading && <Loader2 size={15} className="animate-spin mr-1" />}
               {loading ? "Guardando..." : saved ? "Actualizar" : "Vincular"}
             </Button>

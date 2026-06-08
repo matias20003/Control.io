@@ -4,24 +4,30 @@
  * - Notas del usuario (largo plazo): datos durables que el agente guarda.
  */
 import { prisma } from "@/lib/prisma";
+import { encrypt, decrypt } from "@/lib/crypto";
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
-/** Últimos N turnos de conversación, en orden cronológico. */
+/** Últimos N turnos de conversación, en orden cronológico. Contenido desencriptado. */
 export async function getChatHistory(userId: string, limit = 12): Promise<ChatTurn[]> {
   const rows = await prisma.$queryRaw<{ role: string; content: string }[]>`
     SELECT role, content FROM "whatsapp_chat_history"
     WHERE user_id = ${userId} ORDER BY id DESC LIMIT ${limit}`;
   return rows
     .reverse()
-    .map((r) => ({ role: r.role === "assistant" ? "assistant" : "user", content: r.content }));
+    .map((r) => ({
+      role: r.role === "assistant" ? ("assistant" as const) : ("user" as const),
+      content: decrypt(r.content) ?? "",
+    }));
 }
 
-/** Guarda el turno (mensaje del usuario + respuesta) y poda el historial viejo. */
+/** Guarda el turno (mensaje del usuario + respuesta) encriptado, y poda el historial viejo. */
 export async function saveChatTurn(userId: string, userMsg: string, assistantMsg: string): Promise<void> {
   try {
-    await prisma.$executeRaw`INSERT INTO "whatsapp_chat_history" (user_id, role, content) VALUES (${userId}, 'user', ${userMsg.slice(0, 2000)})`;
-    await prisma.$executeRaw`INSERT INTO "whatsapp_chat_history" (user_id, role, content) VALUES (${userId}, 'assistant', ${assistantMsg.slice(0, 2000)})`;
+    const u = encrypt(userMsg.slice(0, 2000));
+    const a = encrypt(assistantMsg.slice(0, 2000));
+    await prisma.$executeRaw`INSERT INTO "whatsapp_chat_history" (user_id, role, content) VALUES (${userId}, 'user', ${u})`;
+    await prisma.$executeRaw`INSERT INTO "whatsapp_chat_history" (user_id, role, content) VALUES (${userId}, 'assistant', ${a})`;
     // Mantener solo los últimos 40 turnos por usuario.
     await prisma.$executeRaw`
       DELETE FROM "whatsapp_chat_history"
@@ -34,15 +40,19 @@ export async function saveChatTurn(userId: string, userMsg: string, assistantMsg
   }
 }
 
-/** Notas/datos durables del usuario. */
+/** Notas/datos durables del usuario (desencriptados). */
 export async function getMemory(userId: string, limit = 30): Promise<string[]> {
   const rows = await prisma.$queryRaw<{ fact: string }[]>`
     SELECT fact FROM "whatsapp_memory" WHERE user_id = ${userId} ORDER BY id DESC LIMIT ${limit}`;
-  return rows.map((r) => r.fact).reverse();
+  return rows
+    .map((r) => decrypt(r.fact) ?? "")
+    .filter(Boolean)
+    .reverse();
 }
 
 export async function addMemory(userId: string, fact: string): Promise<void> {
   const clean = fact.trim().slice(0, 500);
   if (!clean) return;
-  await prisma.$executeRaw`INSERT INTO "whatsapp_memory" (user_id, fact) VALUES (${userId}, ${clean})`;
+  const enc = encrypt(clean);
+  await prisma.$executeRaw`INSERT INTO "whatsapp_memory" (user_id, fact) VALUES (${userId}, ${enc})`;
 }
