@@ -1,17 +1,30 @@
 /**
  * Cerebro del asistente de WhatsApp.
  *
- * Interpreta un mensaje en lenguaje natural (texto ya transcripto si vino de audio),
- * extrae los movimientos a registrar y/o responde consultas sobre las finanzas.
+ * - Interpreta mensajes en lenguaje natural (texto o audio transcripto).
+ * - Registra gastos/ingresos.
+ * - Responde consultas sobre TODO el estado financiero (saldos, movimientos,
+ *   deudas, presupuestos, metas, inversiones, patrimonio neto) con datos reales.
  *
  * Variables de entorno:
- *   OPENAI_API_KEY   → clave de OpenAI
+ *   OPENAI_API_KEY   → clave del proveedor (OpenAI / OpenRouter / Groq)
  *   OPENAI_BASE_URL  → opcional, default https://api.openai.com/v1
  *   CHAT_MODEL       → opcional, default "gpt-4o-mini"
  */
-import { getAccounts } from "@/lib/db/accounts";
-import { getCategories } from "@/lib/db/categories";
-import { createTransaction, getMonthSummary } from "@/lib/db/transactions";
+import { getAccounts, type SerializedAccount } from "@/lib/db/accounts";
+import { getCategories, type SerializedCategory } from "@/lib/db/categories";
+import {
+  createTransaction,
+  getMonthSummary,
+  getTransactions,
+  type MonthSummary,
+  type SerializedTransaction,
+} from "@/lib/db/transactions";
+import { getNetWorth, type NetWorth } from "@/lib/db/insights";
+import { getDebts, type SerializedDebt } from "@/lib/db/debts";
+import { getBudgets, type SerializedBudget } from "@/lib/db/budgets";
+import { getGoals, type SerializedGoal } from "@/lib/db/goals";
+import { getInvestments, type SerializedInvestment } from "@/lib/db/investments";
 
 type Intent = "register" | "query" | "chat";
 
@@ -30,6 +43,20 @@ interface AssistantOutput {
   answer: string;
 }
 
+interface FinancialContext {
+  accounts: SerializedAccount[];
+  categories: SerializedCategory[];
+  summary: MonthSummary;
+  netWorth: NetWorth | null;
+  debts: SerializedDebt[];
+  budgets: SerializedBudget[];
+  goals: SerializedGoal[];
+  investments: SerializedInvestment[];
+  recent: SerializedTransaction[];
+  today: string;
+  monthLabel: string;
+}
+
 function baseUrl(): string {
   return (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/+$/, "");
 }
@@ -37,53 +64,138 @@ function baseUrl(): string {
 /** Quita acentos y pasa a minúsculas para comparar nombres. */
 const DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
 function norm(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(DIACRITICS, "")
-    .trim();
+  return s.toLowerCase().normalize("NFD").replace(DIACRITICS, "").trim();
 }
 
 function fmt(n: number): string {
   return new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(n);
 }
 
+function money(n: number, currency = "ARS"): string {
+  return currency === "USD" ? `USD ${fmt(n)}` : `$${fmt(n)}`;
+}
+
 function fail(msg: string): never {
   throw new Error(msg);
 }
 
-/** Llama al LLM y devuelve la interpretación estructurada del mensaje. */
-async function interpret(
-  message: string,
-  context: {
-    accounts: { name: string; type: string; balance: number; currency: string }[];
-    categories: { name: string; type: string }[];
-    summary: { totalIncome: number; totalExpense: number; balance: number };
-    today: string;
+/** Arma el bloque de "estado financiero" con datos reales para el LLM. */
+function formatFinancialState(c: FinancialContext): string {
+  const sections: string[] = [];
+
+  sections.push(
+    `CUENTAS Y SALDOS:\n` +
+      (c.accounts.length
+        ? c.accounts.map((a) => `- ${a.name} (${a.type}): ${money(a.balance, a.currency)}`).join("\n")
+        : "- (sin cuentas)")
+  );
+
+  if (c.netWorth) {
+    sections.push(
+      `PATRIMONIO NETO (ARS): activos ${money(c.netWorth.totalAssets)}, pasivos ${money(
+        c.netWorth.totalLiabilities
+      )}, neto ${money(c.netWorth.netWorth)}`
+    );
   }
-): Promise<AssistantOutput> {
+
+  const cats = c.summary.byCategory.map((b) => `${b.name} ${money(b.total)}`).join(", ");
+  sections.push(
+    `RESUMEN ${c.monthLabel.toUpperCase()}: ingresos ${money(c.summary.totalIncome)}, gastos ${money(
+      c.summary.totalExpense
+    )}, balance ${money(c.summary.balance)}` + (cats ? `\nGastos por categoría: ${cats}` : "")
+  );
+
+  if (c.recent.length) {
+    sections.push(
+      `ÚLTIMOS MOVIMIENTOS:\n` +
+        c.recent
+          .slice(0, 15)
+          .map((t) => {
+            const d = new Date(t.date).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
+            const sign = t.type === "INCOME" ? "+" : t.type === "EXPENSE" ? "-" : "";
+            const cat = t.categoryName ? ` · ${t.categoryName}` : "";
+            const acc = t.accountName ? ` (${t.accountName})` : "";
+            return `- ${d} ${sign}${money(t.amount, t.currency)} ${t.description ?? ""}${cat}${acc}`.trim();
+          })
+          .join("\n")
+    );
+  }
+
+  const openDebts = c.debts.filter((d) => !d.isCompleted);
+  if (openDebts.length) {
+    sections.push(
+      `DEUDAS:\n` +
+        openDebts
+          .map((d) => {
+            const who = d.direction === "I_OWE" ? `Le debo a ${d.personName}` : `${d.personName} me debe`;
+            return `- ${who}: ${money(d.remainingAmount, d.currency)} pendientes (de ${money(d.totalAmount, d.currency)})`;
+          })
+          .join("\n")
+    );
+  }
+
+  if (c.budgets.length) {
+    sections.push(
+      `PRESUPUESTOS (${c.monthLabel}):\n` +
+        c.budgets
+          .map((b) => `- ${b.categoryName}: gastado ${money(b.spent)} de ${money(b.amount)} (${b.percentage}%)`)
+          .join("\n")
+    );
+  }
+
+  if (c.goals.length) {
+    sections.push(
+      `METAS:\n` +
+        c.goals
+          .map(
+            (g) =>
+              `- ${g.name}: ${money(g.currentAmount, g.currency)} de ${money(g.targetAmount, g.currency)} (${g.percentage}%)`
+          )
+          .join("\n")
+    );
+  }
+
+  if (c.investments.length) {
+    sections.push(
+      `INVERSIONES:\n` +
+        c.investments
+          .map((i) => {
+            const val = i.currentValue != null ? `, valor actual ${money(i.currentValue, i.currency)}` : "";
+            return `- ${i.name} (${i.type}): invertido ${money(i.amount, i.currency)}${val}`;
+          })
+          .join("\n")
+    );
+  }
+
+  return sections.join("\n\n");
+}
+
+/** Llama al LLM y devuelve la interpretación estructurada del mensaje. */
+async function interpret(message: string, c: FinancialContext): Promise<AssistantOutput> {
   const apiKey = process.env.OPENAI_API_KEY ?? fail("OPENAI_API_KEY no configurada");
   const model = process.env.CHAT_MODEL ?? "gpt-4o-mini";
 
-  const expenseCats = context.categories.filter((c) => c.type === "EXPENSE").map((c) => c.name);
-  const incomeCats = context.categories.filter((c) => c.type === "INCOME").map((c) => c.name);
+  const expenseCats = c.categories.filter((x) => x.type === "EXPENSE").map((x) => x.name);
+  const incomeCats = c.categories.filter((x) => x.type === "INCOME").map((x) => x.name);
 
   const system = `Sos el asistente financiero de "control.io", una app de finanzas personales argentina.
-Hoy es ${context.today}. La moneda por defecto es ARS (pesos argentinos).
+Hoy es ${c.today}. La moneda por defecto es ARS (pesos argentinos).
 
-El usuario te escribe (o te manda audios) con los gastos e ingresos del día. Tu trabajo es:
-1) Detectar la intención del mensaje.
-2) Si registra movimientos, extraer cada gasto/ingreso por separado.
-3) Si pregunta algo sobre sus finanzas, responder con los datos que te paso.
+Tu trabajo:
+1) Si el usuario informa gastos/ingresos → registralos (intent "register").
+2) Si pregunta CUALQUIER cosa sobre sus finanzas → respondé con los DATOS REALES de abajo (intent "query").
+3) Saludos o fuera de tema → intent "chat".
 
-CUENTAS del usuario: ${context.accounts.map((a) => `"${a.name}" (${a.type}, saldo ${fmt(a.balance)} ${a.currency})`).join("; ") || "ninguna"}
-CATEGORÍAS de gasto: ${expenseCats.join(", ") || "ninguna"}
-CATEGORÍAS de ingreso: ${incomeCats.join(", ") || "ninguna"}
-RESUMEN del mes actual: ingresos ${fmt(context.summary.totalIncome)}, gastos ${fmt(context.summary.totalExpense)}, balance ${fmt(context.summary.balance)} ARS.
+═══════════ ESTADO FINANCIERO DEL USUARIO (datos reales del sistema) ═══════════
+${formatFinancialState(c)}
+═══════════════════════════════════════════════════════════════════════════════
+
+CATEGORÍAS de gasto disponibles: ${expenseCats.join(", ") || "ninguna"}
+CATEGORÍAS de ingreso disponibles: ${incomeCats.join(", ") || "ninguna"}
 
 Reglas para montos en jerga argentina:
-- "5 lucas", "5 luca", "5k" = 5000. "un palo" = 1.000.000. "500 mangos" = 500.
-- Si no se aclara la moneda, asumí ARS. Si dicen "dólares"/"usd"/"verdes", currency = "USD".
+- "5 lucas"/"5 luca"/"5k" = 5000. "un palo" = 1.000.000. "500 mangos" = 500.
+- Sin aclaración de moneda → ARS. Si dicen "dólares"/"usd"/"verdes" → currency "USD".
 
 Respondé SIEMPRE en JSON válido con esta forma exacta:
 {
@@ -94,10 +206,11 @@ Respondé SIEMPRE en JSON válido con esta forma exacta:
   "answer": string
 }
 
-- "register": cuando el usuario informa uno o más gastos/ingresos. Llená "items". Elegí "category" SOLO de las listas dadas (la que mejor encaje); si ninguna encaja, usá null. Elegí "account" SOLO de las cuentas dadas si la menciona, sino null. "answer" debe ser una confirmación breve y amable.
-- "query": cuando pregunta por saldos, cuánto gastó, resumen, etc. Dejá "items" vacío y respondé en "answer" con los datos de arriba, en tono breve y claro.
-- "chat": saludos o cosas fuera de tema. "items" vacío, "answer" cordial recordando que podés registrar gastos/ingresos.
-No inventes movimientos que el usuario no mencionó.`;
+- "register": uno o más gastos/ingresos. Llená "items". "category" SOLO de las listas (la que mejor encaje) o null. "account" SOLO de las cuentas si la menciona, sino null. "answer" = confirmación breve.
+- "query": preguntas sobre saldos, gastos, deudas, presupuestos, metas, inversiones, patrimonio, movimientos, etc. "items" vacío. En "answer" respondé de forma BREVE, clara y concreta usando los datos de arriba. Mostrá montos con $ y separadores de miles. Si te piden algo que no está en los datos, decilo con honestidad.
+- "chat": "items" vacío, "answer" cordial recordando que podés registrar movimientos y responder sobre sus finanzas.
+
+NUNCA inventes datos ni movimientos que el usuario no mencionó. Usá solo los datos reales de arriba.`;
 
   const res = await fetch(`${baseUrl()}/chat/completions`, {
     method: "POST",
@@ -142,24 +255,37 @@ export async function handleUserMessage(userId: string, message: string): Promis
   const clean = message.trim();
   if (!clean) return "No entendí el mensaje. Probá escribiendo o mandando un audio con el gasto o ingreso 🙂";
 
-  const [accounts, categories, summary] = await Promise.all([
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+
+  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage] = await Promise.all([
     getAccounts(userId),
     getCategories(userId),
     getMonthSummary(userId),
+    getNetWorth(userId).catch(() => null),
+    getDebts(userId).catch(() => [] as SerializedDebt[]),
+    getBudgets(userId, month, year).catch(() => [] as SerializedBudget[]),
+    getGoals(userId).catch(() => [] as SerializedGoal[]),
+    getInvestments(userId).catch(() => [] as SerializedInvestment[]),
+    getTransactions(userId, { take: 15 }).catch(() => ({ items: [], total: 0, hasMore: false })),
   ]);
 
-  const today = new Date().toLocaleDateString("es-AR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  const today = now.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const monthLabel = now.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
 
   const result = await interpret(clean, {
-    accounts: accounts.map((a) => ({ name: a.name, type: a.type, balance: a.balance, currency: a.currency })),
-    categories: categories.map((c) => ({ name: c.name, type: c.type })),
+    accounts,
+    categories,
     summary,
+    netWorth,
+    debts,
+    budgets,
+    goals,
+    investments,
+    recent: txPage.items,
     today,
+    monthLabel,
   });
 
   if (result.intent !== "register" || result.items.length === 0) {
@@ -178,8 +304,8 @@ export async function handleUserMessage(userId: string, message: string): Promis
 
     // Mapear categoría por nombre (solo del tipo correcto).
     const cat = item.category
-      ? categories.find((c) => c.type === item.type && norm(c.name) === norm(item.category!)) ??
-        categories.find((c) => c.type === item.type && norm(c.name).includes(norm(item.category!)))
+      ? categories.find((x) => x.type === item.type && norm(x.name) === norm(item.category!)) ??
+        categories.find((x) => x.type === item.type && norm(x.name).includes(norm(item.category!)))
       : null;
 
     // Mapear cuenta por nombre, sino la default.
@@ -206,11 +332,13 @@ export async function handleUserMessage(userId: string, message: string): Promis
     const cur = item.currency === "USD" ? "USD" : "$";
     const catTxt = cat ? ` · ${cat.icon ?? ""} ${cat.name}` : "";
     const accTxt = acc ? ` (${acc.name})` : "";
-    lines.push(`${emoji} ${signo}${cur}${fmt(item.amount)} — ${item.description || (item.type === "EXPENSE" ? "Gasto" : "Ingreso")}${catTxt}${accTxt}`);
+    lines.push(
+      `${emoji} ${signo}${cur}${fmt(item.amount)} — ${item.description || (item.type === "EXPENSE" ? "Gasto" : "Ingreso")}${catTxt}${accTxt}`
+    );
   }
 
   if (created === 0) {
-    return "No pude identificar un monto válido. Probá algo como: \"gasté 5 lucas en el súper\" 🙂";
+    return 'No pude identificar un monto válido. Probá algo como: "gasté 5 lucas en el súper" 🙂';
   }
 
   const header = created === 1 ? "✅ Registrado:" : `✅ Registré ${created} movimientos:`;
