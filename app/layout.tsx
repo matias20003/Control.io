@@ -35,6 +35,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh bg-background text-foreground antialiased" suppressHydrationWarning>
+        {/* Aplica el tema guardado antes de pintar para evitar el flash. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{if(localStorage.getItem('theme')==='light'){document.documentElement.classList.add('light');}}catch(e){}})();",
+          }}
+        />
         {children}
         <Analytics />
         <SpeedInsights />

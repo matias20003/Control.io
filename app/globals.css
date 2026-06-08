@@ -1,33 +1,83 @@
 @import "tailwindcss";
 
+/* ── Valores de color crudos (overridables por tema) ──
+   El tema por defecto es OSCURO (:root). El claro se activa con html.light.
+   @theme inline referencia estas variables con var(), así el cambio de tema
+   en runtime se propaga a todas las utilidades de Tailwind. */
+:root {
+  --bg:              oklch(0.09  0.008 258);
+  --surface:         oklch(0.135 0.010 258);
+  --surface-2:       oklch(0.18  0.012 258);
+  --surface-3:       oklch(0.22  0.013 258);
+  --border-c:        oklch(0.26  0.014 258);
+  --border-subtle-c: oklch(0.20  0.010 258);
+  --fg:              oklch(0.955 0.005 258);
+  --muted-c:         oklch(0.62  0.012 258);
+  --muted-2-c:       oklch(0.46  0.010 258);
+  --primary-c:       oklch(0.67  0.19  258);
+  --primary-dark-c:  oklch(0.61  0.19  258);
+  --primary-dim-c:   oklch(0.67  0.19  258 / 12%);
+  --success-c:       oklch(0.67  0.17  148);
+  --success-dim-c:   oklch(0.67  0.17  148 / 12%);
+  --danger-c:        oklch(0.62  0.22   27);
+  --danger-dim-c:    oklch(0.62  0.22   27 / 12%);
+  --warning-c:       oklch(0.76  0.17   76);
+  --warning-dim-c:   oklch(0.76  0.17   76 / 12%);
+  --glass-bg-c:        oklch(0.18 0.012 258 / 55%);
+  --glass-bg-strong-c: oklch(0.22 0.014 258 / 70%);
+  --glass-border-c:    oklch(0.96 0.005 258 / 8%);
+  --glass-highlight-c: oklch(0.96 0.005 258 / 14%);
+}
+
+html.light {
+  --bg:              oklch(0.985 0.003 258);
+  --surface:         oklch(1    0     0);
+  --surface-2:       oklch(0.965 0.004 258);
+  --surface-3:       oklch(0.93  0.006 258);
+  --border-c:        oklch(0.88  0.008 258);
+  --border-subtle-c: oklch(0.92  0.006 258);
+  --fg:              oklch(0.22  0.012 258);
+  --muted-c:         oklch(0.47  0.014 258);
+  --muted-2-c:       oklch(0.60  0.012 258);
+  --primary-c:       oklch(0.55  0.19  258);
+  --primary-dark-c:  oklch(0.48  0.19  258);
+  --primary-dim-c:   oklch(0.55  0.19  258 / 10%);
+  --success-c:       oklch(0.53  0.16  148);
+  --success-dim-c:   oklch(0.53  0.16  148 / 12%);
+  --danger-c:        oklch(0.55  0.21   27);
+  --danger-dim-c:    oklch(0.55  0.21   27 / 12%);
+  --warning-c:       oklch(0.60  0.16   76);
+  --warning-dim-c:   oklch(0.60  0.16   76 / 14%);
+  --glass-bg-c:        oklch(1    0     0 / 65%);
+  --glass-bg-strong-c: oklch(1    0     0 / 82%);
+  --glass-border-c:    oklch(0.2  0.01  258 / 8%);
+  --glass-highlight-c: oklch(1    0     0 / 50%);
+}
+
 @theme inline {
-  /* ── Paleta control.io "Claridad Profunda" ── */
-  /* Todos los colores en OKLCH: nunca hex plano, siempre tonificados */
+  /* ── Paleta control.io (referencia a las variables overridables) ── */
+  --color-background:   var(--bg);
+  --color-surface:      var(--surface);
+  --color-surface-2:    var(--surface-2);
+  --color-surface-3:    var(--surface-3);
 
-  --color-background:   oklch(0.09  0.008 258);
-  --color-surface:      oklch(0.135 0.010 258);
-  --color-surface-2:    oklch(0.18  0.012 258);
-  --color-surface-3:    oklch(0.22  0.013 258);
+  --color-border:       var(--border-c);
+  --color-border-subtle:var(--border-subtle-c);
 
-  --color-border:       oklch(0.26  0.014 258);
-  --color-border-subtle:oklch(0.20  0.010 258);
+  --color-foreground:   var(--fg);
+  --color-muted:        var(--muted-c);
+  --color-muted-2:      var(--muted-2-c);
 
-  --color-foreground:   oklch(0.955 0.005 258);
-  --color-muted:        oklch(0.62  0.012 258);
-  --color-muted-2:      oklch(0.46  0.010 258);
+  --color-primary:      var(--primary-c);
+  --color-primary-dark: var(--primary-dark-c);
+  --color-primary-dim:  var(--primary-dim-c);
 
-  /* Acento principal: azul-índigo confiante */
-  --color-primary:      oklch(0.67  0.19  258);
-  --color-primary-dark: oklch(0.61  0.19  258);
-  --color-primary-dim:  oklch(0.67  0.19  258 / 12%);
-
-  /* Semánticos */
-  --color-success:      oklch(0.67  0.17  148);
-  --color-success-dim:  oklch(0.67  0.17  148 / 12%);
-  --color-danger:       oklch(0.62  0.22   27);
-  --color-danger-dim:   oklch(0.62  0.22   27 / 12%);
-  --color-warning:      oklch(0.76  0.17   76);
-  --color-warning-dim:  oklch(0.76  0.17   76 / 12%);
+  --color-success:      var(--success-c);
+  --color-success-dim:  var(--success-dim-c);
+  --color-danger:       var(--danger-c);
+  --color-danger-dim:   var(--danger-dim-c);
+  --color-warning:      var(--warning-c);
+  --color-warning-dim:  var(--warning-dim-c);
 
   /* ── Tipografía ── */
   --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
@@ -62,10 +112,10 @@
      color/textura detrás (ver .ambient-mesh debajo) para que se note el
      efecto vidrio: si la página queda con fondo plano, el glass parece
      simplemente un gris claro. */
-  --glass-bg:        oklch(0.18 0.012 258 / 55%);
-  --glass-bg-strong: oklch(0.22 0.014 258 / 70%);
-  --glass-border:    oklch(0.96 0.005 258 / 8%);
-  --glass-highlight: oklch(0.96 0.005 258 / 14%);
+  --glass-bg:        var(--glass-bg-c);
+  --glass-bg-strong: var(--glass-bg-strong-c);
+  --glass-border:    var(--glass-border-c);
+  --glass-highlight: var(--glass-highlight-c);
 }
 
 /* ── Reset + base ── */
