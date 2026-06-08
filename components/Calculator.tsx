@@ -159,8 +159,7 @@ export function Calculator() {
         title="Calculadora (C)"
         className={cn(
           "fixed z-30",
-          "top-3",
-          "left-[calc(50%+7.5rem)] -translate-x-1/2",
+          "top-3 right-5",
           "h-10 w-10 rounded-full",
           "bg-primary text-background",
           "shadow-[0_4px_16px_oklch(0.67_0.19_258/35%)]",
