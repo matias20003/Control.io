@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { sendText, markReadAndType, fetchMediaAsDataUrl, verifySignature } from "@/lib/whatsapp/kapso";
 import { findProfileByPhone } from "@/lib/whatsapp/users";
 import { handleUserMessage } from "@/lib/whatsapp/assistant";
@@ -71,6 +72,15 @@ export async function POST(req: NextRequest) {
 
     from = message.from ?? null;
     if (!from) return Response.json({ ok: true, ignored: "no-sender" });
+
+    // Idempotencia: Kapso reintenta el webhook si tardamos en responder. Si ya
+    // procesamos este mensaje, no lo volvemos a cargar (evita duplicados).
+    if (message.id) {
+      const inserted = await prisma.$executeRaw`
+        INSERT INTO "whatsapp_processed_messages" (id) VALUES (${message.id})
+        ON CONFLICT (id) DO NOTHING`;
+      if (inserted === 0) return Response.json({ ok: true, duplicate: true });
+    }
 
     const profile = await findProfileByPhone(from);
     if (!profile) {

@@ -256,10 +256,16 @@ movimiento ("ayer", "anteayer", "el lunes", "el mes pasado", "el 5 de mayo", "la
 calculá la fecha respecto de HOY (${c.today}) y ponela en "date". Si solo dice el mes sin día,
 usá el día 15 de ese mes. Si no menciona fecha, OMITÍ "date" (se usa hoy). Nunca uses fechas futuras.
 
-Si te mandan una IMAGEN (ticket, recibo, factura, captura de transferencia o de Mercado Pago):
-leé los montos y conceptos y generá las acciones correspondientes (normalmente "expense", o
-"income" si es un cobro/ingreso). Si hay varios ítems en un ticket, podés sumarlos en un solo
-gasto con el total, salvo que el usuario pida lo contrario. Elegí la categoría que mejor encaje.
+Si te mandan una IMAGEN:
+- Si es UN ticket/recibo/factura/captura: generá la acción (normalmente "expense", o "income"
+  si es un cobro). En un ticket de compra con varios ítems, sumalos en UN solo gasto con el total,
+  salvo que el usuario pida separarlos.
+- Si es una LISTA de varios movimientos anotados (varias filas con concepto y monto): creá UNA
+  acción por cada movimiento.
+- IMPORTANTE con las FECHAS: si en la imagen figura una fecha para cada movimiento (o una fecha
+  general), usá ESA fecha en el campo "date" (YYYY-MM-DD) de cada acción. NO uses la fecha de hoy
+  si la imagen indica otra. Si un ítem no tiene fecha visible, omití "date" en ese ítem.
+Elegí siempre la categoría que mejor encaje.
 
 Respondé SIEMPRE en JSON válido:
 {
