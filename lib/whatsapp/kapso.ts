@@ -38,6 +38,24 @@ export async function sendText(to: string, text: string): Promise<void> {
 }
 
 /**
+ * Descarga un archivo multimedia (ej. una imagen) y lo devuelve como data URL
+ * (base64) para pasárselo a un modelo con visión.
+ */
+export async function fetchMediaAsDataUrl(mediaUrl: string, mimeType?: string): Promise<string> {
+  const apiKey = process.env.KAPSO_API_KEY;
+  const headers: Record<string, string> = {};
+  // La auth solo va a los hosts de Kapso; los CDN públicos de WhatsApp no la necesitan.
+  if (apiKey && mediaUrl.includes("kapso.ai")) headers["X-API-Key"] = apiKey;
+
+  const res = await fetch(mediaUrl, { headers });
+  if (!res.ok) throw new Error(`No pude descargar el archivo (${res.status})`);
+
+  const buf = Buffer.from(await res.arrayBuffer());
+  const mt = mimeType || res.headers.get("content-type") || "image/jpeg";
+  return `data:${mt};base64,${buf.toString("base64")}`;
+}
+
+/**
  * Marca el mensaje como leído y muestra "escribiendo..." al usuario.
  * Da feedback instantáneo mientras procesamos (la IA tarda unos segundos).
  * Best-effort: si falla, no rompe el flujo.

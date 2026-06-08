@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { sendText, markReadAndType, verifySignature } from "@/lib/whatsapp/kapso";
+import { sendText, markReadAndType, fetchMediaAsDataUrl, verifySignature } from "@/lib/whatsapp/kapso";
 import { findProfileByPhone } from "@/lib/whatsapp/users";
 import { handleUserMessage } from "@/lib/whatsapp/assistant";
 
@@ -12,10 +12,12 @@ type KapsoMessage = {
   type?: string;
   from?: string;
   text?: { body?: string };
+  image?: { id?: string; mime_type?: string; caption?: string };
   kapso?: {
     direction?: string;
     content?: string;
     has_media?: boolean;
+    media_url?: string;
     transcript?: { text?: string };
   };
 };
@@ -37,6 +39,7 @@ function extractMessage(body: Record<string, unknown>): KapsoMessage | null {
 /** Obtiene el texto del mensaje: texto directo o transcripción del audio. */
 function getText(message: KapsoMessage): string | null {
   if (message.text?.body) return message.text.body;
+  if (message.image?.caption) return message.image.caption;
   if (message.kapso?.transcript?.text) return message.kapso.transcript.text;
   if (message.kapso?.content) return message.kapso.content;
   return null;
@@ -81,19 +84,29 @@ export async function POST(req: NextRequest) {
     // Feedback inmediato: marca leído + "escribiendo..." mientras procesamos.
     if (message.id) void markReadAndType(message.id);
 
+    // Si mandó una imagen (ticket, recibo, captura), la descargamos para que la lea la IA.
+    let imageUrl: string | undefined;
+    if (message.type === "image" && message.kapso?.media_url) {
+      try {
+        imageUrl = await fetchMediaAsDataUrl(message.kapso.media_url, message.image?.mime_type);
+      } catch (err) {
+        console.error("[kapso webhook] no pude descargar la imagen:", err);
+      }
+    }
+
     const text = getText(message);
-    if (!text) {
+    if (!text && !imageUrl) {
       const isAudio = message.type === "audio" || message.kapso?.has_media;
       await sendText(
         from,
         isAudio
           ? "No pude entender el audio 🙉 Probá de nuevo hablando más claro o escribime el gasto."
-          : "Por ahora entiendo texto y audios 🙂 Mandame el gasto o ingreso de esa forma."
+          : "Entiendo texto, audios y fotos 🙂 Mandame el gasto o ingreso de alguna de esas formas."
       );
       return Response.json({ ok: true, unsupported: true });
     }
 
-    const reply = await handleUserMessage(profile.id, text);
+    const reply = await handleUserMessage(profile.id, text ?? "", imageUrl);
     await sendText(from, reply);
 
     return Response.json({ ok: true });

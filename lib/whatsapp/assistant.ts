@@ -216,7 +216,7 @@ function formatFinancialState(c: FinancialContext): string {
   return s.join("\n\n");
 }
 
-async function interpret(message: string, c: FinancialContext): Promise<AssistantOutput> {
+async function interpret(message: string, c: FinancialContext, imageUrl?: string): Promise<AssistantOutput> {
   const apiKey = process.env.OPENAI_API_KEY ?? fail("OPENAI_API_KEY no configurada");
   const model = process.env.CHAT_MODEL ?? "gpt-4o-mini";
 
@@ -239,6 +239,11 @@ TIPOS de cuenta válidos: ${ACCOUNT_TYPES.join(", ")}
 
 Jerga argentina de montos: "5 lucas"/"5k"=5000, "un palo"=1.000.000, "500 mangos"=500.
 Sin aclarar moneda → ARS. "dólares"/"usd"/"verdes" → USD.
+
+Si te mandan una IMAGEN (ticket, recibo, factura, captura de transferencia o de Mercado Pago):
+leé los montos y conceptos y generá las acciones correspondientes (normalmente "expense", o
+"income" si es un cobro/ingreso). Si hay varios ítems en un ticket, podés sumarlos en un solo
+gasto con el total, salvo que el usuario pida lo contrario. Elegí la categoría que mejor encaje.
 
 Respondé SIEMPRE en JSON válido:
 {
@@ -267,6 +272,14 @@ REGLAS:
 - Pedidos destructivos (borrar/editar): hacelos solo si el usuario lo pide claramente.
 - NUNCA inventes datos ni acciones que el usuario no pidió. "answer" siempre presente (vacío si no aplica).`;
 
+  // Contenido del usuario: texto, o texto + imagen (multimodal) si hay foto.
+  const userContent: unknown = imageUrl
+    ? [
+        { type: "text", text: message || "Interpretá esta imagen (ticket/recibo/captura) y registrá los gastos o ingresos que veas." },
+        { type: "image_url", image_url: { url: imageUrl } },
+      ]
+    : message;
+
   const res = await fetch(`${baseUrl()}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -276,7 +289,7 @@ REGLAS:
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: system },
-        { role: "user", content: message },
+        { role: "user", content: userContent },
       ],
     }),
   });
@@ -456,9 +469,9 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
 /**
  * Procesa un mensaje entrante y devuelve el texto a responder por WhatsApp.
  */
-export async function handleUserMessage(userId: string, message: string): Promise<string> {
+export async function handleUserMessage(userId: string, message: string, imageUrl?: string): Promise<string> {
   const clean = message.trim();
-  if (!clean) return "No entendí el mensaje. Probá escribiendo o mandando un audio 🙂";
+  if (!clean && !imageUrl) return "No entendí el mensaje. Probá escribiendo, mandando un audio o una foto 🙂";
 
   const now = new Date();
   const month = now.getMonth() + 1;
@@ -495,7 +508,7 @@ export async function handleUserMessage(userId: string, message: string): Promis
     year,
   };
 
-  const result = await interpret(clean, ctx);
+  const result = await interpret(clean, ctx, imageUrl);
 
   if (result.intent !== "action" || result.actions.length === 0) {
     return result.answer || "Listo 👍";
