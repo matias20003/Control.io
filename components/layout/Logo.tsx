@@ -52,11 +52,16 @@ export function LogoIcon({ size = 32, className }: { size?: number; className?: 
 }
 
 /**
- * LogoFull — uses the real brand asset (logo-full.svg).
- * The SVG is the full horizontal identity: shield + "control.io" + "SYSTEMATIC EFFICIENCY".
+ * LogoFull — full horizontal identity: vector shield + "control.io" wordmark + tagline.
  *
- * size="full" → stretches to 100% of the container width (height auto).
- * All other sizes set a fixed pixel height with auto width.
+ * Built entirely from the vector LogoIcon + native text (no rasterised PNG), so it stays
+ * pixel-sharp at any size and adapts to light/dark mode automatically:
+ *   · "control"  → text-foreground (dark on light bg, light on dark bg)
+ *   · ".io"      → text-primary (brand blue, legible on both themes)
+ *   · tagline    → text-muted
+ *
+ * The `h` (icon height in px) drives every other dimension proportionally, so the wordmark
+ * never distorts relative to the mark.
  */
 export function LogoFull({
   className,
@@ -65,23 +70,34 @@ export function LogoFull({
   className?: string;
   size?: "xs" | "sm" | "md" | "lg" | "full";
 }) {
-  const heights: Record<string, number> = { xs: 32, sm: 44, md: 64, lg: 96 };
-  const isFull = size === "full";
-  const h = isFull ? undefined : heights[size];
+  const heights: Record<string, number> = { xs: 32, sm: 44, md: 64, lg: 96, full: 96 };
+  const h = heights[size];
 
   return (
-    <div className={cn("flex items-center", isFull && "w-full", className)}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/logo-full.svg"
-        alt="control.io"
-        draggable={false}
-        style={
-          isFull
-            ? { width: "100%", height: "auto" }
-            : { height: h, width: "auto", maxWidth: "none" }
-        }
-      />
+    <div
+      className={cn("flex items-center", className)}
+      style={{ gap: Math.round(h * 0.2) }}
+      aria-label="control.io"
+    >
+      <LogoIcon size={h} className="shrink-0" />
+      <span className="flex flex-col" style={{ gap: Math.round(h * 0.06) }}>
+        <span
+          className="font-semibold leading-none tracking-tight"
+          style={{ fontSize: Math.round(h * 0.46) }}
+        >
+          <span className="text-foreground">control</span>
+          <span className="text-primary">.io</span>
+        </span>
+        <span
+          className="font-medium uppercase leading-none text-muted"
+          style={{
+            fontSize: Math.max(7, Math.round(h * 0.135)),
+            letterSpacing: Math.max(1, h * 0.05),
+          }}
+        >
+          Systematic Efficiency
+        </span>
+      </span>
     </div>
   );
 }

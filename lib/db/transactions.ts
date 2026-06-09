@@ -113,6 +113,44 @@ export async function getTransactions(
   };
 }
 
+/**
+ * Búsqueda libre de movimientos por texto (descripción, categoría, cuenta,
+ * notas). Las descripciones/notas/cuentas están cifradas en la BD, así que
+ * traemos una ventana reciente (6 meses) y filtramos en memoria tras descifrar.
+ */
+export async function searchTransactions(
+  userId: string,
+  q: string,
+  take = 25
+): Promise<SerializedTransaction[]> {
+  const term = q.toLowerCase().trim();
+  if (!term) return [];
+  const since = new Date();
+  since.setMonth(since.getMonth() - 6);
+
+  const rows = await prisma.transaction.findMany({
+    where: { userId, date: { gte: since } },
+    include: {
+      category: { select: { name: true, icon: true, color: true } },
+      account: { select: { name: true } },
+      toAccount: { select: { name: true } },
+    },
+    orderBy: { date: "desc" },
+    take: 600,
+  });
+
+  return rows
+    .map(serialize)
+    .filter((t) => {
+      const hay = [t.description, t.categoryName, t.accountName, t.toAccountName, t.notes]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(term);
+    })
+    .slice(0, take);
+}
+
 export async function createTransaction(userId: string, data: {
   type: string; amount: number; currency: string; description?: string;
   date: string; categoryId?: string; accountId?: string; toAccountId?: string; notes?: string;

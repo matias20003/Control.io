@@ -35,7 +35,7 @@ export function Topbar({ name, email }: { name: string; email: string }) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          router.push(q.trim() ? `/movimientos?q=${encodeURIComponent(q.trim())}` : "/movimientos");
+          if (q.trim()) router.push(`/buscar?q=${encodeURIComponent(q.trim())}`);
         }}
         className="relative w-full max-w-xs"
       >
@@ -43,7 +43,7 @@ export function Topbar({ name, email }: { name: string; email: string }) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar movimientos…"
+          placeholder="Buscar en todo…"
           className="w-full h-9 pl-9 pr-3 rounded-xl bg-surface border border-border text-sm text-foreground placeholder:text-muted focus:outline-none focus:border-primary transition-colors"
         />
       </form>
