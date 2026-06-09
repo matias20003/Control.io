@@ -52,13 +52,16 @@ export function DialogContent({
         className={cn(
           "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50",
           "w-[calc(100vw-2rem)] max-w-md",
+          // Límite de alto al viewport + columna flex: el header queda fijo y el
+          // cuerpo scrollea. Sin esto, los formularios largos se salían de la
+          // pantalla y el botón "Guardar" quedaba inalcanzable.
+          "max-h-[calc(100dvh-2rem)] flex flex-col",
           // Volvemos al fondo sólido. Combinar backdrop-filter en el overlay
           // con otro backdrop-filter en el content hace que Chrome desactive
           // el segundo: el contenido del modal queda invisible aunque el
           // overlay siga oscureciendo todo lo demás.
           "bg-surface border border-border rounded-2xl",
           "shadow-[0_24px_64px_oklch(0_0_0/60%)]",
-          "p-6",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
           "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
           "data-[state=closed]:zoom-out-[0.98] data-[state=open]:zoom-in-[0.98]",
@@ -68,7 +71,8 @@ export function DialogContent({
           className
         )}
       >
-        <div className="flex items-start justify-between mb-5">
+        {/* Header — fijo */}
+        <div className="flex items-start justify-between p-6 pb-4 shrink-0">
           <div>
             <DialogPrimitive.Title className="text-base font-semibold text-foreground tracking-tight leading-tight">
               {title}
@@ -93,7 +97,10 @@ export function DialogContent({
           </DialogPrimitive.Close>
         </div>
 
-        {children}
+        {/* Cuerpo — scrolleable */}
+        <div className="px-6 pb-6 overflow-y-auto overscroll-contain">
+          {children}
+        </div>
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   );
