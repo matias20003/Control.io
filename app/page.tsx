@@ -8,6 +8,7 @@ import { Reveal, Aurora, TiltCard, Magnetic, CursorGlow, Parallax } from "@/comp
 import { ChatMockAnimated } from "@/components/landing/ChatMockAnimated";
 import { LiveDashboard } from "@/components/landing/LiveDashboard";
 import { Scrollytelling } from "@/components/landing/Scrollytelling";
+import { InteractiveDemo } from "@/components/landing/InteractiveDemo";
 import {
   ArrowRight,
   ShieldCheck,
@@ -68,6 +69,7 @@ export default async function LandingPage() {
         <Reveal><Pillars /></Reveal>
         <LiveDashboard />
         <AssistantSection isLogged={isLogged} />
+        <Reveal><InteractiveDemo /></Reveal>
         <Reveal><Features /></Reveal>
         <Reveal><SecuritySection /></Reveal>
         <Scrollytelling />
