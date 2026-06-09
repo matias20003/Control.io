@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { LogoFull, LogoIcon } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/button";
 import { DashboardMockAnimated } from "./DashboardMockAnimated";
+import { Reveal, Aurora, TiltCard, Magnetic } from "@/components/landing/fx";
+import { ChatMockAnimated } from "@/components/landing/ChatMockAnimated";
 import {
   ArrowRight,
   ShieldCheck,
@@ -53,20 +55,21 @@ export default async function LandingPage() {
   return (
     <div className="relative min-h-dvh overflow-x-clip bg-background text-foreground">
       <BackgroundFx />
+      <Aurora />
 
       <SiteNav isLogged={isLogged} />
 
       <main className="relative">
         <Hero isLogged={isLogged} />
-        <TrustStrip />
-        <Pillars />
-        <AssistantSection isLogged={isLogged} />
-        <Features />
-        <SecuritySection />
-        <HowItWorks />
-        <ForWho />
-        <FAQ />
-        <FinalCta isLogged={isLogged} />
+        <Reveal><TrustStrip /></Reveal>
+        <Reveal><Pillars /></Reveal>
+        <Reveal><AssistantSection isLogged={isLogged} /></Reveal>
+        <Reveal><Features /></Reveal>
+        <Reveal><SecuritySection /></Reveal>
+        <Reveal><HowItWorks /></Reveal>
+        <Reveal><ForWho /></Reveal>
+        <Reveal><FAQ /></Reveal>
+        <Reveal><FinalCta isLogged={isLogged} /></Reveal>
       </main>
 
       <SiteFooter />
@@ -196,12 +199,14 @@ function Hero({ isLogged }: { isLogged: boolean }) {
               </Link>
             ) : (
               <>
-                <Link href="/register">
-                  <Button size="lg" className="gap-2">
-                    Empezar gratis
-                    <ArrowRight className="h-5 w-5" />
-                  </Button>
-                </Link>
+                <Magnetic>
+                  <Link href="/register">
+                    <Button size="lg" className="gap-2">
+                      Empezar gratis
+                      <ArrowRight className="h-5 w-5" />
+                    </Button>
+                  </Link>
+                </Magnetic>
                 <Link href="/login">
                   <Button size="lg" variant="secondary">
                     Ya tengo cuenta
@@ -469,19 +474,19 @@ function Pillars() {
 
       <div className="mt-12 grid gap-5 md:grid-cols-3">
         {pillars.map(({ icon: Icon, title, body }) => (
-          <div
+          <TiltCard
             key={title}
-            className="group relative overflow-hidden rounded-2xl border border-border bg-surface/60 p-6 backdrop-blur transition hover:border-primary/40 hover:bg-surface"
+            className="group relative overflow-hidden rounded-2xl border border-border bg-surface/60 p-6 backdrop-blur transition-colors hover:border-primary/40 hover:bg-surface"
           >
             <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary/10 blur-3xl transition group-hover:bg-primary/20" />
-            <div className="relative">
+            <div className="relative" style={{ transform: "translateZ(40px)" }}>
               <div className="grid h-11 w-11 place-items-center rounded-xl border border-border bg-background/60">
                 <Icon className="h-5 w-5 text-primary" />
               </div>
               <h3 className="mt-5 text-lg font-semibold">{title}</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted">{body}</p>
             </div>
-          </div>
+          </TiltCard>
         ))}
       </div>
     </section>
@@ -632,8 +637,8 @@ function AssistantSection({ isLogged }: { isLogged: boolean }) {
           )}
         </div>
 
-        {/* Mockup de chat */}
-        <ChatMock />
+        {/* Mockup de chat animado */}
+        <ChatMockAnimated />
       </div>
     </section>
   );
@@ -706,11 +711,11 @@ function Features() {
 
       <div className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {features.map(({ icon: Icon, title, body }) => (
-          <div
+          <TiltCard
             key={title}
-            className="group relative rounded-xl border border-border bg-surface/50 p-5 transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-surface"
+            className="group relative rounded-xl border border-border bg-surface/50 p-5 transition-colors hover:border-primary/40 hover:bg-surface"
           >
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-3" style={{ transform: "translateZ(35px)" }}>
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-background/60 ring-1 ring-border transition group-hover:ring-primary/40">
                 <Icon className="h-5 w-5 text-primary" />
               </div>
@@ -723,7 +728,7 @@ function Features() {
                 </p>
               </div>
             </div>
-          </div>
+          </TiltCard>
         ))}
       </div>
     </section>
