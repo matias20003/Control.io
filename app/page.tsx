@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { DashboardMockAnimated } from "./DashboardMockAnimated";
 import { Reveal, Aurora, TiltCard, Magnetic } from "@/components/landing/fx";
 import { ChatMockAnimated } from "@/components/landing/ChatMockAnimated";
+import { LiveDashboard } from "@/components/landing/LiveDashboard";
 import {
   ArrowRight,
   ShieldCheck,
@@ -63,6 +64,7 @@ export default async function LandingPage() {
         <Hero isLogged={isLogged} />
         <Reveal><TrustStrip /></Reveal>
         <Reveal><Pillars /></Reveal>
+        <LiveDashboard />
         <Reveal><AssistantSection isLogged={isLogged} /></Reveal>
         <Reveal><Features /></Reveal>
         <Reveal><SecuritySection /></Reveal>
