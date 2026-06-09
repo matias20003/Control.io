@@ -34,7 +34,7 @@ import {
 export const metadata = {
   title: "control.io — Tomá el control real de tu plata",
   description:
-    "El sistema de finanzas personales pensado para Argentina. Movimientos, cuentas, metas, inversiones, deudas y reportes con seguridad bancaria. Sin spreadsheets, sin spam, sin tracking.",
+    "El sistema de finanzas personales pensado para Argentina. Movimientos, cuentas, metas, deudas y reportes, con un asistente de IA por WhatsApp y cifrado fuerte. Sin spreadsheets, sin spam.",
 };
 
 export default async function LandingPage() {
@@ -297,9 +297,9 @@ function DashboardMock() {
           />
           <ListRow
             icon={<TrendingUp className="h-4 w-4 text-success" />}
-            title="USD · Plazo fijo"
-            sub="Renta mensual"
-            value="+US$ 142,80"
+            title="Sueldo · Galicia"
+            sub="Hoy"
+            value="+$ 400.000"
             positive
           />
         </div>
@@ -421,7 +421,7 @@ function TrustStrip() {
     { icon: KeyRound, label: "Auth con Supabase" },
     { icon: EyeOff, label: "Sin tracking de terceros" },
     { icon: ServerCog, label: "Infra en Vercel" },
-    { icon: FileLock2, label: "Aislamiento por usuario (RLS)" },
+    { icon: FileLock2, label: "Aislamiento por usuario" },
   ];
   return (
     <section className="border-y border-border/60 bg-surface/30 backdrop-blur">
@@ -446,7 +446,7 @@ function Pillars() {
     {
       icon: LineChart,
       title: "Visibilidad total",
-      body: "Toda tu plata en un solo lugar: cuentas, tarjetas, plazos fijos, USD, inversiones y deudas. Sin Excel.",
+      body: "Toda tu plata en un solo lugar: cuentas, tarjetas, USD, deudas y cuotas. Sin Excel.",
     },
     {
       icon: Brain,
@@ -654,7 +654,7 @@ function Features() {
     {
       icon: Wallet,
       title: "Cuentas y billeteras",
-      body: "Bancos, MercadoPago, efectivo, USD físicos, plazos fijos. Todo unificado.",
+      body: "Bancos, MercadoPago, efectivo, USD físicos y ahorros. Todo unificado.",
     },
     {
       icon: PiggyBank,
@@ -747,12 +747,12 @@ function SecuritySection() {
     {
       icon: FileLock2,
       title: "Aislamiento por usuario",
-      body: "Row Level Security en base de datos: cada cuenta solo puede leer y escribir sus propios registros. Nada compartido por error.",
+      body: "Cada cuenta solo lee y escribe sus propios registros: todo el acceso a datos está aislado por usuario. Nada se mezcla ni se comparte por error.",
     },
     {
       icon: EyeOff,
       title: "Cero tracking de terceros",
-      body: "Sin Google Analytics, sin Facebook Pixel, sin trackers publicitarios. Tu navegación dentro de la app es solo tuya.",
+      body: "Sin Google Analytics, sin Facebook Pixel ni trackers publicitarios. No vendemos ni compartimos tus datos con nadie.",
     },
     {
       icon: ServerCog,
@@ -854,7 +854,7 @@ function HowItWorks() {
     {
       n: "02",
       title: "Cargá tus cuentas y saldos",
-      body: "Bancos, billeteras, USD físicos, inversiones. Vos decidís el detalle.",
+      body: "Bancos, billeteras, USD físicos y efectivo. Vos decidís el detalle.",
     },
     {
       n: "03",
@@ -944,7 +944,7 @@ function FAQ() {
     },
     {
       q: "¿Mis datos están seguros?",
-      a: "Sí. Cifrado en tránsito (TLS 1.3) y en reposo (AES-256), aislamiento por usuario en base de datos (RLS) y cero trackers. Detalles en la sección de Seguridad.",
+      a: "Sí. Cifrado en tránsito (TLS 1.3) y en reposo (AES-256), aislamiento por usuario en cada consulta y cero trackers publicitarios. Detalles en la sección de Seguridad.",
     },
     {
       q: "¿Puedo usarlo en el celular?",
@@ -952,7 +952,7 @@ function FAQ() {
     },
     {
       q: "¿Sirve para varias monedas?",
-      a: "Sí. Pesos, dólares (oficial, blue, MEP, CCL) y otras monedas con cotizaciones sincronizadas para conversiones reales.",
+      a: "Sí. Cargás cuentas y movimientos en pesos, dólares y otras monedas.",
     },
     {
       q: "¿Qué pasa si quiero borrar mi cuenta?",
