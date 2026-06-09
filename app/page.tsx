@@ -20,8 +20,6 @@ import {
   TrendingUp,
   HandCoins,
   BarChart3,
-  DollarSign,
-  CalendarClock,
   ClipboardList,
   CreditCard,
   Sparkles,
@@ -679,11 +677,6 @@ function Features() {
       body: "Seguimiento de cuotas de tarjeta y compras en planes con vencimiento por mes.",
     },
     {
-      icon: TrendingUp,
-      title: "Inversiones",
-      body: "Acciones, cripto, plazos fijos, fondos. Rentabilidad real, no proyectada.",
-    },
-    {
       icon: HandCoins,
       title: "Deudas y préstamos",
       body: "Cuánto debés, a quién y para cuándo. Cierre limpio sin sorpresas.",
@@ -697,16 +690,6 @@ function Features() {
       icon: ClipboardList,
       title: "Reporte semanal",
       body: "Un resumen claro de tu semana financiera, listo cada lunes.",
-    },
-    {
-      icon: DollarSign,
-      title: "Cotizaciones",
-      body: "Dólar oficial, blue, MEP, CCL y cripto sincronizado para conversiones reales.",
-    },
-    {
-      icon: CalendarClock,
-      title: "Agenda financiera",
-      body: "Vencimientos, pagos y obligaciones en un calendario que avisa a tiempo.",
     },
   ];
 
