@@ -4,9 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { LogoFull, LogoIcon } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/button";
 import { DashboardMockAnimated } from "./DashboardMockAnimated";
-import { Reveal, Aurora, TiltCard, Magnetic } from "@/components/landing/fx";
+import { Reveal, Aurora, TiltCard, Magnetic, CursorGlow, Parallax } from "@/components/landing/fx";
 import { ChatMockAnimated } from "@/components/landing/ChatMockAnimated";
 import { LiveDashboard } from "@/components/landing/LiveDashboard";
+import { Scrollytelling } from "@/components/landing/Scrollytelling";
 import {
   ArrowRight,
   ShieldCheck,
@@ -57,6 +58,7 @@ export default async function LandingPage() {
     <div className="relative min-h-dvh overflow-x-clip bg-background text-foreground">
       <BackgroundFx />
       <Aurora />
+      <CursorGlow />
 
       <SiteNav isLogged={isLogged} />
 
@@ -68,7 +70,7 @@ export default async function LandingPage() {
         <Reveal><AssistantSection isLogged={isLogged} /></Reveal>
         <Reveal><Features /></Reveal>
         <Reveal><SecuritySection /></Reveal>
-        <Reveal><HowItWorks /></Reveal>
+        <Scrollytelling />
         <Reveal><ForWho /></Reveal>
         <Reveal><FAQ /></Reveal>
         <Reveal><FinalCta isLogged={isLogged} /></Reveal>
@@ -242,9 +244,11 @@ function Hero({ isLogged }: { isLogged: boolean }) {
           </ul>
         </div>
 
-        {/* Right — dashboard mock animado */}
+        {/* Right — dashboard mock animado con parallax */}
         <div className="relative lg:col-span-5">
-          <DashboardMockAnimated />
+          <Parallax offset={50}>
+            <DashboardMockAnimated />
+          </Parallax>
         </div>
       </div>
     </section>

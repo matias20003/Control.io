@@ -6,6 +6,7 @@ import {
   useMotionValue,
   useSpring,
   useTransform,
+  useScroll,
   animate,
 } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -204,6 +205,59 @@ export function Magnetic({ children, className, strength = 0.35 }: { children: R
         y.set(0);
       }}
     >
+      {children}
+    </motion.div>
+  );
+}
+
+/** Glow de color que sigue al cursor (spotlight premium). Fixed, detrás. */
+export function CursorGlow() {
+  const x = useMotionValue(-1000);
+  const y = useMotionValue(-1000);
+  const sx = useSpring(x, { stiffness: 140, damping: 22, mass: 0.4 });
+  const sy = useSpring(y, { stiffness: 140, damping: 22, mass: 0.4 });
+
+  useEffect(() => {
+    if (window.matchMedia("(pointer: coarse)").matches) return; // sin glow en touch
+    const move = (e: MouseEvent) => {
+      x.set(e.clientX);
+      y.set(e.clientY);
+    };
+    window.addEventListener("mousemove", move, { passive: true });
+    return () => window.removeEventListener("mousemove", move);
+  }, [x, y]);
+
+  return (
+    <motion.div
+      aria-hidden
+      className="pointer-events-none fixed -z-10 h-[34rem] w-[34rem] rounded-full blur-[90px]"
+      style={{
+        left: sx,
+        top: sy,
+        translateX: "-50%",
+        translateY: "-50%",
+        background: "radial-gradient(circle, var(--color-primary) 0%, transparent 62%)",
+        opacity: 0.13,
+      }}
+    />
+  );
+}
+
+/** Parallax vertical suave atado al scroll de la página. */
+export function Parallax({
+  children,
+  className,
+  offset = 70,
+}: {
+  children: ReactNode;
+  className?: string;
+  offset?: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
+  const y = useTransform(scrollYProgress, [0, 1], [offset, -offset]);
+  return (
+    <motion.div ref={ref} style={{ y }} className={className}>
       {children}
     </motion.div>
   );

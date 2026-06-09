@@ -68,8 +68,8 @@ function Typing() {
 
 export function ChatMockAnimated() {
   const ref = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-100px" });
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-120px" });
   const [shown, setShown] = useState(0);
   const [typing, setTyping] = useState(false);
 
@@ -103,7 +103,10 @@ export function ChatMockAnimated() {
   }, [inView]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    // Scrolleamos SOLO el contenedor del chat (no la página) para que la
+    // animación no arrastre el scroll de la landing.
+    const el = bodyRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [shown, typing]);
 
   return (
@@ -125,14 +128,13 @@ export function ChatMockAnimated() {
           </div>
         </div>
         {/* Cuerpo */}
-        <div className="h-[420px] space-y-2.5 overflow-y-auto bg-[#0b141a] px-3 py-4 [scrollbar-width:none]">
+        <div ref={bodyRef} className="h-[420px] space-y-2.5 overflow-y-auto overscroll-contain bg-[#0b141a] px-3 py-4 [scrollbar-width:none]">
           {MESSAGES.slice(0, shown).map((m, i) => (
             <Bubble key={i} side={m.side} audio={m.audio}>
               {m.node}
             </Bubble>
           ))}
           <AnimatePresence>{typing && <Typing />}</AnimatePresence>
-          <div ref={bottomRef} />
         </div>
       </motion.div>
     </div>
