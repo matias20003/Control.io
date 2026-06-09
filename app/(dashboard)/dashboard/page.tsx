@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { getMonthSummary, hasTransactionToday, getTransactions } from "@/lib/db/transactions";
+import { getMonthSummary, getTransactions } from "@/lib/db/transactions";
 import { getAccounts } from "@/lib/db/accounts";
 import { getCategories } from "@/lib/db/categories";
 import { getInsights } from "@/lib/db/insights";
@@ -19,7 +19,6 @@ import { DashboardQuickAdd } from "./DashboardQuickAdd";
 import { CategoryChart } from "./CategoryChart";
 import { IncomeExpenseChart, BalanceSparkline } from "./DashboardCharts";
 import { TodayDate } from "./TodayDate";
-import { MovementPrompt } from "@/components/MovementPrompt";
 import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 import { WhatsappPromoModal } from "@/components/WhatsappPromoModal";
 import { getOnboardingState } from "@/lib/db/onboarding";
@@ -54,7 +53,7 @@ export default async function DashboardPage() {
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [summary, accounts, categories, insights, trends, goals, recent, movementToday, onboarding, whatsappNumber] =
+  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber] =
     await Promise.all([
       getMonthSummary(user.id, month, year),
       getAccounts(user.id),
@@ -63,7 +62,6 @@ export default async function DashboardPage() {
       getTrends(user.id, 6).catch(() => null),
       getGoals(user.id).catch(() => []),
       getTransactions(user.id, { take: 6 }).then((r) => r.items).catch(() => []),
-      hasTransactionToday(user.id).catch(() => true),
       getOnboardingState(user.id),
       getProfileWhatsapp(user.id).catch(() => null),
     ]);
@@ -106,7 +104,6 @@ export default async function DashboardPage() {
   return (
     <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-5">
 
-      <MovementPrompt hasMovementToday={movementToday} />
       <WhatsappPromoModal isLinked={!!whatsappNumber} />
 
       {/* Greeting */}
