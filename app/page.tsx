@@ -9,8 +9,12 @@ import { ChatMockAnimated } from "@/components/landing/ChatMockAnimated";
 import { LiveDashboard } from "@/components/landing/LiveDashboard";
 import { Scrollytelling } from "@/components/landing/Scrollytelling";
 import { InteractiveDemo } from "@/components/landing/InteractiveDemo";
+import { InstallButton } from "@/components/InstallApp";
 import {
   ArrowRight,
+  Smartphone,
+  Share,
+  Plus,
   ShieldCheck,
   Lock,
   KeyRound,
@@ -74,6 +78,7 @@ export default async function LandingPage() {
         <Reveal><SecuritySection /></Reveal>
         <Scrollytelling />
         <Reveal><ForWho /></Reveal>
+        <Reveal><InstallSection /></Reveal>
         <Reveal><FAQ /></Reveal>
         <Reveal><FinalCta isLogged={isLogged} /></Reveal>
       </main>
@@ -994,6 +999,73 @@ function FAQ() {
             <p className="mt-3 text-sm leading-relaxed text-muted">{a}</p>
           </details>
         ))}
+      </div>
+    </section>
+  );
+}
+
+/* ───────────────────────── Instalar app (PWA) ───────────────────────── */
+
+function StepDot({ n }: { n: number }) {
+  return (
+    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary/12 text-xs font-bold text-primary">
+      {n}
+    </span>
+  );
+}
+
+function InstallSection() {
+  return (
+    <section className="mx-auto max-w-7xl px-5 py-16 sm:px-8">
+      <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-primary/12 via-surface to-background p-8 sm:p-12">
+        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/25 blur-3xl" />
+
+        <div className="relative grid gap-8 lg:grid-cols-12 lg:items-center">
+          <div className="lg:col-span-7">
+            <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs uppercase tracking-widest text-primary">
+              <Smartphone className="h-3.5 w-3.5" /> Instalala gratis
+            </span>
+            <h2 className="mt-5 text-3xl font-bold tracking-tight sm:text-4xl">
+              Llevá control.io en tu <span className="text-primary">pantalla de inicio.</span>
+            </h2>
+            <p className="mt-4 max-w-xl text-sm text-muted sm:text-base">
+              No hace falta bajarla de ninguna tienda. Agregala a tu teléfono y se abre como
+              una app nativa: pantalla completa, ícono propio y acceso al toque.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <InstallButton label="Instalar en mi teléfono" />
+              <span className="text-xs text-muted">Gratis · sin tiendas · pesa casi nada</span>
+            </div>
+          </div>
+
+          {/* Pasos manuales — visibles siempre (cubren iPhone y quien no vea el botón) */}
+          <div className="lg:col-span-5">
+            <div className="rounded-2xl border border-border bg-surface/60 p-5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+                Desde el teléfono, en 3 pasos
+              </p>
+              <ol className="mt-4 space-y-3.5 text-sm text-foreground">
+                <li className="flex items-center gap-3">
+                  <StepDot n={1} /> Abrí <b className="font-semibold">controlio.site</b> en tu navegador.
+                </li>
+                <li className="flex items-center gap-3">
+                  <StepDot n={2} />
+                  <span>
+                    Tocá <Share size={14} className="inline align-text-bottom text-primary" /> Compartir
+                    (iPhone) o el menú <b className="font-semibold">⋮</b> (Android).
+                  </span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <StepDot n={3} />
+                  <span>
+                    Elegí <Plus size={14} className="inline align-text-bottom text-primary" />{" "}
+                    <b className="font-semibold">Agregar a inicio</b>.
+                  </span>
+                </li>
+              </ol>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );

@@ -3,6 +3,7 @@ import { BottomNav } from "@/components/layout/BottomNav";
 import { Header } from "@/components/layout/Header";
 import { Topbar } from "@/components/layout/Topbar";
 import { Calculator } from "@/components/Calculator";
+import { InstallBanner } from "@/components/InstallApp";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getOrCreateProfile } from "@/lib/db/profile";
@@ -38,6 +39,7 @@ export default async function DashboardLayout({
       <Calculator />
       <main className="md:ml-60 pb-20 md:pb-0 min-h-dvh">
         <Topbar name={name} email={user.email ?? ""} />
+        <InstallBanner />
         {children}
       </main>
       <BottomNav />
