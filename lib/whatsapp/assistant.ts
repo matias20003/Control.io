@@ -333,7 +333,13 @@ REGLAS:
 - "category"/"account" SOLO de las listas/cuentas dadas, o null. Para borrar/editar, usá el "ref" [#N] de ÚLTIMOS MOVIMIENTOS.
 - Pedidos destructivos (borrar/editar): hacelos solo si el usuario lo pide claramente.
 - Usá el HISTORIAL de la charla para entender referencias ("¿y comparado con el mes pasado?", "sí, hacelo").
-- NUNCA inventes datos ni acciones que el usuario no pidió. "answer" siempre presente (vacío si no aplica).`;
+- NUNCA inventes datos ni acciones que el usuario no pidió. "answer" siempre presente (vacío si no aplica).
+
+FORMATO de "answer" (WhatsApp): ordenado y fácil de escanear.
+- Usá *negrita* (UN asterisco) para los montos y los totales importantes.
+- Frases cortas. Si listás varias cosas, una por línea empezando con "• ".
+- Nada de párrafos largos: máximo ~6 líneas, salvo que pidan más detalle.
+- Un emoji al inicio de un bloque está bien; no abuses ni uses tablas.`;
 
   // Contenido del usuario: texto, o texto + imagen (multimodal) si hay foto.
   const userContent: unknown = imageUrl
@@ -421,8 +427,12 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       const dateTxt = a.date && txDate.slice(0, 10) !== isoDate.slice(0, 10)
         ? ` 📅 ${new Date(txDate).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}`
         : "";
-      const noteTxt = a.reportOnly ? " 📝 (solo registro, no afecta el saldo)" : "";
-      return `${emoji} ${sign}${money(a.amount, cur)} — ${a.description ?? ""}${cat ? ` · ${cat.icon ?? ""} ${cat.name}` : ""}${acc ? ` (${acc.name})` : ""}${dateTxt}${noteTxt}`.trim();
+      const noteTxt = a.reportOnly ? "\n📝 _solo registro, no afecta el saldo_" : "";
+      const desc = a.description || (type === "EXPENSE" ? "Gasto" : "Ingreso");
+      const meta = [cat ? `${cat.icon ?? "🏷️"} ${cat.name}` : null, acc ? `🏦 ${acc.name}` : null]
+        .filter(Boolean)
+        .join(" · ");
+      return `${emoji} *${sign}${money(a.amount, cur)}* · ${desc}${meta ? `\n${meta}` : ""}${dateTxt}${noteTxt}`.trim();
     }
 
     case "transfer": {
@@ -639,7 +649,22 @@ async function buildReply(
       : 'No pude identificar la acción. Probá algo como: "gasté 5 lucas en el súper" 🙂';
   }
 
-  let reply = lines.length === 1 ? lines[0] : `✅ Hecho:\n\n${lines.join("\n")}`;
+  let reply: string;
+  if (lines.length === 1) {
+    reply = lines[0];
+  } else {
+    // Varias acciones → lista con viñetas. Cada item puede ocupar 2 líneas; las
+    // sangramos para que se lea como un bloque ordenado.
+    const bullets = lines.map((l) => `• ${l.replace(/\n/g, "\n   ")}`).join("\n");
+    reply = `✅ *Hecho:*\n\n${bullets}`;
+  }
+
+  // Nota conversacional del modelo (si aporta algo y no es un relleno trivial).
+  const note = (result.answer ?? "").trim();
+  if (note && note.length <= 180 && !/^(listo|ok|dale|hecho|perfecto)\b/i.test(note)) {
+    reply += `\n\n${note}`;
+  }
+
   if (errors.length) reply += `\n\n⚠️ No pude con: ${errors.join("; ")}`;
   return reply;
 }
