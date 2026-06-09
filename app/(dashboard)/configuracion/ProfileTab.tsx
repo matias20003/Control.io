@@ -185,12 +185,12 @@ export function ProfileTab({
   }
 
   return (
-    <div className="space-y-6 max-w-sm">
+    <div className="columns-1 lg:columns-2 gap-4">
       {CATEGORY_ORDER.map((cat) => {
         const items = visible.filter((s) => s.cat === cat);
         if (items.length === 0) return null;
         return (
-          <div key={cat} className="space-y-2.5">
+          <div key={cat} className="break-inside-avoid mb-4 space-y-2.5">
             <h3 className="text-xs font-semibold text-muted uppercase tracking-wider px-1">{cat}</h3>
             {items.map((s) => (
               <div key={s.title}>{s.node}</div>
