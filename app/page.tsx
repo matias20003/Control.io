@@ -168,7 +168,7 @@ function Hero({ isLogged }: { isLogged: boolean }) {
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-surface/60 px-3 py-1 text-xs text-muted backdrop-blur">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
             <span className="uppercase tracking-widest">
-              Finanzas personales · Pensado para Argentina
+              Finanzas para estudiantes · Argentina
             </span>
           </div>
 
@@ -913,27 +913,27 @@ function HowItWorks() {
 function ForWho() {
   const audiences = [
     {
-      title: "Freelancers",
-      body: "Ingresos irregulares, multi-moneda y facturación en cuotas. Sabé exactamente cuánto podés sacar este mes.",
+      title: "Estudiantes",
+      body: "Beca, mesada, changas y tu primer laburo. Sabé en qué se te va la plata sin pelearte con un Excel.",
     },
     {
-      title: "Familias",
-      body: "Presupuesto compartido, cuotas del colegio, supermercado y vacaciones bajo control sin discutir.",
+      title: "Tu primer sueldo",
+      body: "Arrancaste a laburar. Aprendé a ahorrar de verdad y dejá de llegar al 20 sin un peso.",
     },
     {
-      title: "Inversores",
-      body: "Plazos fijos, dólares, acciones y cripto en una misma vista de patrimonio con tendencia real.",
+      title: "Viviendo solo o compartido",
+      body: "Alquiler, expensas y súper. Llevá todo junto y dividí los gastos con tus compañeros de depto.",
     },
     {
-      title: "Profesionales en relación de dependencia",
-      body: "Tu sueldo cargado solo, tus gastos clasificados y tu tasa de ahorro real, todos los meses.",
+      title: "Changas y freelance",
+      body: "Ingresos que entran cuando entran, en pesos o dólares. Sabé cuánto podés gastar este mes.",
     },
   ];
   return (
     <section className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24">
       <SectionHeader
         eyebrow="Para quién"
-        title="Si te entra y te sale plata, control.io es para vos."
+        title="Tu primera app de finanzas, pensada para estudiantes."
       />
 
       <div className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
