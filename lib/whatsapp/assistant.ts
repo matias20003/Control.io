@@ -335,6 +335,7 @@ REGLAS:
 - Usá el HISTORIAL de la charla para entender referencias ("¿y comparado con el mes pasado?", "sí, hacelo").
 - NUNCA inventes datos ni acciones que el usuario no pidió. "answer" siempre presente (vacío si no aplica).
 - NO repitas acciones: cada movimiento que menciona el usuario se registra UNA sola vez (no pongas la misma acción dos veces en "actions").
+- Cuando "intent" es "action" y registrás movimientos, la app YA muestra sola la confirmación (monto, descripción, categoría y cuenta). Por eso NO reescribas eso en "answer": dejá "answer" VACÍO. Usalo solo si tenés un dato EXTRA y breve que aporte de verdad (ej. "Ojo, ya vas *$40.000* en Comida este mes"). Nunca repitas el gasto/ingreso registrado.
 
 FORMATO de "answer" (WhatsApp): ordenado y fácil de escanear.
 - Usá *negrita* (UN asterisco) para los montos y los totales importantes.
@@ -686,8 +687,20 @@ async function buildReply(
   }
 
   // Nota conversacional del modelo (si aporta algo y no es un relleno trivial).
+  // Guard anti-duplicado: a veces el modelo reescribe en "answer" el mismo
+  // movimiento que la app ya confirmó (mismo monto). En ese caso la descartamos
+  // para no responder dos veces lo mismo.
   const note = (result.answer ?? "").trim();
-  if (note && note.length <= 180 && !/^(listo|ok|dale|hecho|perfecto)\b/i.test(note)) {
+  const amountTokens = actions
+    .filter((a): a is Action & { amount: number } => typeof a.amount === "number" && a.amount > 0)
+    .map((a) => money(a.amount, a.currency === "USD" ? "USD" : "ARS"));
+  const noteRestatesMovement = amountTokens.some((tok) => note.includes(tok));
+  if (
+    note &&
+    note.length <= 180 &&
+    !noteRestatesMovement &&
+    !/^(listo|ok|dale|hecho|perfecto)\b/i.test(note)
+  ) {
     reply += `\n\n${note}`;
   }
 
