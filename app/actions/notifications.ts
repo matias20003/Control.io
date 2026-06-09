@@ -3,7 +3,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getReportPrefs, updateReportPrefs, type ReportPrefs } from "@/lib/db/profile";
+import {
+  getReportPrefs,
+  updateReportPrefs,
+  getDailyReminderPref,
+  setDailyReminderPref,
+  getProfileWhatsapp,
+  type ReportPrefs,
+} from "@/lib/db/profile";
 
 const schema = z.object({
   enabled: z.boolean(),
@@ -48,6 +55,46 @@ export async function updateReportPrefsAction(
     );
     revalidatePath("/configuracion");
     return { success: true, prefs };
+  } catch {
+    return { error: "Error al guardar la preferencia" };
+  }
+}
+
+/** Lee si el recordatorio diario por WhatsApp está activo. */
+export async function getDailyReminderPrefAction(): Promise<{ enabled: boolean } | { error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autorizado" };
+  return { enabled: await getDailyReminderPref(user.id) };
+}
+
+/** Activa o desactiva el recordatorio diario por WhatsApp del usuario actual. */
+export async function updateDailyReminderPrefAction(
+  enabled: boolean,
+): Promise<{ success: true; enabled: boolean } | { error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autorizado" };
+
+  // Sin número vinculado no hay a dónde enviar el recordatorio.
+  if (enabled) {
+    const wa = await getProfileWhatsapp(user.id);
+    if (!wa) return { error: "Primero vinculá tu número de WhatsApp." };
+  }
+
+  try {
+    const saved = await setDailyReminderPref(
+      user.id,
+      user.email!,
+      user.user_metadata?.name as string | undefined,
+      enabled,
+    );
+    revalidatePath("/configuracion");
+    return { success: true, enabled: saved };
   } catch {
     return { error: "Error al guardar la preferencia" };
   }

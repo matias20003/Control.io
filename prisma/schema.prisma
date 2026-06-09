@@ -75,6 +75,9 @@ model Profile {
   weeklyReportDay     Int?
   weeklyReportHour    Int?
 
+  // Recordatorio diario por WhatsApp — pregunta a las 20hs ARG si registró sus gastos.
+  dailyReminderEnabled Boolean @default(false)
+
   accounts              Account[]
   categories            Category[]
   transactions          Transaction[]

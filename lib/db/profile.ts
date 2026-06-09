@@ -105,6 +105,40 @@ export async function getReportPrefs(userId: string): Promise<ReportPrefs> {
   };
 }
 
+/** Lee si el recordatorio diario por WhatsApp está activo. */
+export async function getDailyReminderPref(userId: string): Promise<boolean> {
+  const p = await prisma.profile.findUnique({
+    where: { id: userId },
+    select: { dailyReminderEnabled: true },
+  });
+  return p?.dailyReminderEnabled ?? false;
+}
+
+/** Activa o desactiva el recordatorio diario por WhatsApp. */
+export async function setDailyReminderPref(
+  userId: string,
+  email: string,
+  name: string | undefined,
+  enabled: boolean,
+): Promise<boolean> {
+  await getOrCreateProfile(userId, email, name);
+  const updated = await prisma.profile.update({
+    where: { id: userId },
+    data: { dailyReminderEnabled: enabled },
+    select: { dailyReminderEnabled: true },
+  });
+  return updated.dailyReminderEnabled;
+}
+
+/** Usuarios con recordatorio diario activo y número de WhatsApp vinculado. */
+export async function getDailyReminderRecipients(): Promise<{ id: string; whatsappNumber: string }[]> {
+  const rows = await prisma.profile.findMany({
+    where: { dailyReminderEnabled: true, whatsappNumber: { not: null } },
+    select: { id: true, whatsappNumber: true },
+  });
+  return rows.filter((r): r is { id: string; whatsappNumber: string } => !!r.whatsappNumber);
+}
+
 /** Actualiza la preferencia de reporte semanal. Valida rangos (day 0–6, hour 0–23). */
 export async function updateReportPrefs(
   userId: string,

@@ -2,8 +2,11 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { startOfMonth, endOfMonth } from "date-fns";
 import { sendPushToUser } from "@/lib/push/send";
+import { sendDailyReminders } from "@/lib/whatsapp/daily-reminder";
 
-// Vercel Cron: diariamente a las 12:00 UTC (09:00 ARG)
+// Vercel Cron: diariamente a las 23:00 UTC (20:00 ARG).
+// Además de las alertas de presupuesto, dispara el recordatorio diario por
+// WhatsApp (consolidado acá por el límite de 2 crons del plan Hobby de Vercel).
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -26,6 +29,10 @@ export async function GET(req: NextRequest) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Recordatorio diario por WhatsApp (20hs ARG). Best-effort: corre siempre,
+  // aun si no hay presupuestos cargados.
+  const reminder = await sendDailyReminders().catch(() => ({ sent: 0, skipped: 0, failed: 0 }));
+
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
@@ -37,7 +44,7 @@ export async function GET(req: NextRequest) {
     include: { category: { select: { name: true, icon: true } } },
   });
 
-  if (!budgets.length) return Response.json({ ok: true, alerts: 0 });
+  if (!budgets.length) return Response.json({ ok: true, alerts: 0, reminder });
 
   // Agrupar por userId para una sola query
   const userIds = [...new Set(budgets.map((b) => b.userId))];
@@ -91,5 +98,5 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return Response.json({ ok: true, alerts, budgets: budgets.length });
+  return Response.json({ ok: true, alerts, budgets: budgets.length, reminder });
 }
