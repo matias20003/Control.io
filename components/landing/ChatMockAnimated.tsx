@@ -111,7 +111,10 @@ export function ChatMockAnimated() {
 
   return (
     <div ref={ref} className="relative mx-auto w-full max-w-sm">
-      <div className="absolute -inset-6 -z-10 rounded-[2.5rem] bg-gradient-to-br from-emerald-500/30 via-primary/15 to-transparent blur-2xl" />
+      {/* Halo de color difuso */}
+      <div className="absolute -inset-8 -z-20 rounded-[3rem] bg-gradient-to-br from-emerald-500/30 via-primary/20 to-transparent blur-3xl" />
+      {/* Panel esmerilado: difumina lo que está detrás del chat (efecto vidrio) */}
+      <div className="absolute -inset-3 -z-10 rounded-[2.4rem] bg-surface/25 shadow-2xl ring-1 ring-white/10 backdrop-blur-2xl" />
       <motion.div
         initial={{ opacity: 0, y: 30, rotateX: 8 }}
         whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
