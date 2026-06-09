@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, Wallet, Pencil, Layers, Coins } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/ui/stat";
+import { Sparkline } from "@/components/ui/sparkline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,9 +42,10 @@ const ACCOUNT_TYPE_ICONS: Record<string, string> = {
 interface Props {
   initialAccounts: SerializedAccount[];
   recentTx: SerializedTransaction[];
+  sparklines: Record<string, number[]>;
 }
 
-export function CuentasClient({ initialAccounts, recentTx }: Props) {
+export function CuentasClient({ initialAccounts, recentTx, sparklines }: Props) {
   const [accounts, setAccounts] = useState<SerializedAccount[]>(initialAccounts);
   const [isOpen, setIsOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<SerializedAccount | null>(null);
@@ -234,6 +236,7 @@ export function CuentasClient({ initialAccounts, recentTx }: Props) {
                     <th className="text-left font-medium py-2.5 px-2">Cuenta</th>
                     <th className="text-left font-medium py-2.5 px-2">Tipo</th>
                     <th className="text-right font-medium py-2.5 px-2">Saldo disponible</th>
+                    <th className="text-left font-medium py-2.5 px-2 pl-4">Tendencia (30d)</th>
                     <th className="text-left font-medium py-2.5 px-2 pl-4">Estado</th>
                     <th className="py-2.5 px-2 w-20" />
                   </tr>
@@ -254,6 +257,9 @@ export function CuentasClient({ initialAccounts, recentTx }: Props) {
                         <td className="py-2.5 px-2 text-muted">{ACCOUNT_TYPE_LABELS[account.type] || account.type}</td>
                         <td className={`py-2.5 px-2 text-right font-mono font-bold ${neg ? "text-danger" : "text-foreground"}`}>
                           {formatCurrency(account.balance, account.currency)} <span className="text-[11px] text-muted font-normal">{account.currency}</span>
+                        </td>
+                        <td className="py-2.5 px-2 pl-4">
+                          <Sparkline data={sparklines[account.id]} />
                         </td>
                         <td className="py-2.5 px-2 pl-4">
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${neg ? "bg-danger/10 text-danger" : "bg-success/10 text-success"}`}>{neg ? "Deuda" : "Activa"}</span>

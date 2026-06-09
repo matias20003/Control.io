@@ -9,8 +9,9 @@ import {
 import type { TrendsData } from "@/lib/db/trends";
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
-import { PageHeader } from "@/components/ui/stat";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { PageHeader, StatCard } from "@/components/ui/stat";
+import { Sparkline } from "@/components/ui/sparkline";
+import { TrendingUp, TrendingDown, Wallet } from "lucide-react";
 
 interface Props { trends: TrendsData }
 
@@ -70,34 +71,16 @@ export function TendenciasClient({ trends }: Props) {
       <PageHeader title="Tendencias" subtitle="Últimos 6 meses de actividad financiera." />
 
       {/* ── KPIs vs mes anterior ── */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: "Ingresos", value: currentMonth?.income ?? 0, change: incomeChange, positive: true },
-          { label: "Gastos", value: currentMonth?.expense ?? 0, change: expenseChange, positive: false },
-          { label: "Balance", value: currentMonth?.balance ?? 0, change: balanceChange, positive: true },
-        ].map((k) => {
-          const up = (k.change ?? 0) > 0;
-          const good = k.positive ? up : !up;
-          const Icon = k.change === null ? Minus : up ? TrendingUp : TrendingDown;
-          return (
-            <Card key={k.label}>
-              <CardContent className="p-3 md:p-4">
-                <p className="text-[11px] text-muted font-medium mb-1">{k.label}</p>
-                <p className={`text-base md:text-lg font-bold font-mono leading-tight ${k.value >= 0 ? "text-foreground" : "text-danger"}`}>
-                  {fmt(k.value)}
-                </p>
-                {k.change !== null && (
-                  <p className={`text-[11px] mt-1 flex items-center gap-0.5 ${good ? "text-success" : "text-danger"}`}>
-                    <Icon size={11} />
-                    {Math.abs(k.change)}% vs mes ant.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard label="Ingresos" value={fmt(currentMonth?.income ?? 0)} icon={TrendingUp} accent="success"
+          delta={incomeChange != null ? `${Math.abs(incomeChange)}% vs mes ant.` : null} deltaGood={(incomeChange ?? 0) >= 0} />
+        <StatCard label="Gastos" value={fmt(currentMonth?.expense ?? 0)} icon={TrendingDown} accent="danger"
+          delta={expenseChange != null ? `${Math.abs(expenseChange)}% vs mes ant.` : null} deltaGood={(expenseChange ?? 0) <= 0} />
+        <StatCard label="Balance" value={fmt(currentMonth?.balance ?? 0)} icon={Wallet} accent={(currentMonth?.balance ?? 0) >= 0 ? "primary" : "danger"}
+          delta={balanceChange != null ? `${Math.abs(balanceChange)}% vs mes ant.` : null} deltaGood={(balanceChange ?? 0) >= 0} />
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* ── Bar chart: ingresos vs gastos ── */}
       <Card>
         <CardContent className="p-4">
@@ -140,7 +123,9 @@ export function TendenciasClient({ trends }: Props) {
           </ResponsiveContainer>
         </CardContent>
       </Card>
+      </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* ── Savings rate ── */}
       <Card>
         <CardContent className="p-4">
@@ -172,9 +157,12 @@ export function TendenciasClient({ trends }: Props) {
                 const pct = maxTotal > 0 ? Math.round((total / maxTotal) * 100) : 0;
                 return (
                   <div key={cat.name}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-foreground">{cat.icon} {cat.name}</span>
-                      <span className="text-sm font-mono text-muted">{fmt(total)}</span>
+                    <div className="flex items-center justify-between mb-1 gap-2">
+                      <span className="text-sm text-foreground truncate">{cat.icon} {cat.name}</span>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <Sparkline data={cat.months} width={64} height={20} />
+                        <span className="text-sm font-mono text-muted">{fmt(total)}</span>
+                      </div>
                     </div>
                     <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
                       <div
@@ -190,8 +178,10 @@ export function TendenciasClient({ trends }: Props) {
         </Card>
       )}
 
+      </div>
+
       {/* ── Promedios ── */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted mb-1">Ingreso promedio mensual</p>
