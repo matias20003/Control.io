@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, HandCoins, DollarSign } from "lucide-react";
+import { Plus, Trash2, HandCoins, DollarSign, TrendingDown, TrendingUp, ListChecks } from "lucide-react";
+import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -88,37 +89,25 @@ export function DeudasClient({ initialDebts }: Props) {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Deudas</h1>
-          <p className="text-sm text-muted mt-0.5">
-            {iOwe.length + theyOwe.length} activa
-            {iOwe.length + theyOwe.length !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <Button size="sm" onClick={() => setIsCreateOpen(true)}>
-          <Plus size={16} className="mr-1.5" />
-          Nueva
-        </Button>
-      </div>
+      <PageHeader
+        title="Deudas"
+        subtitle="Organizá tus deudas y seguí tu plan de pago."
+        actions={
+          <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+            <Plus size={16} className="mr-1.5" />
+            Nueva deuda
+          </Button>
+        }
+      />
 
-      {/* Summary */}
+      {/* KPIs */}
       {(iOwe.length > 0 || theyOwe.length > 0) && (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-danger/10 rounded-xl p-3">
-            <p className="text-xs text-muted mb-0.5">Les debo</p>
-            <p className="text-base font-bold font-mono text-danger">
-              {formatCurrency(totalIOwe, "ARS")}
-            </p>
-          </div>
-          <div className="bg-success/10 rounded-xl p-3">
-            <p className="text-xs text-muted mb-0.5">Me deben</p>
-            <p className="text-base font-bold font-mono text-success">
-              {formatCurrency(totalTheyOwe, "ARS")}
-            </p>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCard label="Total que debo" value={formatCurrency(totalIOwe, "ARS")} hint={`${iOwe.length} deuda${iOwe.length !== 1 ? "s" : ""}`} icon={TrendingDown} accent="danger" />
+          <StatCard label="Me deben" value={formatCurrency(totalTheyOwe, "ARS")} hint={`${theyOwe.length} a favor`} icon={TrendingUp} accent="success" />
+          <StatCard label="Deudas activas" value={iOwe.length + theyOwe.length} hint={completed.length > 0 ? `${completed.length} saldada${completed.length !== 1 ? "s" : ""}` : undefined} icon={ListChecks} accent="primary" />
         </div>
       )}
 

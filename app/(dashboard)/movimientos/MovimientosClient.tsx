@@ -16,7 +16,12 @@ import {
   X,
   Download,
   Upload,
+  TrendingUp,
+  TrendingDown,
+  Scale,
 } from "lucide-react";
+import { PageHeader, StatCard } from "@/components/ui/stat";
+import { DailyFlowChart } from "./MovimientosCharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -139,6 +144,25 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
 
   const totalIncome  = transactions.filter((t) => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
   const totalExpense = transactions.filter((t) => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
+  const balanceNeto  = totalIncome - totalExpense;
+
+  // Serie diaria del mes (para el gráfico de flujo neto)
+  const daily = useMemo(() => {
+    const map = new Map<number, { income: number; expense: number }>();
+    for (const t of transactions) {
+      if (t.type === "TRANSFER") continue;
+      const d = new Date(t.date).getDate();
+      const e = map.get(d) ?? { income: 0, expense: 0 };
+      if (t.type === "INCOME") e.income += t.amount;
+      else e.expense += t.amount;
+      map.set(d, e);
+    }
+    const daysInMonth = new Date(year, month, 0).getDate();
+    return Array.from({ length: daysInMonth }, (_, i) => {
+      const e = map.get(i + 1) ?? { income: 0, expense: 0 };
+      return { day: String(i + 1), income: e.income, expense: e.expense, net: e.income - e.expense };
+    });
+  }, [transactions, month, year]);
 
   // Handlers
   const handleCreate = (formData: FormData) => {
@@ -336,30 +360,32 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
+    <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-5">
       {/* Header */}
-      <div className="space-y-3">
-        <h1 className="text-2xl font-bold text-foreground">Movimientos</h1>
-        <div className="grid grid-cols-2 gap-2">
-          <Button variant="income" onClick={() => openCreate("INCOME")} className="w-full">
-            <ArrowDownLeft size={15} />Nuevo ingreso
-          </Button>
-          <Button variant="expense" onClick={() => openCreate("EXPENSE")} className="w-full">
-            <ArrowUpRight size={15} />Nuevo gasto
-          </Button>
-        </div>
-        <div className="flex items-center justify-between">
-          <button onClick={() => openCreate("TRANSFER")}
-            className="flex items-center gap-1.5 text-xs text-muted hover:text-primary transition-colors">
-            <ArrowLeftRight size={12} />Nueva transferencia
-          </button>
+      <PageHeader
+        title="Movimientos"
+        subtitle="Registrá, consultá y controlá todos tus movimientos financieros."
+      />
+
+      {/* Acciones rápidas */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: "Nuevo ingreso", icon: ArrowDownLeft, cls: "bg-success/10 text-success", on: () => openCreate("INCOME") },
+          { label: "Nuevo gasto", icon: ArrowUpRight, cls: "bg-danger/10 text-danger", on: () => openCreate("EXPENSE") },
+          { label: "Transferencia", icon: ArrowLeftRight, cls: "bg-primary/10 text-primary", on: () => openCreate("TRANSFER") },
+          { label: "Importar CSV", icon: Upload, cls: "bg-surface-2 text-muted", on: () => setImportOpen(true) },
+        ].map((b) => (
           <button
-            onClick={() => setImportOpen(true)}
-            className="flex items-center gap-1.5 text-xs text-muted hover:text-primary transition-colors"
+            key={b.label}
+            onClick={b.on}
+            className="flex items-center gap-3 rounded-2xl border border-border bg-surface hover:border-primary hover:bg-surface-2 transition-colors p-3.5 text-left"
           >
-            <Upload size={12} />Importar CSV
+            <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${b.cls}`}>
+              <b.icon size={18} />
+            </span>
+            <span className="text-sm font-semibold text-foreground">{b.label}</span>
           </button>
-        </div>
+        ))}
       </div>
 
       {/* Month nav */}
@@ -386,17 +412,27 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
         </a>
       </div>
 
-      {/* Summary */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-success/10 rounded-xl p-3">
-          <p className="text-xs text-muted mb-0.5">Ingresos</p>
-          <p className="text-base font-bold font-mono text-success">{formatCurrency(totalIncome, "ARS")}</p>
-        </div>
-        <div className="bg-danger/10 rounded-xl p-3">
-          <p className="text-xs text-muted mb-0.5">Gastos</p>
-          <p className="text-base font-bold font-mono text-danger">{formatCurrency(totalExpense, "ARS")}</p>
-        </div>
+      {/* KPIs del mes */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard label="Ingresos del mes" value={formatCurrency(totalIncome, "ARS")} icon={TrendingUp} accent="success" />
+        <StatCard label="Gastos del mes" value={formatCurrency(totalExpense, "ARS")} icon={TrendingDown} accent="danger" />
+        <StatCard label="Balance neto" value={formatCurrency(balanceNeto, "ARS")} icon={Scale} accent={balanceNeto >= 0 ? "primary" : "danger"} />
       </div>
+
+      {/* Flujo neto diario */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold text-foreground">Flujo neto diario</p>
+            <div className="flex items-center gap-3 text-xs">
+              <span className="flex items-center gap-1.5 text-muted"><span className="w-2.5 h-2.5 rounded-sm bg-success" /> Ingresos</span>
+              <span className="flex items-center gap-1.5 text-muted"><span className="w-2.5 h-2.5 rounded-sm bg-danger" /> Gastos</span>
+              <span className="flex items-center gap-1.5 text-muted"><span className="w-3 h-0.5 rounded-sm bg-primary" /> Neto</span>
+            </div>
+          </div>
+          <DailyFlowChart data={daily} />
+        </CardContent>
+      </Card>
 
       {/* Search */}
       <div className="relative">

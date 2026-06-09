@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Wallet, Pencil } from "lucide-react";
+import { Plus, Trash2, Wallet, Pencil, Layers, Coins } from "lucide-react";
+import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,6 +52,22 @@ export function CuentasClient({ initialAccounts }: Props) {
     .filter((a) => a.currency === "ARS")
     .reduce((acc, a) => acc + a.balance, 0);
 
+  const arsCount = accounts.filter((a) => a.currency === "ARS").length;
+  const otherCount = accounts.length - arsCount;
+  const topAccount = [...accounts].sort((a, b) => b.balance - a.balance)[0] ?? null;
+
+  // Distribución del dinero: cuentas ARS con saldo positivo
+  const PALETTE = ["#3b82f6", "#22c55e", "#a855f7", "#f59e0b", "#ec4899", "#14b8a6", "#ef4444"];
+  const positiveArs = accounts.filter((a) => a.currency === "ARS" && a.balance > 0);
+  const totalPositive = positiveArs.reduce((s, a) => s + a.balance, 0) || 1;
+  const distribution = positiveArs.map((a, i) => ({
+    id: a.id,
+    name: a.name,
+    balance: a.balance,
+    color: a.color || PALETTE[i % PALETTE.length],
+    pct: Math.round((a.balance / totalPositive) * 100),
+  }));
+
   const handleCreate = (formData: FormData) => {
     startTransition(async () => {
       const result = await createAccountAction(formData);
@@ -93,24 +110,64 @@ export function CuentasClient({ initialAccounts }: Props) {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Cuentas</h1>
-          <p className="text-sm text-muted mt-0.5">
-            {accounts.length} cuenta{accounts.length !== 1 ? "s" : ""} •{" "}
-            <span className="font-mono text-foreground">
-              {formatCurrency(totalARS, "ARS")}
-            </span>{" "}
-            en pesos
-          </p>
-        </div>
-        <Button onClick={() => setIsOpen(true)} size="sm">
-          <Plus size={16} className="mr-1.5" />
-          Nueva
-        </Button>
-      </div>
+      <PageHeader
+        title="Cuentas"
+        subtitle="Organizá y entendé el saldo de todas tus cuentas."
+        actions={
+          <Button onClick={() => setIsOpen(true)} size="sm">
+            <Plus size={16} className="mr-1.5" />
+            Nueva cuenta
+          </Button>
+        }
+      />
+
+      {accounts.length > 0 && (
+        <>
+          {/* KPIs */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <StatCard label="Total disponible" value={formatCurrency(totalARS, "ARS")} hint="en pesos (ARS)" icon={Wallet} accent="success" />
+            <StatCard
+              label="Cuentas activas"
+              value={accounts.length}
+              hint={`${arsCount} en ARS${otherCount ? ` · ${otherCount} en otras monedas` : ""}`}
+              icon={Layers}
+              accent="primary"
+            />
+            <StatCard
+              label="Mayor saldo"
+              value={topAccount ? topAccount.name : "—"}
+              hint={topAccount ? formatCurrency(topAccount.balance, topAccount.currency) : undefined}
+              icon={Coins}
+              accent="warning"
+            />
+          </div>
+
+          {/* Distribución del dinero */}
+          {distribution.length > 0 && (
+            <Card>
+              <CardContent className="p-5">
+                <p className="text-sm font-semibold text-foreground mb-3">Distribución del dinero</p>
+                <div className="flex h-7 rounded-lg overflow-hidden bg-surface-2">
+                  {distribution.map((d) => (
+                    <div key={d.id} style={{ width: `${d.pct}%`, backgroundColor: d.color }} title={`${d.name} · ${d.pct}%`} />
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-x-5 gap-y-2 mt-3">
+                  {distribution.map((d) => (
+                    <div key={d.id} className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                      <span className="text-xs font-medium text-foreground">{d.name}</span>
+                      <span className="text-xs text-muted font-mono">{formatCurrency(d.balance, "ARS")} ({d.pct}%)</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
 
       {/* Account list */}
       {accounts.length === 0 ? (

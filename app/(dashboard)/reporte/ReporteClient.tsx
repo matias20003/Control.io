@@ -9,6 +9,7 @@ import {
 import type { ReporteSemanal } from "@/lib/db/reporte-semanal";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/stat";
 import {
   ChevronLeft, ChevronRight,
   TrendingUp, TrendingDown, Minus,
@@ -69,8 +70,10 @@ export function ReporteClient({ reporte: r, currentOffset }: Props) {
   const weekRange = `${new Date(r.weekStart).toLocaleDateString("es-AR", { day: "numeric", month: "short" })} – ${new Date(r.weekEnd).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}`;
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
+    <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-5">
       <SectionTabs />
+
+      <PageHeader title="Análisis" subtitle="Entendé tu rendimiento financiero de un vistazo." />
 
       {/* ── Header + nav ── */}
       <div className="flex items-center gap-3">

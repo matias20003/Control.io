@@ -166,7 +166,8 @@ export function Calculator() {
           "hover:bg-primary-dark active:scale-95",
           "transition-all duration-150",
           "items-center justify-center",
-          "hidden md:flex",
+          // Desktop: el disparador vive en la Topbar. Mobile: en el Header.
+          "hidden",
         )}
       >
         <CalculatorIcon size={16} strokeWidth={2.2} />

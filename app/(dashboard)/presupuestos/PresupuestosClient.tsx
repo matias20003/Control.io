@@ -3,7 +3,8 @@ import { SectionTabs } from "@/components/layout/SectionTabs";
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Target, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Target, ChevronLeft, ChevronRight, Wallet, TrendingDown, PiggyBank } from "lucide-react";
+import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -91,18 +92,21 @@ export function PresupuestosClient({
   const totalSpent = budgets.reduce((s, b) => s + b.spent, 0);
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
+    <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-5">
       <SectionTabs />
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Presupuestos</h1>
-        {availableCategories.length > 0 && (
-          <Button size="sm" onClick={() => setIsOpen(true)}>
-            <Plus size={16} className="mr-1.5" />
-            Nuevo
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="Presupuestos"
+        subtitle="Definí límites de gasto por categoría y seguí tu avance del mes."
+        actions={
+          availableCategories.length > 0 ? (
+            <Button size="sm" onClick={() => setIsOpen(true)}>
+              <Plus size={16} className="mr-1.5" />
+              Nuevo
+            </Button>
+          ) : undefined
+        }
+      />
 
       {/* Month navigation */}
       <div className="flex items-center gap-3">
@@ -126,29 +130,24 @@ export function PresupuestosClient({
         </button>
       </div>
 
-      {/* Summary */}
+      {/* KPIs */}
       {budgets.length > 0 && (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-surface-2 rounded-xl p-3">
-            <p className="text-xs text-muted mb-0.5">Presupuestado</p>
-            <p className="text-base font-bold font-mono text-foreground">
-              {formatCurrency(totalBudgeted, "ARS")}
-            </p>
-          </div>
-          <div
-            className={`rounded-xl p-3 ${
-              totalSpent > totalBudgeted ? "bg-danger/10" : "bg-success/10"
-            }`}
-          >
-            <p className="text-xs text-muted mb-0.5">Gastado</p>
-            <p
-              className={`text-base font-bold font-mono ${
-                totalSpent > totalBudgeted ? "text-danger" : "text-success"
-              }`}
-            >
-              {formatCurrency(totalSpent, "ARS")}
-            </p>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCard label="Presupuestado" value={formatCurrency(totalBudgeted, "ARS")} hint={formatMonth(month, year)} icon={Wallet} accent="primary" />
+          <StatCard
+            label="Gastado"
+            value={formatCurrency(totalSpent, "ARS")}
+            hint={totalBudgeted > 0 ? `${Math.round((totalSpent / totalBudgeted) * 100)}% del presupuesto` : undefined}
+            icon={TrendingDown}
+            accent={totalSpent > totalBudgeted ? "danger" : "success"}
+          />
+          <StatCard
+            label="Disponible"
+            value={formatCurrency(totalBudgeted - totalSpent, "ARS")}
+            hint={totalBudgeted > 0 ? `${Math.max(0, Math.round(((totalBudgeted - totalSpent) / totalBudgeted) * 100))}% restante` : undefined}
+            icon={PiggyBank}
+            accent={totalBudgeted - totalSpent >= 0 ? "success" : "danger"}
+          />
         </div>
       )}
 

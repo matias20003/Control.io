@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Tag, User, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/stat";
 import { CategoriasTab } from "./CategoriasTab";
 import { ProfileTab } from "./ProfileTab";
 import type { SerializedCategory } from "@/lib/db/categories";
@@ -30,11 +31,9 @@ export function ConfiguracionClient({
   const [query, setQuery] = useState("");
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Configuración</h1>
-        <p className="text-sm text-muted mt-0.5">Personalizá categorías y tu perfil</p>
-      </div>
+    <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-6">
+      <PageHeader title="Configuración" subtitle="Personalizá tu cuenta, seguridad y preferencias." />
+
 
       {/* Buscador de configuraciones */}
       <div className="relative max-w-sm">

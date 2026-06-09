@@ -1,6 +1,7 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Header } from "@/components/layout/Header";
+import { Topbar } from "@/components/layout/Topbar";
 import { Calculator } from "@/components/Calculator";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -28,12 +29,17 @@ export default async function DashboardLayout({
 
   await getOrCreateProfile(user.id, user.email!, user.user_metadata?.name);
 
+  const name = user.user_metadata?.name || user.email?.split("@")[0] || "Usuario";
+
   return (
     <div className="ambient-mesh min-h-dvh bg-background">
       <Sidebar />
       <Header />
       <Calculator />
-      <main className="md:ml-60 pb-20 md:pb-0 min-h-dvh">{children}</main>
+      <main className="md:ml-60 pb-20 md:pb-0 min-h-dvh">
+        <Topbar name={name} email={user.email ?? ""} />
+        {children}
+      </main>
       <BottomNav />
     </div>
   );
