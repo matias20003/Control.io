@@ -21,7 +21,7 @@ import {
   Scale,
 } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/ui/stat";
-import { DailyFlowChart } from "./MovimientosCharts";
+import { DailyFlowChart, ActivityHeatmap } from "./MovimientosCharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -419,20 +419,32 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
         <StatCard label="Balance neto" value={formatCurrency(balanceNeto, "ARS")} icon={Scale} accent={balanceNeto >= 0 ? "primary" : "danger"} />
       </div>
 
-      {/* Flujo neto diario */}
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-semibold text-foreground">Flujo neto diario</p>
-            <div className="flex items-center gap-3 text-xs">
-              <span className="flex items-center gap-1.5 text-muted"><span className="w-2.5 h-2.5 rounded-sm bg-success" /> Ingresos</span>
-              <span className="flex items-center gap-1.5 text-muted"><span className="w-2.5 h-2.5 rounded-sm bg-danger" /> Gastos</span>
-              <span className="flex items-center gap-1.5 text-muted"><span className="w-3 h-0.5 rounded-sm bg-primary" /> Neto</span>
+      {/* Flujo diario + actividad */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-2">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-foreground">Flujo neto diario</p>
+              <div className="flex items-center gap-3 text-xs">
+                <span className="flex items-center gap-1.5 text-muted"><span className="w-2.5 h-2.5 rounded-sm bg-success" /> Ingresos</span>
+                <span className="flex items-center gap-1.5 text-muted"><span className="w-2.5 h-2.5 rounded-sm bg-danger" /> Gastos</span>
+                <span className="flex items-center gap-1.5 text-muted"><span className="w-3 h-0.5 rounded-sm bg-primary" /> Neto</span>
+              </div>
             </div>
-          </div>
-          <DailyFlowChart data={daily} />
-        </CardContent>
-      </Card>
+            <DailyFlowChart data={daily} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-sm font-semibold text-foreground mb-3">Actividad por día</p>
+            <ActivityHeatmap data={daily} month={month} year={year} />
+            <div className="flex items-center justify-end gap-3 mt-3 text-[11px] text-muted">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-success" /> Día positivo</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-danger" /> Día negativo</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Search */}
       <div className="relative">

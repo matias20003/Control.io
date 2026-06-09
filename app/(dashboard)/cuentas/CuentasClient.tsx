@@ -68,6 +68,18 @@ export function CuentasClient({ initialAccounts }: Props) {
     pct: Math.round((a.balance / totalPositive) * 100),
   }));
 
+  // Detalle rápido por tipo (saldos ARS)
+  const sumArs = (list: SerializedAccount[]) =>
+    list.filter((a) => a.currency === "ARS").reduce((s, a) => s + a.balance, 0);
+  const detalle = [
+    { label: "Cuentas bancarias", accts: accounts.filter((a) => ["BANK", "SAVINGS"].includes(a.type)) },
+    { label: "Billeteras", accts: accounts.filter((a) => a.type === "DIGITAL_WALLET") },
+    { label: "Efectivo", accts: accounts.filter((a) => a.type === "CASH") },
+    { label: "Tarjetas de crédito", accts: accounts.filter((a) => a.type === "CREDIT_CARD") },
+  ]
+    .filter((g) => g.accts.length > 0)
+    .map((g) => ({ label: g.label, value: sumArs(g.accts) }));
+
   const handleCreate = (formData: FormData) => {
     startTransition(async () => {
       const result = await createAccountAction(formData);
@@ -144,28 +156,49 @@ export function CuentasClient({ initialAccounts }: Props) {
             />
           </div>
 
-          {/* Distribución del dinero */}
-          {distribution.length > 0 && (
-            <Card>
+          {/* Distribución del dinero + Detalle rápido */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {distribution.length > 0 && (
+              <Card className="lg:col-span-2">
+                <CardContent className="p-5">
+                  <p className="text-sm font-semibold text-foreground mb-3">Distribución del dinero</p>
+                  <div className="flex h-7 rounded-lg overflow-hidden bg-surface-2">
+                    {distribution.map((d) => (
+                      <div key={d.id} style={{ width: `${d.pct}%`, backgroundColor: d.color }} title={`${d.name} · ${d.pct}%`} />
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-x-5 gap-y-2 mt-3">
+                    {distribution.map((d) => (
+                      <div key={d.id} className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                        <span className="text-xs font-medium text-foreground">{d.name}</span>
+                        <span className="text-xs text-muted font-mono">{formatCurrency(d.balance, "ARS")} ({d.pct}%)</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            <Card className={distribution.length > 0 ? "" : "lg:col-span-3"}>
               <CardContent className="p-5">
-                <p className="text-sm font-semibold text-foreground mb-3">Distribución del dinero</p>
-                <div className="flex h-7 rounded-lg overflow-hidden bg-surface-2">
-                  {distribution.map((d) => (
-                    <div key={d.id} style={{ width: `${d.pct}%`, backgroundColor: d.color }} title={`${d.name} · ${d.pct}%`} />
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-x-5 gap-y-2 mt-3">
-                  {distribution.map((d) => (
-                    <div key={d.id} className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-                      <span className="text-xs font-medium text-foreground">{d.name}</span>
-                      <span className="text-xs text-muted font-mono">{formatCurrency(d.balance, "ARS")} ({d.pct}%)</span>
+                <p className="text-sm font-semibold text-foreground mb-3">Detalle rápido</p>
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted">Total en ARS</span>
+                    <span className="text-sm font-bold font-mono text-foreground">{formatCurrency(totalARS, "ARS")}</span>
+                  </div>
+                  {detalle.map((d) => (
+                    <div key={d.label} className="flex items-center justify-between border-t border-border-subtle pt-2.5">
+                      <span className="text-xs text-muted">{d.label}</span>
+                      <span className={`text-sm font-bold font-mono ${d.value < 0 ? "text-danger" : "text-foreground"}`}>
+                        {formatCurrency(d.value, "ARS")}
+                      </span>
                     </div>
                   ))}
                 </div>
               </CardContent>
             </Card>
-          )}
+          </div>
         </>
       )}
 

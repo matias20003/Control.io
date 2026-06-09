@@ -111,6 +111,39 @@ export function DeudasClient({ initialDebts }: Props) {
         </div>
       )}
 
+      {/* Plan de cancelación (bola de nieve) */}
+      {iOwe.length > 1 && (
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-sm font-semibold text-foreground">Plan de cancelación</p>
+            <p className="text-xs text-muted mb-4">Orden sugerido (bola de nieve): saldá primero las deudas más chicas para ganar impulso.</p>
+            <div className="flex items-start gap-1 overflow-x-auto pb-2">
+              {[...iOwe].sort((a, b) => a.remainingAmount - b.remainingAmount).map((d, i, arr) => (
+                <div key={d.id} className="flex items-start gap-1 shrink-0">
+                  <div className="flex flex-col items-center gap-2 w-32">
+                    <span className="w-8 h-8 rounded-full bg-primary/15 text-primary flex items-center justify-center text-sm font-bold">{i + 1}</span>
+                    <div className="rounded-xl border border-border bg-surface-2/50 p-2.5 text-center w-full">
+                      <p className="text-xs font-medium text-foreground truncate">{d.personName}</p>
+                      <p className="text-sm font-bold font-mono text-danger mt-0.5">{formatCurrency(d.remainingAmount, d.currency)}</p>
+                    </div>
+                  </div>
+                  <div className="w-5 h-0.5 bg-border mt-4" />
+                  {i === arr.length - 1 && (
+                    <div className="flex flex-col items-center gap-2 w-32">
+                      <span className="w-8 h-8 rounded-full bg-success/15 text-success flex items-center justify-center text-base">🏆</span>
+                      <div className="rounded-xl border border-success/30 bg-success/5 p-2.5 text-center w-full">
+                        <p className="text-xs font-semibold text-success">Libre de deudas</p>
+                        <p className="text-[11px] text-muted mt-0.5">{formatCurrency(totalIOwe, "ARS")} total</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Empty state */}
       {debts.length === 0 && (
         <EmptyState

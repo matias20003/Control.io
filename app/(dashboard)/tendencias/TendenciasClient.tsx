@@ -9,6 +9,7 @@ import {
 import type { TrendsData } from "@/lib/db/trends";
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/stat";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 interface Props { trends: TrendsData }
@@ -64,12 +65,9 @@ export function TendenciasClient({ trends }: Props) {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-6">
       <SectionTabs />
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Tendencias</h1>
-        <p className="text-sm text-muted mt-0.5">Últimos 6 meses de actividad financiera</p>
-      </div>
+      <PageHeader title="Tendencias" subtitle="Últimos 6 meses de actividad financiera." />
 
       {/* ── KPIs vs mes anterior ── */}
       <div className="grid grid-cols-3 gap-3">

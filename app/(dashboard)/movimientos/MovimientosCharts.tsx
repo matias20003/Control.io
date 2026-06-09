@@ -34,6 +34,47 @@ function FlowTip({ active, payload, label }: any) {
   );
 }
 
+/** Heatmap calendario: intensidad de actividad por día (verde neto +, rojo neto −). */
+export function ActivityHeatmap({ data, month, year }: { data: Pt[]; month: number; year: number }) {
+  const firstDow = (new Date(year, month - 1, 1).getDay() + 6) % 7; // Lunes = 0
+  const maxAbs = Math.max(1, ...data.map((d) => Math.abs(d.net)));
+  const labels = ["L", "M", "M", "J", "V", "S", "D"];
+
+  const cells: (Pt | null)[] = [];
+  for (let i = 0; i < firstDow; i++) cells.push(null);
+  for (const d of data) cells.push(d);
+
+  return (
+    <div>
+      <div className="grid grid-cols-7 gap-1.5 mb-1.5">
+        {labels.map((l, i) => (
+          <div key={i} className="text-[10px] text-muted text-center">{l}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1.5">
+        {cells.map((c, i) => {
+          if (!c) return <div key={i} />;
+          const has = c.income > 0 || c.expense > 0;
+          const intensity = has ? Math.min(1, Math.abs(c.net) / maxAbs) * 0.8 + 0.2 : 1;
+          const bg = !has
+            ? "var(--color-surface-2)"
+            : c.net >= 0
+            ? "var(--color-success)"
+            : "var(--color-danger)";
+          return (
+            <div
+              key={i}
+              title={has ? `Día ${c.day}: +${formatCurrency(c.income, "ARS")} / −${formatCurrency(c.expense, "ARS")}` : `Día ${c.day}: sin actividad`}
+              className="aspect-square rounded-md"
+              style={{ backgroundColor: bg, opacity: intensity }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function DailyFlowChart({ data }: { data: Pt[] }) {
   return (
     <div className="w-full h-[240px]">

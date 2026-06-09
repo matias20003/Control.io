@@ -3,7 +3,8 @@ import { SectionTabs } from "@/components/layout/SectionTabs";
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, RefreshCw, Power, Pencil } from "lucide-react";
+import { Plus, Trash2, RefreshCw, Power, Pencil, TrendingDown, TrendingUp } from "lucide-react";
+import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,6 +52,19 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
 
   const monthlyExpense = active
     .filter((r) => r.type === "EXPENSE")
+    .reduce((s, r) => {
+      const factor =
+        r.frequency === "DAILY" ? 30
+        : r.frequency === "WEEKLY" ? 4.3
+        : r.frequency === "BIWEEKLY" ? 2
+        : r.frequency === "MONTHLY" ? 1
+        : r.frequency === "QUARTERLY" ? 1 / 3
+        : 1 / 12;
+      return s + r.amount * factor;
+    }, 0);
+
+  const monthlyIncome = active
+    .filter((r) => r.type === "INCOME")
     .reduce((s, r) => {
       const factor =
         r.frequency === "DAILY" ? 30
@@ -295,29 +309,26 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-6">
       <SectionTabs />
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Recurrentes</h1>
-          <p className="text-sm text-muted mt-0.5">
-            {active.length} activo{active.length !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <Button size="sm" onClick={() => setIsCreateOpen(true)}>
-          <Plus size={16} className="mr-1.5" />
-          Nuevo
-        </Button>
-      </div>
+      <PageHeader
+        title="Recurrentes"
+        subtitle="Subscripciones, alquileres y pagos periódicos automatizados."
+        actions={
+          <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+            <Plus size={16} className="mr-1.5" />
+            Nuevo
+          </Button>
+        }
+      />
 
-      {/* Monthly estimate */}
+      {/* KPIs */}
       {active.length > 0 && (
-        <div className="bg-danger/10 rounded-xl p-4">
-          <p className="text-xs text-muted mb-1">Gasto recurrente mensual estimado</p>
-          <p className="text-xl font-bold font-mono text-danger">
-            {formatCurrency(monthlyExpense, "ARS")}
-          </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCard label="Gasto mensual estimado" value={formatCurrency(monthlyExpense, "ARS")} icon={TrendingDown} accent="danger" />
+          <StatCard label="Ingreso mensual estimado" value={formatCurrency(monthlyIncome, "ARS")} icon={TrendingUp} accent="success" />
+          <StatCard label="Recurrentes activos" value={active.length} hint={inactive.length > 0 ? `${inactive.length} pausado${inactive.length !== 1 ? "s" : ""}` : undefined} icon={RefreshCw} accent="primary" />
         </div>
       )}
 

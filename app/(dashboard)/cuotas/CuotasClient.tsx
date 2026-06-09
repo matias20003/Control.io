@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Check, Trash2, CreditCard, Pencil } from "lucide-react";
+import { Plus, Check, Trash2, CreditCard, Pencil, CalendarClock, ListChecks } from "lucide-react";
+import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,6 +55,11 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
     const nextUnpaid = p.installments.find((i) => !i.isPaid);
     return s + (nextUnpaid?.amount ?? 0);
   }, 0);
+
+  const totalRemaining = activePurchases.reduce(
+    (s, p) => s + p.installments.filter((i) => !i.isPaid).reduce((a, i) => a + i.amount, 0),
+    0
+  );
 
   const toggleExpanded = (id: string) => {
     setExpanded((prev) => {
@@ -130,30 +136,25 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Cuotas</h1>
-          <p className="text-sm text-muted mt-0.5">
-            {activePurchases.length} compra
-            {activePurchases.length !== 1 ? "s" : ""} activa
-            {activePurchases.length !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <Button size="sm" onClick={() => setIsOpen(true)}>
-          <Plus size={16} className="mr-1.5" />
-          Nueva
-        </Button>
-      </div>
+      <PageHeader
+        title="Cuotas"
+        subtitle="Seguí tus compras en cuotas y los pagos pendientes."
+        actions={
+          <Button size="sm" onClick={() => setIsOpen(true)}>
+            <Plus size={16} className="mr-1.5" />
+            Nueva
+          </Button>
+        }
+      />
 
-      {/* This month */}
+      {/* KPIs */}
       {activePurchases.length > 0 && (
-        <div className="bg-warning/10 border border-warning/20 rounded-xl p-4">
-          <p className="text-xs text-muted mb-1">Cuotas próximas a vencer</p>
-          <p className="text-xl font-bold font-mono text-warning">
-            {formatCurrency(totalMonthly, "ARS")}
-          </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCard label="Próxima cuota" value={formatCurrency(totalMonthly, "ARS")} hint="suma de la cuota siguiente" icon={CalendarClock} accent="warning" />
+          <StatCard label="Total adeudado en cuotas" value={formatCurrency(totalRemaining, "ARS")} icon={CreditCard} accent="danger" />
+          <StatCard label="Compras activas" value={activePurchases.length} hint={completedPurchases.length > 0 ? `${completedPurchases.length} saldada${completedPurchases.length !== 1 ? "s" : ""}` : undefined} icon={ListChecks} accent="primary" />
         </div>
       )}
 

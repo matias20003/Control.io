@@ -3,7 +3,8 @@ import { SectionTabs } from "@/components/layout/SectionTabs";
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, PiggyBank, DollarSign } from "lucide-react";
+import { Plus, Trash2, PiggyBank, DollarSign, Target, TrendingUp } from "lucide-react";
+import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,10 @@ export function MetasClient({ initialGoals }: Props) {
 
   const active = goals.filter((g) => !g.isCompleted);
   const completed = goals.filter((g) => g.isCompleted);
+
+  const totalSaved = active.reduce((s, g) => s + g.currentAmount, 0);
+  const totalTarget = active.reduce((s, g) => s + g.targetAmount, 0);
+  const avance = totalTarget > 0 ? Math.round((totalSaved / totalTarget) * 100) : 0;
 
   const handleCreate = (formData: FormData) => {
     startTransition(async () => {
@@ -73,22 +78,28 @@ export function MetasClient({ initialGoals }: Props) {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-6">
       <SectionTabs />
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Metas de ahorro</h1>
-          <p className="text-sm text-muted mt-0.5">
-            {active.length} activa{active.length !== 1 ? "s" : ""}
-            {completed.length > 0 && ` · ${completed.length} cumplida${completed.length !== 1 ? "s" : ""}`}
-          </p>
+      <PageHeader
+        title="Metas de ahorro"
+        subtitle="Definí objetivos con monto y fecha, y seguí tu avance."
+        actions={
+          <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+            <Plus size={16} className="mr-1.5" />
+            Nueva
+          </Button>
+        }
+      />
+
+      {/* KPIs */}
+      {active.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCard label="Ahorrado" value={formatCurrency(totalSaved, "ARS")} hint={`${active.length} meta${active.length !== 1 ? "s" : ""} activa${active.length !== 1 ? "s" : ""}`} icon={PiggyBank} accent="success" />
+          <StatCard label="Objetivo total" value={formatCurrency(totalTarget, "ARS")} icon={Target} accent="primary" />
+          <StatCard label="Avance global" value={`${avance}%`} hint={completed.length > 0 ? `${completed.length} cumplida${completed.length !== 1 ? "s" : ""}` : undefined} icon={TrendingUp} accent="warning" />
         </div>
-        <Button size="sm" onClick={() => setIsCreateOpen(true)}>
-          <Plus size={16} className="mr-1.5" />
-          Nueva
-        </Button>
-      </div>
+      )}
 
       {/* Empty */}
       {goals.length === 0 && (
