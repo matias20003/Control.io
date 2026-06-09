@@ -334,6 +334,7 @@ REGLAS:
 - Pedidos destructivos (borrar/editar): hacelos solo si el usuario lo pide claramente.
 - Usá el HISTORIAL de la charla para entender referencias ("¿y comparado con el mes pasado?", "sí, hacelo").
 - NUNCA inventes datos ni acciones que el usuario no pidió. "answer" siempre presente (vacío si no aplica).
+- NO repitas acciones: cada movimiento que menciona el usuario se registra UNA sola vez (no pongas la misma acción dos veces en "actions").
 
 FORMATO de "answer" (WhatsApp): ordenado y fácil de escanear.
 - Usá *negrita* (UN asterisco) para los montos y los totales importantes.
@@ -635,7 +636,32 @@ async function buildReply(
   const lines: string[] = [];
   const errors: string[] = [];
 
-  for (const action of result.actions) {
+  // Dedup: a veces el modelo emite la MISMA acción dos veces (sobre todo con
+  // audio), lo que registraba el movimiento duplicado y respondía dos veces.
+  // Filtramos acciones idénticas antes de ejecutarlas.
+  const seen = new Set<string>();
+  const actions = result.actions.filter((a) => {
+    const sig = JSON.stringify([
+      a.type,
+      a.amount ?? null,
+      a.currency ?? null,
+      (a.description ?? "").toLowerCase().trim(),
+      a.category ?? null,
+      a.account ?? null,
+      a.fromAccount ?? null,
+      a.toAccount ?? null,
+      a.personName ?? null,
+      a.date ?? null,
+      a.name ?? null,
+      a.goalName ?? null,
+      a.ref ?? null,
+    ]);
+    if (seen.has(sig)) return false;
+    seen.add(sig);
+    return true;
+  });
+
+  for (const action of actions) {
     try {
       lines.push(await runAction(userId, action, ctx, isoDate));
     } catch (err) {
