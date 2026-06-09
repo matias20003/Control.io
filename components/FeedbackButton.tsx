@@ -52,9 +52,9 @@ export function FeedbackButton() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Enviar feedback"
-        className="fixed right-4 bottom-24 z-40 flex items-center gap-2 rounded-full border border-primary/30 bg-surface/90 px-4 py-2.5 text-sm font-semibold text-primary shadow-lg backdrop-blur-md transition-colors hover:bg-surface md:bottom-6"
+        className="fixed right-4 bottom-32 z-[45] flex items-center gap-2 rounded-full border border-primary/40 bg-surface/95 px-5 py-3.5 text-sm font-semibold text-primary shadow-xl backdrop-blur-md transition-colors hover:bg-surface md:bottom-6"
       >
-        <MessageSquarePlus size={17} />
+        <MessageSquarePlus size={22} />
         <span className="hidden sm:inline">Feedback</span>
       </button>
 

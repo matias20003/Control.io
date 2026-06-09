@@ -107,6 +107,47 @@ export default async function DashboardPage({
 
   const balanceBetter = balanceDelta != null && balanceDelta >= 0;
 
+  // Card "Objetivo principal" reutilizable: en desktop va en la fila hero,
+  // en mobile se muestra más abajo (después de Movimientos recientes).
+  const objetivoCard = (
+    <Card>
+      <CardContent className="p-5 h-full flex flex-col">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-muted uppercase tracking-wider">Objetivo principal</p>
+          <Link href="/metas" className="text-xs text-primary hover:underline flex items-center gap-0.5">
+            Ver metas <ChevronRight size={12} />
+          </Link>
+        </div>
+        {topGoal ? (
+          <div className="mt-2 flex-1 flex flex-col">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">{topGoal.icon || "🎯"}</span>
+              <p className="text-lg font-bold text-foreground leading-tight">{topGoal.name}</p>
+            </div>
+            <p className="text-3xl font-bold font-mono mt-3" style={{ color: topGoal.color || "var(--color-primary)" }}>
+              {topGoal.percentage}%
+            </p>
+            <p className="text-xs text-muted mt-1">
+              {formatCurrency(topGoal.currentAmount, topGoal.currency)} de {formatCurrency(topGoal.targetAmount, topGoal.currency)}
+            </p>
+            <div className="h-2 rounded-full bg-surface-2 overflow-hidden mt-3">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${topGoal.percentage}%`, backgroundColor: topGoal.color || "var(--color-primary)" }}
+              />
+            </div>
+          </div>
+        ) : (
+          <Link href="/metas" className="mt-4 flex-1 flex flex-col items-center justify-center text-center gap-2 rounded-xl border border-dashed border-border py-6 hover:border-primary transition-colors">
+            <Target size={22} className="text-muted" />
+            <p className="text-sm font-medium text-foreground">Creá tu primer objetivo</p>
+            <p className="text-xs text-muted">Definí una meta de ahorro y seguí tu avance</p>
+          </Link>
+        )}
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-5">
 
@@ -171,43 +212,8 @@ export default async function DashboardPage({
           </CardContent>
         </Card>
 
-        {/* Objetivo principal */}
-        <Card>
-          <CardContent className="p-5 h-full flex flex-col">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-muted uppercase tracking-wider">Objetivo principal</p>
-              <Link href="/metas" className="text-xs text-primary hover:underline flex items-center gap-0.5">
-                Ver metas <ChevronRight size={12} />
-              </Link>
-            </div>
-            {topGoal ? (
-              <div className="mt-2 flex-1 flex flex-col">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{topGoal.icon || "🎯"}</span>
-                  <p className="text-lg font-bold text-foreground leading-tight">{topGoal.name}</p>
-                </div>
-                <p className="text-3xl font-bold font-mono mt-3" style={{ color: topGoal.color || "var(--color-primary)" }}>
-                  {topGoal.percentage}%
-                </p>
-                <p className="text-xs text-muted mt-1">
-                  {formatCurrency(topGoal.currentAmount, topGoal.currency)} de {formatCurrency(topGoal.targetAmount, topGoal.currency)}
-                </p>
-                <div className="h-2 rounded-full bg-surface-2 overflow-hidden mt-3">
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{ width: `${topGoal.percentage}%`, backgroundColor: topGoal.color || "var(--color-primary)" }}
-                  />
-                </div>
-              </div>
-            ) : (
-              <Link href="/metas" className="mt-4 flex-1 flex flex-col items-center justify-center text-center gap-2 rounded-xl border border-dashed border-border py-6 hover:border-primary transition-colors">
-                <Target size={22} className="text-muted" />
-                <p className="text-sm font-medium text-foreground">Creá tu primer objetivo</p>
-                <p className="text-xs text-muted">Definí una meta de ahorro y seguí tu avance</p>
-              </Link>
-            )}
-          </CardContent>
-        </Card>
+        {/* Objetivo principal — en desktop acá; en mobile baja después de Movimientos */}
+        <div className="hidden lg:block">{objetivoCard}</div>
 
         {/* Resumen del mes */}
         <Card>
@@ -317,6 +323,9 @@ export default async function DashboardPage({
             )}
           </CardContent>
         </Card>
+
+        {/* Objetivo principal — solo en mobile, justo debajo de Movimientos */}
+        <div className="lg:hidden">{objetivoCard}</div>
 
         {/* Insights para vos */}
         <Card>
