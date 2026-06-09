@@ -161,7 +161,7 @@ export async function payInstallment(
       data: { isPaid: true, paidAt: now },
     }),
     prisma.creditPurchase.update({
-      where: { id: purchase.id },
+      where: { id: purchase.id, userId },
       data: { paidInstallments: { increment: 1 } },
     }),
     // Movimiento equivalente, queda visible en /movimientos.

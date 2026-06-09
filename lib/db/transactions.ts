@@ -317,7 +317,7 @@ export async function deleteTransaction(userId: string, transactionId: string) {
         data: { balance: { increment: -toNum(tx.amount) } },
       });
     }
-    await db.transaction.delete({ where: { id: transactionId } });
+    await db.transaction.delete({ where: { id: transactionId, userId } });
   });
 }
 

@@ -87,7 +87,7 @@ export async function payDebt(
   const isCompleted = newPaid >= total;
 
   const row = await prisma.debt.update({
-    where: { id: debtId },
+    where: { id: debtId, userId },
     data: { paidAmount: newPaid, isCompleted },
   });
   return serialize(row);

@@ -109,7 +109,7 @@ export async function updateGoal(
   const current = toNum(existing.currentAmount);
 
   const row = await prisma.goal.update({
-    where: { id: goalId },
+    where: { id: goalId, userId },
     data: {
       ...(data.name !== undefined && { name: encrypt(data.name) ?? data.name }),
       ...(data.targetAmount !== undefined && { targetAmount: data.targetAmount }),
@@ -139,7 +139,7 @@ export async function addFundsToGoal(
   const isCompleted = newAmount >= target;
 
   const row = await prisma.goal.update({
-    where: { id: goalId },
+    where: { id: goalId, userId },
     data: { currentAmount: newAmount, isCompleted },
     include: withAccount,
   });

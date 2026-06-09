@@ -450,6 +450,18 @@ model WaitlistEntry {
   @@map("waitlist_entries")
 }
 
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String?
+  email     String?
+  message   String
+  page      String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("feedback")
+}
+
 model ExchangeRate {
   id        String   @id @default(cuid())
   type      String

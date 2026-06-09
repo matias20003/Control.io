@@ -4,6 +4,7 @@ import { Header } from "@/components/layout/Header";
 import { Topbar } from "@/components/layout/Topbar";
 import { Calculator } from "@/components/Calculator";
 import { InstallBanner } from "@/components/InstallApp";
+import { FeedbackButton } from "@/components/FeedbackButton";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getOrCreateProfile } from "@/lib/db/profile";
@@ -43,6 +44,7 @@ export default async function DashboardLayout({
         {children}
       </main>
       <BottomNav />
+      <FeedbackButton />
     </div>
   );
 }
