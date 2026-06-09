@@ -54,6 +54,36 @@ html.light {
   --glass-highlight-c: oklch(1    0     0 / 50%);
 }
 
+/* ── Tema oscuro forzado por subárbol ──
+   La landing siempre se ve oscura, sin importar el toggle del usuario.
+   Re-declara los tokens oscuros en un wrapper → gana sobre html.light para
+   todo lo que esté adentro (sin JS, sin flash). */
+.landing-dark {
+  color-scheme: dark;
+  --bg:              oklch(0.09  0.008 258);
+  --surface:         oklch(0.135 0.010 258);
+  --surface-2:       oklch(0.18  0.012 258);
+  --surface-3:       oklch(0.22  0.013 258);
+  --border-c:        oklch(0.26  0.014 258);
+  --border-subtle-c: oklch(0.20  0.010 258);
+  --fg:              oklch(0.955 0.005 258);
+  --muted-c:         oklch(0.62  0.012 258);
+  --muted-2-c:       oklch(0.46  0.010 258);
+  --primary-c:       oklch(0.67  0.19  258);
+  --primary-dark-c:  oklch(0.61  0.19  258);
+  --primary-dim-c:   oklch(0.67  0.19  258 / 12%);
+  --success-c:       oklch(0.67  0.17  148);
+  --success-dim-c:   oklch(0.67  0.17  148 / 12%);
+  --danger-c:        oklch(0.62  0.22   27);
+  --danger-dim-c:    oklch(0.62  0.22   27 / 12%);
+  --warning-c:       oklch(0.76  0.17   76);
+  --warning-dim-c:   oklch(0.76  0.17   76 / 12%);
+  --glass-bg-c:        oklch(0.18 0.012 258 / 55%);
+  --glass-bg-strong-c: oklch(0.22 0.014 258 / 70%);
+  --glass-border-c:    oklch(0.96 0.005 258 / 8%);
+  --glass-highlight-c: oklch(0.96 0.005 258 / 14%);
+}
+
 @theme inline {
   /* ── Paleta control.io (referencia a las variables overridables) ── */
   --color-background:   var(--bg);

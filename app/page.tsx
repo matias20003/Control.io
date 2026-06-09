@@ -55,7 +55,7 @@ export default async function LandingPage() {
   const isLogged = false;
 
   return (
-    <div className="relative min-h-dvh overflow-x-clip bg-background text-foreground">
+    <div className="landing-dark relative min-h-dvh overflow-x-clip bg-background text-foreground">
       <BackgroundFx />
       <Aurora />
       <CursorGlow />
