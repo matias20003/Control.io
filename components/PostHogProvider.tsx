@@ -37,8 +37,13 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
       autocapture: true, // captura clicks/inputs automáticamente
       persistence: "localStorage+cookie",
       session_recording: {
-        // Privacidad: nunca grabamos lo que se tipea (contraseñas, montos, etc.)
+        // Privacidad (app de finanzas con datos reales): enmascaramos TODO.
+        // - maskAllInputs: nunca grabamos lo que se tipea (contraseñas, montos).
+        // - maskTextSelector "*": tapamos también el texto ya en pantalla
+        //   (saldos, movimientos, nombres de cuentas). Así vemos el COMPORTAMIENTO
+        //   (clicks, dónde se traban, scroll) pero NUNCA los datos personales.
         maskAllInputs: true,
+        maskTextSelector: "*",
       },
     });
   }, []);
