@@ -45,7 +45,7 @@ export default async function UnirseGrupoPage({ params }: Props) {
       <div className="w-full max-w-sm space-y-6">
         {/* Logo */}
         <div className="text-center">
-          <LogoFull className="justify-center" />
+          <LogoFull className="items-center" />
         </div>
 
         {/* Card */}
@@ -98,7 +98,7 @@ function PaginaError({ mensaje }: { mensaje: string }) {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-6 text-center">
-        <LogoFull className="justify-center" />
+        <LogoFull className="items-center" />
         <div className="bg-surface border border-border rounded-xl p-6 space-y-3">
           <p className="text-4xl">🔗</p>
           <h1 className="text-lg font-semibold text-foreground">Link inválido</h1>

@@ -8,7 +8,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <header className="flex justify-center md:justify-start px-8 pt-8 pb-2">
         {/* Mobile: logo sm */}
         <div className="md:hidden">
-          <LogoFull size="sm" />
+          <LogoFull size="sm" tagline />
         </div>
         {/* Desktop: logo md */}
         <div className="hidden md:block">
@@ -121,7 +121,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
       <footer className="py-5 text-center">
         <p className="text-xs text-muted-2 uppercase tracking-[0.12em]">
-          systematic efficiency
+          Entendé tu dinero.
         </p>
       </footer>
 

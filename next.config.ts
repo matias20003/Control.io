@@ -31,6 +31,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Fija la raíz del proyecto para Turbopack. Sin esto, los package-lock.json
+  // sueltos en carpetas padre (C:\Users\yoris\, ...\Finanzas Personales\) hacen
+  // que Turbopack infiera la raíz equivocada y no resuelva Tailwind/módulos.
+  turbopack: { root: __dirname },
   serverExternalPackages: ["web-push", "resend", "@prisma/client", "pg"],
   experimental: {
     // Cachea en el navegador las páginas ya visitadas: volver a una pantalla
