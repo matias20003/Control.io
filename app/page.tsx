@@ -421,7 +421,7 @@ function TrustStrip() {
     { icon: KeyRound, label: "Auth con Supabase" },
     { icon: EyeOff, label: "Sin tracking de terceros" },
     { icon: ServerCog, label: "Infra en Vercel" },
-    { icon: FileLock2, label: "Aislamiento por usuario" },
+    { icon: FileLock2, label: "Row Level Security (RLS)" },
   ];
   return (
     <section className="border-y border-border/60 bg-surface/30 backdrop-blur">
@@ -747,7 +747,7 @@ function SecuritySection() {
     {
       icon: FileLock2,
       title: "Aislamiento por usuario",
-      body: "Cada cuenta solo lee y escribe sus propios registros: todo el acceso a datos está aislado por usuario. Nada se mezcla ni se comparte por error.",
+      body: "Row Level Security en la base de datos: cada cuenta solo puede leer y escribir sus propios registros. Nada se mezcla ni se comparte por error.",
     },
     {
       icon: EyeOff,
@@ -944,7 +944,7 @@ function FAQ() {
     },
     {
       q: "¿Mis datos están seguros?",
-      a: "Sí. Cifrado en tránsito (TLS 1.3) y en reposo (AES-256), aislamiento por usuario en cada consulta y cero trackers publicitarios. Detalles en la sección de Seguridad.",
+      a: "Sí. Cifrado en tránsito (TLS 1.3) y en reposo (AES-256), aislamiento por usuario con Row Level Security (RLS) y cero trackers publicitarios. Detalles en la sección de Seguridad.",
     },
     {
       q: "¿Puedo usarlo en el celular?",
