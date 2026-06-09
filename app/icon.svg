@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Brand-blue tile: legible on light and dark browser tabs -->
+  <!-- Tile azul de marca con una sola "c": a tamaño de pestaña (16px) cuatro
+       caracteres no se leen; una inicial grande sí. -->
   <rect width="64" height="64" rx="14" fill="#2563EB"/>
   <text
     x="50%"
-    y="53%"
+    y="54%"
     fill="#ffffff"
     font-family="Inter, 'Helvetica Neue', Arial, sans-serif"
-    font-size="25"
-    font-weight="500"
-    letter-spacing="-0.5"
+    font-size="46"
+    font-weight="600"
     text-anchor="middle"
     dominant-baseline="central"
-  >c.io</text>
+  >c</text>
 </svg>
