@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 // Configuración y Cerrar sesión viven en el menú del perfil (Topbar). En
 // mobile, Configuración está en "Más" y el logout dentro de Configuración.
@@ -64,7 +65,7 @@ export function Sidebar() {
       </nav>
 
       {/* Asistente C.io */}
-      <div className="px-2.5 pb-4 pt-1">
+      <div className="px-2.5 pb-4 pt-1 space-y-2.5">
         <a
           href="https://wa.me/5493416041118"
           target="_blank"
@@ -81,6 +82,9 @@ export function Sidebar() {
             Chateá con <span className="text-primary font-medium">control.io →</span>
           </p>
         </a>
+
+        {/* Cambiar tema claro/oscuro */}
+        <ThemeToggle />
       </div>
     </aside>
   );
