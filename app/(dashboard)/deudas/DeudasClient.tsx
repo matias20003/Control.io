@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, HandCoins, DollarSign, TrendingDown, TrendingUp, ListChecks } from "lucide-react";
+import { Plus, Trash2, HandCoins, DollarSign, TrendingDown, TrendingUp, ListChecks, AlertTriangle, Clock, CheckCircle2, Info, CalendarClock } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,32 @@ export function DeudasClient({ initialDebts }: Props) {
 
   const totalIOwe = iOwe.reduce((s, d) => s + d.remainingAmount, 0);
   const totalTheyOwe = theyOwe.reduce((s, d) => s + d.remainingAmount, 0);
+
+  // Alertas y próximos vencimientos (deudas que debo, con fecha)
+  const daysTo = (iso: string) => Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
+  const withDue = iOwe.filter((d) => d.dueDate);
+  const overdue = withDue.filter((d) => daysTo(d.dueDate!) < 0);
+  const upcoming = withDue
+    .filter((d) => daysTo(d.dueDate!) >= 0)
+    .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime());
+  const goodProgress = iOwe.find((d) => d.totalAmount > 0 && d.paidAmount / d.totalAmount >= 0.5);
+
+  const alerts: { type: "danger" | "warning" | "success" | "info"; title: string; body: string }[] = [];
+  if (overdue.length) {
+    alerts.push({ type: "danger", title: "Pago atrasado", body: `Tenés ${overdue.length} deuda${overdue.length !== 1 ? "s" : ""} vencida${overdue.length !== 1 ? "s" : ""} por ${formatCurrency(overdue.reduce((s, d) => s + d.remainingAmount, 0), "ARS")}.` });
+  }
+  const soon = upcoming.filter((d) => daysTo(d.dueDate!) <= 7);
+  if (soon.length) {
+    alerts.push({ type: "warning", title: "Vence pronto", body: `${soon[0].personName} vence en ${daysTo(soon[0].dueDate!)} día${daysTo(soon[0].dueDate!) !== 1 ? "s" : ""}.` });
+  }
+  if (goodProgress) {
+    alerts.push({ type: "success", title: "Buen progreso", body: `Ya pagaste más de la mitad de ${goodProgress.personName}. ¡Seguí así!` });
+  }
+  if (!alerts.length) {
+    alerts.push({ type: "info", title: "Todo en orden", body: "No tenés pagos atrasados ni vencimientos próximos." });
+  }
+  const ALERT_ICON = { danger: AlertTriangle, warning: Clock, success: CheckCircle2, info: Info };
+  const ALERT_COLOR = { danger: "text-danger", warning: "text-warning", success: "text-success", info: "text-primary" };
 
   const handleCreate = (formData: FormData) => {
     startTransition(async () => {
@@ -159,9 +185,10 @@ export function DeudasClient({ initialDebts }: Props) {
         />
       )}
 
-      {/* Detalle de deudas */}
+      {/* Detalle de deudas + aside */}
       {(iOwe.length > 0 || theyOwe.length > 0) && (
-        <>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 space-y-4">
           {/* Tabla — desktop */}
           <Card className="hidden md:block">
             <CardContent className="p-5">
@@ -227,7 +254,56 @@ export function DeudasClient({ initialDebts }: Props) {
               <DebtGroup title="Me deben" debts={theyOwe} accent="text-success" onPay={(d) => { setPayingDebt(d); setPayAmount(""); }} onDelete={handleDelete} deletingId={deletingId} isPending={isPending} />
             )}
           </div>
-        </>
+          </div>
+
+          {/* Aside: alertas + próximos vencimientos */}
+          <aside className="space-y-4">
+            <Card>
+              <CardContent className="p-5">
+                <p className="text-sm font-semibold text-foreground mb-3">Alertas y recomendaciones</p>
+                <div className="space-y-3">
+                  {alerts.map((a, i) => {
+                    const Icon = ALERT_ICON[a.type];
+                    const color = ALERT_COLOR[a.type];
+                    return (
+                      <div key={i} className="flex gap-3">
+                        <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-surface-2 ${color}`}><Icon size={15} /></span>
+                        <div className="min-w-0">
+                          <p className={`text-sm font-medium ${color}`}>{a.title}</p>
+                          <p className="text-xs text-muted mt-0.5 leading-snug">{a.body}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
+            {upcoming.length > 0 && (
+              <Card>
+                <CardContent className="p-5">
+                  <p className="text-sm font-semibold text-foreground mb-3 flex items-center gap-1.5">
+                    <CalendarClock size={15} className="text-muted" /> Próximos vencimientos
+                  </p>
+                  <div className="space-y-2.5">
+                    {upcoming.slice(0, 5).map((d) => {
+                      const dd = daysTo(d.dueDate!);
+                      return (
+                        <div key={d.id} className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{d.personName}</p>
+                            <p className="text-[11px] text-muted">{dd === 0 ? "Vence hoy" : `Vence en ${dd}d`}</p>
+                          </div>
+                          <p className="text-sm font-bold font-mono text-danger shrink-0">{formatCurrency(d.remainingAmount, d.currency)}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </aside>
+        </div>
       )}
 
       {/* Completed */}

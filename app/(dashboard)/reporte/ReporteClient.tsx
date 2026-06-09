@@ -9,11 +9,11 @@ import {
 import type { ReporteSemanal } from "@/lib/db/reporte-semanal";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
-import { PageHeader } from "@/components/ui/stat";
+import { PageHeader, StatCard } from "@/components/ui/stat";
 import {
   ChevronLeft, ChevronRight,
-  TrendingUp, TrendingDown, Minus,
-  ArrowDownLeft, ArrowUpRight, Flame,
+  TrendingUp, TrendingDown,
+  ArrowDownLeft, ArrowUpRight, Flame, Wallet, PiggyBank,
 } from "lucide-react";
 
 interface Props {
@@ -29,19 +29,6 @@ function fmt(n: number) {
   }).format(n);
   // Normalize compact suffix case — Node.js and browser ICU differ (k vs K, m vs M)
   return s.replace(/\b([kmbt])\b/gi, (c) => c.toUpperCase());
-}
-
-function ChangeTag({ value }: { value: number | null }) {
-  if (value === null) return null;
-  const up = value > 0;
-  const Icon = value === 0 ? Minus : up ? TrendingUp : TrendingDown;
-  const color = up ? "text-danger bg-danger/10" : "text-success bg-success/10";
-  return (
-    <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${color}`}>
-      <Icon size={9} />
-      {Math.abs(value)}%
-    </span>
-  );
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -104,27 +91,15 @@ export function ReporteClient({ reporte: r, currentOffset }: Props) {
         </div>
       ) : (
         <>
-          {/* ── Métricas principales ── */}
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: "Ingresos", value: r.income, color: "text-success", change: r.incomeChange, positiveGood: true },
-              { label: "Gastos",   value: r.expense, color: "text-danger",  change: r.expenseChange, positiveGood: false },
-              { label: "Balance",  value: r.balance, color: r.balance >= 0 ? "text-success" : "text-danger", change: null, positiveGood: true },
-            ].map((m) => (
-              <Card key={m.label}>
-                <CardContent className="p-3 text-center">
-                  <p className="text-[11px] text-muted mb-1">{m.label}</p>
-                  <p className={`text-base font-bold font-mono leading-tight ${m.color}`}>
-                    {fmt(m.value)}
-                  </p>
-                  {m.change !== null && (
-                    <div className="mt-1 flex justify-center">
-                      <ChangeTag value={m.change} />
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+          {/* ── KPIs ── */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatCard label="Ingresos" value={fmt(r.income)} icon={TrendingUp} accent="success"
+              delta={r.incomeChange != null ? `${Math.abs(r.incomeChange)}%` : null} deltaGood={(r.incomeChange ?? 0) >= 0} />
+            <StatCard label="Gastos" value={fmt(r.expense)} icon={TrendingDown} accent="danger"
+              delta={r.expenseChange != null ? `${Math.abs(r.expenseChange)}%` : null} deltaGood={(r.expenseChange ?? 0) <= 0} />
+            <StatCard label="Balance neto" value={fmt(r.balance)} icon={Wallet} accent={r.balance >= 0 ? "primary" : "danger"} />
+            <StatCard label="Tasa de ahorro" value={`${r.savingsRate}%`} icon={PiggyBank}
+              accent={r.savingsRate >= 20 ? "success" : r.savingsRate < 0 ? "danger" : "warning"} />
           </div>
 
           {/* ── Stats secundarias ── */}
@@ -145,6 +120,7 @@ export function ReporteClient({ reporte: r, currentOffset }: Props) {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* ── Gráfico por día ── */}
           <Card>
             <CardContent className="p-4">
@@ -210,6 +186,8 @@ export function ReporteClient({ reporte: r, currentOffset }: Props) {
               </CardContent>
             </Card>
           )}
+
+          </div>
 
           {/* ── Mayor gasto ── */}
           {r.biggestExpense && (

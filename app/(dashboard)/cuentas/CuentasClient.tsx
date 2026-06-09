@@ -14,6 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
 import { createAccountAction, updateAccountAction, deleteAccountAction } from "@/app/actions/accounts";
 import type { SerializedAccount } from "@/lib/db/accounts";
+import type { SerializedTransaction } from "@/lib/db/transactions";
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   CASH: "Efectivo",
@@ -39,9 +40,10 @@ const ACCOUNT_TYPE_ICONS: Record<string, string> = {
 
 interface Props {
   initialAccounts: SerializedAccount[];
+  recentTx: SerializedTransaction[];
 }
 
-export function CuentasClient({ initialAccounts }: Props) {
+export function CuentasClient({ initialAccounts, recentTx }: Props) {
   const [accounts, setAccounts] = useState<SerializedAccount[]>(initialAccounts);
   const [isOpen, setIsOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<SerializedAccount | null>(null);
@@ -216,7 +218,8 @@ export function CuentasClient({ initialAccounts }: Props) {
           }
         />
       ) : (
-        <Card>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-2">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-4">
               <p className="text-sm font-semibold text-foreground">Mis cuentas</p>
@@ -295,6 +298,40 @@ export function CuentasClient({ initialAccounts }: Props) {
             </div>
           </CardContent>
         </Card>
+
+        {/* Aside: últimos movimientos por cuenta */}
+        <aside>
+          <Card>
+            <CardContent className="p-5">
+              <p className="text-sm font-semibold text-foreground mb-3">Últimos movimientos</p>
+              {recentTx.length > 0 ? (
+                <div className="space-y-1">
+                  {recentTx.map((t) => {
+                    const isIncome = t.type === "INCOME";
+                    const isTransfer = t.type === "TRANSFER";
+                    return (
+                      <div key={t.id} className="flex items-center gap-3 py-2">
+                        <span className="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0" style={{ backgroundColor: t.categoryColor ? `${t.categoryColor}22` : "var(--color-surface-2)" }}>
+                          {t.categoryIcon || (isTransfer ? "🔁" : isIncome ? "💰" : "💸")}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground leading-tight truncate">{t.description || t.categoryName || (isTransfer ? "Transferencia" : isIncome ? "Ingreso" : "Gasto")}</p>
+                          <p className="text-xs text-muted truncate">{t.accountName || "—"}</p>
+                        </div>
+                        <p className={`text-sm font-bold font-mono shrink-0 ${isIncome ? "text-success" : isTransfer ? "text-primary" : "text-danger"}`}>
+                          {isIncome ? "+" : isTransfer ? "" : "−"}{formatCurrency(t.amount, t.currency)}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted py-6 text-center">Todavía no hay movimientos este mes.</p>
+              )}
+            </CardContent>
+          </Card>
+        </aside>
+        </div>
       )}
 
       {/* Edit Account Dialog */}

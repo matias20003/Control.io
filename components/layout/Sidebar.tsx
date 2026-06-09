@@ -78,7 +78,7 @@ export function Sidebar() {
             <p className="text-xs font-semibold text-foreground leading-tight">¿Dudas con tus finanzas?</p>
           </div>
           <p className="text-[11px] text-muted leading-snug">
-            Chateá con <span className="text-primary font-medium">C.io →</span>
+            Chateá con <span className="text-primary font-medium">control.io →</span>
           </p>
         </a>
       </div>

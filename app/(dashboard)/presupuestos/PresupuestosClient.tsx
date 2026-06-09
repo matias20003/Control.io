@@ -3,7 +3,7 @@ import { SectionTabs } from "@/components/layout/SectionTabs";
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Target, ChevronLeft, ChevronRight, Wallet, TrendingDown, PiggyBank } from "lucide-react";
+import { Plus, Trash2, Target, ChevronLeft, ChevronRight, Wallet, TrendingDown, PiggyBank, AlertTriangle, Clock, CheckCircle2 } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,6 +90,8 @@ export function PresupuestosClient({
 
   const totalBudgeted = budgets.reduce((s, b) => s + b.amount, 0);
   const totalSpent = budgets.reduce((s, b) => s + b.spent, 0);
+  const overBudgets = budgets.filter((b) => b.percentage >= 100);
+  const alertBudgets = budgets.filter((b) => b.percentage >= b.alertAt && b.percentage < 100);
 
   return (
     <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-5">
@@ -200,7 +202,9 @@ export function PresupuestosClient({
           }
         />
       ) : (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 space-y-2">
+          <p className="text-sm font-semibold text-foreground mb-1">Detalle por categoría</p>
           {budgets.map((b) => {
             const isOver = b.percentage >= 100;
             const isAlert = b.percentage >= b.alertAt && !isOver;
@@ -269,6 +273,45 @@ export function PresupuestosClient({
               </Card>
             );
           })}
+          </div>
+
+          {/* Aside: alertas y recomendaciones */}
+          <aside className="space-y-4">
+            <Card>
+              <CardContent className="p-5">
+                <p className="text-sm font-semibold text-foreground mb-3">Alertas y recomendaciones</p>
+                <div className="space-y-3">
+                  {overBudgets.map((b) => (
+                    <div key={b.id} className="flex gap-3">
+                      <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-surface-2 text-danger"><AlertTriangle size={15} /></span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-danger">{b.categoryName} excedido</p>
+                        <p className="text-xs text-muted mt-0.5 leading-snug">Vas {b.percentage - 100}% por encima del presupuesto.</p>
+                      </div>
+                    </div>
+                  ))}
+                  {alertBudgets.map((b) => (
+                    <div key={b.id} className="flex gap-3">
+                      <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-surface-2 text-warning"><Clock size={15} /></span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-warning">{b.categoryName} cerca del límite</p>
+                        <p className="text-xs text-muted mt-0.5 leading-snug">Llevás {b.percentage}% del presupuesto asignado.</p>
+                      </div>
+                    </div>
+                  ))}
+                  {overBudgets.length === 0 && alertBudgets.length === 0 && (
+                    <div className="flex gap-3">
+                      <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-surface-2 text-success"><CheckCircle2 size={15} /></span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-success">¡Vas por buen camino!</p>
+                        <p className="text-xs text-muted mt-0.5 leading-snug">Todas tus categorías están bajo control este mes.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </aside>
         </div>
       )}
 
