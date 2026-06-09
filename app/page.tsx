@@ -29,6 +29,8 @@ import {
   Zap,
   Brain,
   LineChart,
+  MessageCircle,
+  Mic,
 } from "lucide-react";
 
 export const metadata = {
@@ -60,6 +62,7 @@ export default async function LandingPage() {
         <Hero isLogged={isLogged} />
         <TrustStrip />
         <Pillars />
+        <AssistantSection isLogged={isLogged} />
         <Features />
         <SecuritySection />
         <HowItWorks />
@@ -178,10 +181,11 @@ function Hero({ isLogged }: { isLogged: boolean }) {
           </h1>
 
           <p className="mt-6 max-w-xl text-base leading-relaxed text-muted sm:text-lg">
-            Reemplazá el Excel y los apps que venden tus datos. control.io
-            unifica cuentas, movimientos, metas, inversiones, deudas y reportes
-            en un sistema rápido, encriptado y diseñado para que finalmente
-            sepas a dónde se va cada peso.
+            Reemplazá el Excel y los apps que venden tus datos. control.io unifica
+            cuentas, movimientos, metas, deudas y reportes — y suma un{" "}
+            <span className="font-semibold text-foreground">asistente de IA por WhatsApp</span>{" "}
+            que carga tus gastos por texto, audio o foto y te responde con tus números reales.
+            Rápido, encriptado y para que finalmente sepas a dónde se va cada peso.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -210,6 +214,10 @@ function Hero({ isLogged }: { isLogged: boolean }) {
           </div>
 
           <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-3 text-xs text-muted">
+            <li className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-success" />
+              Asistente de IA por WhatsApp
+            </li>
             <li className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-success" />
               Sin tarjeta de crédito
@@ -484,8 +492,162 @@ function Pillars() {
 
 /* ───────────────────────── Features ───────────────────────── */
 
+/* ───────────────── Asistente de IA por WhatsApp ───────────────── */
+
+function ChatBubble({
+  side,
+  audio,
+  children,
+}: {
+  side: "in" | "out";
+  audio?: boolean;
+  children?: React.ReactNode;
+}) {
+  const out = side === "out";
+  return (
+    <div className={`flex ${out ? "justify-end" : "justify-start"}`}>
+      <div
+        className={`max-w-[82%] whitespace-pre-line rounded-2xl px-3 py-2 text-[13px] leading-snug shadow-sm ${
+          out
+            ? "rounded-br-sm bg-emerald-700 text-white"
+            : "rounded-bl-sm bg-[#202c33] text-slate-100"
+        }`}
+      >
+        {audio ? (
+          <span className="flex items-center gap-2 py-0.5">
+            <Mic className="h-4 w-4 shrink-0" />
+            <span className="h-1 w-28 rounded-full bg-white/40" />
+            <span className="text-[11px] text-white/70">0:07</span>
+          </span>
+        ) : (
+          children
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChatMock() {
+  return (
+    <div className="relative mx-auto w-full max-w-sm">
+      <div className="absolute -inset-6 -z-10 rounded-[2.5rem] bg-gradient-to-br from-emerald-500/30 via-primary/15 to-transparent blur-2xl" />
+      <div className="overflow-hidden rounded-[2rem] border border-border bg-surface shadow-2xl">
+        {/* Header estilo WhatsApp */}
+        <div className="flex items-center gap-3 bg-emerald-600 px-4 py-3 text-white">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-base font-semibold">
+            c
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold leading-tight">control.io</p>
+            <p className="text-[11px] text-white/80">en línea · escribiendo…</p>
+          </div>
+        </div>
+        {/* Cuerpo del chat */}
+        <div className="space-y-2.5 bg-[#0b141a] px-3 py-4">
+          <ChatBubble side="out">gasté 5 lucas en el súper 🛒</ChatBubble>
+          <ChatBubble side="in">
+            🔴 <strong>-$5.000</strong> · Súper{"\n"}🏷️ Comida · 🏦 Mercado Pago
+          </ChatBubble>
+          <ChatBubble side="out" audio />
+          <ChatBubble side="in">
+            🟢 <strong>+$400.000</strong> · Sueldo{"\n"}🏦 Banco Galicia
+          </ChatBubble>
+          <ChatBubble side="out">📷 (foto de un ticket)</ChatBubble>
+          <ChatBubble side="in">
+            🔴 <strong>-$12.480</strong> · Farmacia{"\n"}🏷️ Salud · leí el total del ticket
+          </ChatBubble>
+          <ChatBubble side="out">¿cómo vengo este mes?</ChatBubble>
+          <ChatBubble side="in">
+            Vas <strong>+$311.610</strong> 👏{"\n"}Ahorraste <strong>24%</strong> más que en
+            mayo. Tu mayor gasto es Comida ($88.390). ¿Te armo un presupuesto?
+          </ChatBubble>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AssistantSection({ isLogged }: { isLogged: boolean }) {
+  const points = [
+    {
+      icon: MessageCircle,
+      t: "Registrá hablando",
+      d: "“Gasté 5 lucas en el súper” y listo. Texto, audio o la foto de un ticket: lo carga solo con cuenta y categoría.",
+    },
+    {
+      icon: Brain,
+      t: "Preguntale y analizá",
+      d: "“¿Cómo vengo este mes?”, “¿en qué gasto de más?”. Te responde con tus números reales y consejos concretos.",
+    },
+    {
+      icon: ShieldCheck,
+      t: "Privado y con memoria",
+      d: "Tus conversaciones viajan cifradas. Te conoce: tus metas, tus hábitos y tu plata.",
+    },
+  ];
+
+  return (
+    <section className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24">
+      <div className="grid items-center gap-12 lg:grid-cols-2">
+        {/* Copy */}
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-400 backdrop-blur">
+            <Sparkles className="h-3.5 w-3.5" />
+            <span className="uppercase tracking-widest">Asistente de IA · Por WhatsApp</span>
+          </div>
+
+          <h2 className="mt-5 text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
+            Tu asesor financiero,
+            <br />
+            <span className="text-primary">en tu WhatsApp.</span>
+          </h2>
+
+          <p className="mt-5 max-w-lg text-base leading-relaxed text-muted">
+            Sin abrir la app. Mandale un texto, un audio o la foto de un ticket y queda
+            registrado al instante. Preguntale lo que quieras y te contesta con tus datos
+            reales — como un contador que tenés en el bolsillo, 24/7.
+          </p>
+
+          <ul className="mt-8 space-y-5">
+            {points.map((p) => (
+              <li key={p.t} className="flex gap-3.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <p.icon className="h-4 w-4" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{p.t}</p>
+                  <p className="mt-0.5 text-sm leading-relaxed text-muted">{p.d}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {!isLogged && (
+            <div className="mt-9">
+              <Link href="/register">
+                <Button size="lg" className="gap-2">
+                  Probar el asistente gratis
+                  <ArrowRight className="h-5 w-5" />
+                </Button>
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* Mockup de chat */}
+        <ChatMock />
+      </div>
+    </section>
+  );
+}
+
 function Features() {
   const features = [
+    {
+      icon: MessageCircle,
+      title: "Asistente de IA por WhatsApp",
+      body: "Registrá por texto, audio o foto y preguntale lo que quieras. Tu asesor financiero, sin abrir la app.",
+    },
     {
       icon: ArrowUpDown,
       title: "Movimientos ágiles",
