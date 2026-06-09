@@ -14,6 +14,7 @@ import {
   ChevronLeft, ChevronRight,
   TrendingUp, TrendingDown,
   ArrowDownLeft, ArrowUpRight, Flame, Wallet, PiggyBank,
+  Trophy, Activity, ArrowDownRight,
 } from "lucide-react";
 
 interface Props {
@@ -55,6 +56,9 @@ export function ReporteClient({ reporte: r, currentOffset }: Props) {
   const hasData = r.income > 0 || r.expense > 0;
 
   const weekRange = `${new Date(r.weekStart).toLocaleDateString("es-AR", { day: "numeric", month: "short" })} – ${new Date(r.weekEnd).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}`;
+
+  const bestDay = r.byDay.length ? [...r.byDay].sort((a, b) => (b.income - b.expense) - (a.income - a.expense))[0] : null;
+  const topExpenseDay = r.byDay.length ? [...r.byDay].sort((a, b) => b.expense - a.expense)[0] : null;
 
   return (
     <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-5">
@@ -208,6 +212,39 @@ export function ReporteClient({ reporte: r, currentOffset }: Props) {
               </p>
             </div>
           )}
+
+          {/* ── Resumen de la semana ── */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="p-5 flex items-center gap-3">
+                <span className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-success/10 text-success"><Trophy size={18} /></span>
+                <div>
+                  <p className="text-xs text-muted">Mejor día</p>
+                  <p className="text-lg font-bold text-foreground capitalize leading-tight">{bestDay?.label ?? "—"}</p>
+                  {bestDay && <p className="text-xs font-mono text-success">{fmt(bestDay.income - bestDay.expense)}</p>}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-5 flex items-center gap-3">
+                <span className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-primary/10 text-primary"><Activity size={18} /></span>
+                <div>
+                  <p className="text-xs text-muted">Gasto promedio diario</p>
+                  <p className="text-lg font-bold font-mono text-foreground leading-tight">{fmt(r.avgDailyExpense)}</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-5 flex items-center gap-3">
+                <span className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-danger/10 text-danger"><ArrowDownRight size={18} /></span>
+                <div>
+                  <p className="text-xs text-muted">Día de mayor gasto</p>
+                  <p className="text-lg font-bold text-foreground capitalize leading-tight">{topExpenseDay?.label ?? "—"}</p>
+                  {topExpenseDay && <p className="text-xs font-mono text-danger">{fmt(topExpenseDay.expense)}</p>}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* ── Lista de transacciones ── */}
           <div className="space-y-2">
