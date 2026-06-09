@@ -206,6 +206,9 @@ export default async function AdminPage() {
   }
 
   const s = await getStats();
+  const feedback = await prisma.feedback
+    .findMany({ orderBy: { createdAt: "desc" }, take: 50 })
+    .catch(() => []);
   const now = new Date();
   const monthName = now.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
   const waAccent = s.whatsapp.percent >= 80 ? "text-danger" : s.whatsapp.percent >= 60 ? "text-warning" : "text-success";
@@ -234,6 +237,31 @@ export default async function AdminPage() {
             Métricas del sistema — actualizado {now.toLocaleString("es-AR")}
           </p>
         </div>
+
+        {/* Feedback de testers — lo primero del beta */}
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
+            Feedback de testers ({feedback.length})
+          </h2>
+          {feedback.length === 0 ? (
+            <p className="rounded-xl border border-border bg-surface p-4 text-sm text-muted">
+              Todavía no hay feedback. Aparece acá apenas un tester use el botón “Feedback”.
+            </p>
+          ) : (
+            <div className="space-y-2.5">
+              {feedback.map((f) => (
+                <div key={f.id} className="rounded-xl border border-border bg-surface p-4">
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{f.message}</p>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted">
+                    <span>{f.email ?? "anónimo"}</span>
+                    {f.page && <span>· {f.page}</span>}
+                    <span>· {new Date(f.createdAt).toLocaleString("es-AR")}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* Waitlist — primera sección porque es lo que se llena ahora */}
         <section className="space-y-3">
