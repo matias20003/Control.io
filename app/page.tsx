@@ -67,7 +67,7 @@ export default async function LandingPage() {
         <Reveal><TrustStrip /></Reveal>
         <Reveal><Pillars /></Reveal>
         <LiveDashboard />
-        <Reveal><AssistantSection isLogged={isLogged} /></Reveal>
+        <AssistantSection isLogged={isLogged} />
         <Reveal><Features /></Reveal>
         <Reveal><SecuritySection /></Reveal>
         <Scrollytelling />
