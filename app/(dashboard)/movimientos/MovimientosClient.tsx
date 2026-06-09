@@ -19,7 +19,9 @@ import {
   TrendingUp,
   TrendingDown,
   Scale,
+  Plus,
 } from "lucide-react";
+import { createCategoryAction } from "@/app/actions/categories";
 import { PageHeader, StatCard } from "@/components/ui/stat";
 import { DailyFlowChart, ActivityHeatmap } from "./MovimientosCharts";
 import { Button } from "@/components/ui/button";
@@ -236,6 +238,36 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
     const [showMore, setShowMore] = useState(
       !!(defaultValues?.notes || (defaultValues?.currency && defaultValues.currency !== "ARS"))
     );
+    // Crear categoría inline: la nueva queda en estado LOCAL del form para no
+    // remontarlo (no se pierde lo ya tipeado). Se persiste igual en la BD.
+    const [extraCats, setExtraCats] = useState<SerializedCategory[]>([]);
+    const [catId, setCatId] = useState(defaultValues?.categoryId ?? "");
+    const [addingCat, setAddingCat] = useState(false);
+    const [newCatName, setNewCatName] = useState("");
+    const [newCatIcon, setNewCatIcon] = useState("");
+    const [creatingCat, setCreatingCat] = useState(false);
+    const allCats = [...cats, ...extraCats.filter((c) => c.type === type)];
+
+    const createCat = async () => {
+      if (!newCatName.trim() || type === "TRANSFER") return;
+      setCreatingCat(true);
+      const fd = new FormData();
+      fd.set("name", newCatName.trim());
+      fd.set("type", type);
+      if (newCatIcon.trim()) fd.set("icon", newCatIcon.trim());
+      const res = await createCategoryAction(fd);
+      setCreatingCat(false);
+      if ("category" in res && res.category) {
+        setExtraCats((prev) => [...prev, res.category as SerializedCategory]);
+        setCatId(res.category.id);
+        setAddingCat(false);
+        setNewCatName("");
+        setNewCatIcon("");
+        toast.success("Categoría creada ✓");
+      } else {
+        toast.error("error" in res && res.error ? res.error : "No se pudo crear la categoría");
+      }
+    };
     return (
       <>
         <div className="flex rounded-xl overflow-hidden border border-border mb-5">
@@ -279,19 +311,40 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
 
           {type !== "TRANSFER" && (
             <div className="space-y-1.5">
-              <Label htmlFor="f-category">Categoría</Label>
-              <Select id="f-category" name="categoryId" defaultValue={defaultValues?.categoryId ?? ""}>
-                <option value="">Sin categoría</option>
-                {cats.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-              </Select>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="f-category">Categoría</Label>
+                <button type="button" onClick={() => setAddingCat((v) => !v)}
+                  className="text-xs text-primary hover:underline inline-flex items-center gap-0.5">
+                  {addingCat ? "Cancelar" : <><Plus size={12} /> Nueva</>}
+                </button>
+              </div>
+              {addingCat ? (
+                <>
+                  <div className="flex gap-2">
+                    <Input value={newCatIcon} onChange={(e) => setNewCatIcon(e.target.value)} maxLength={2} placeholder="🍔" className="w-14 text-center" />
+                    <Input value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
+                      placeholder={`Categoría de ${type === "INCOME" ? "ingreso" : "gasto"}`} className="flex-1"
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createCat(); } }} />
+                    <Button type="button" variant="secondary" className="shrink-0" disabled={creatingCat || !newCatName.trim()} onClick={createCat}>
+                      {creatingCat ? "..." : "Crear"}
+                    </Button>
+                  </div>
+                  <input type="hidden" name="categoryId" value={catId} />
+                </>
+              ) : (
+                <Select id="f-category" name="categoryId" value={catId} onChange={(e) => setCatId(e.target.value)}>
+                  <option value="">Sin categoría</option>
+                  {allCats.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                </Select>
+              )}
             </div>
           )}
 
           {type !== "TRANSFER" ? (
             <div className="space-y-1.5">
-              <Label htmlFor="f-account">Cuenta</Label>
-              <Select id="f-account" name="accountId" defaultValue={defaultValues?.accountId ?? ""}>
-                <option value="">Sin cuenta</option>
+              <Label htmlFor="f-account">Cuenta {accounts.length > 0 ? "*" : ""}</Label>
+              <Select id="f-account" name="accountId" defaultValue={defaultValues?.accountId ?? ""} required={accounts.length > 0}>
+                <option value="" disabled={accounts.length > 0}>{accounts.length > 0 ? "Seleccioná una cuenta" : "Sin cuenta"}</option>
                 {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
               </Select>
             </div>

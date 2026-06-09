@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, ChevronDown } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { createTransactionAction } from "@/app/actions/transactions";
+import { createCategoryAction } from "@/app/actions/categories";
 import { formatCurrency } from "@/lib/utils";
 import type { SerializedAccount } from "@/lib/db/accounts";
 import type { SerializedCategory } from "@/lib/db/categories";
@@ -79,6 +80,35 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
   /* ── Formulario reutilizable ── */
   const QuickForm = () => {
     const [showMore, setShowMore] = useState(false);
+    // Crear categoría inline (queda en estado local del form, no remonta).
+    const [extraCats, setExtraCats] = useState<SerializedCategory[]>([]);
+    const [catId, setCatId] = useState(lastDefaults.categoryId ?? "");
+    const [addingCat, setAddingCat] = useState(false);
+    const [newCatName, setNewCatName] = useState("");
+    const [newCatIcon, setNewCatIcon] = useState("");
+    const [creatingCat, setCreatingCat] = useState(false);
+    const allCats = [...filteredCategories, ...extraCats.filter((c) => c.type === txType)];
+
+    const createCat = async () => {
+      if (!newCatName.trim() || txType === "TRANSFER") return;
+      setCreatingCat(true);
+      const fd = new FormData();
+      fd.set("name", newCatName.trim());
+      fd.set("type", txType);
+      if (newCatIcon.trim()) fd.set("icon", newCatIcon.trim());
+      const res = await createCategoryAction(fd);
+      setCreatingCat(false);
+      if ("category" in res && res.category) {
+        setExtraCats((prev) => [...prev, res.category as SerializedCategory]);
+        setCatId(res.category.id);
+        setAddingCat(false);
+        setNewCatName("");
+        setNewCatIcon("");
+        toast.success("Categoría creada ✓");
+      } else {
+        toast.error("error" in res && res.error ? res.error : "No se pudo crear la categoría");
+      }
+    };
     return (
       <>
         <div className="flex rounded-xl overflow-hidden border border-border mb-5">
@@ -119,21 +149,42 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
 
           {txType !== "TRANSFER" && (
             <div className="space-y-1.5">
-              <Label htmlFor="dqa-category">Categoría</Label>
-              <Select id="dqa-category" name="categoryId" defaultValue={lastDefaults.categoryId ?? ""}>
-                <option value="">Sin categoría</option>
-                {filteredCategories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-                ))}
-              </Select>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="dqa-category">Categoría</Label>
+                <button type="button" onClick={() => setAddingCat((v) => !v)}
+                  className="text-xs text-primary hover:underline inline-flex items-center gap-0.5">
+                  {addingCat ? "Cancelar" : <><Plus size={12} /> Nueva</>}
+                </button>
+              </div>
+              {addingCat ? (
+                <>
+                  <div className="flex gap-2">
+                    <Input value={newCatIcon} onChange={(e) => setNewCatIcon(e.target.value)} maxLength={2} placeholder="🍔" className="w-14 text-center" />
+                    <Input value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
+                      placeholder={`Categoría de ${txType === "INCOME" ? "ingreso" : "gasto"}`} className="flex-1"
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createCat(); } }} />
+                    <Button type="button" variant="secondary" className="shrink-0" disabled={creatingCat || !newCatName.trim()} onClick={createCat}>
+                      {creatingCat ? "..." : "Crear"}
+                    </Button>
+                  </div>
+                  <input type="hidden" name="categoryId" value={catId} />
+                </>
+              ) : (
+                <Select id="dqa-category" name="categoryId" value={catId} onChange={(e) => setCatId(e.target.value)}>
+                  <option value="">Sin categoría</option>
+                  {allCats.map((c) => (
+                    <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                  ))}
+                </Select>
+              )}
             </div>
           )}
 
           {txType !== "TRANSFER" ? (
             <div className="space-y-1.5">
-              <Label htmlFor="dqa-account">Cuenta</Label>
-              <Select id="dqa-account" name="accountId" defaultValue={lastDefaults.accountId ?? ""}>
-                <option value="">Sin cuenta</option>
+              <Label htmlFor="dqa-account">Cuenta {accounts.length > 0 ? "*" : ""}</Label>
+              <Select id="dqa-account" name="accountId" defaultValue={lastDefaults.accountId ?? ""} required={accounts.length > 0}>
+                <option value="" disabled={accounts.length > 0}>{accounts.length > 0 ? "Seleccioná una cuenta" : "Sin cuenta"}</option>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
                 ))}

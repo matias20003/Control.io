@@ -140,9 +140,6 @@ function findAccount(c: FinancialContext, name: string | null | undefined) {
   );
 }
 
-function defaultAccount(c: FinancialContext) {
-  return c.accounts.find((a) => a.type === "CASH") ?? c.accounts[0] ?? null;
-}
 
 // ─────────────────────────── Contexto para el LLM ───────────────────────────
 
@@ -284,6 +281,12 @@ solo para el registro", "no toques el saldo", "esto ya está en mi plata actual"
 movimientos históricos de un mes ya pasado. En ese caso NO se asocia a ninguna cuenta. Para un
 movimiento normal de ahora (que SÍ debe descontar/sumar a la cuenta), dejá reportOnly en false.
 
+CUENTA OBLIGATORIA: para un gasto o ingreso REAL (reportOnly en false) SIEMPRE necesitás saber
+CON QUÉ CUENTA es (Efectivo, Mercado Pago, banco, etc.). Si el usuario NO mencionó la cuenta y
+tiene MÁS DE UNA, NO registres todavía: respondé (intent "chat") preguntando con qué cuenta fue,
+nombrando las cuentas disponibles. Recién cuando sepas la cuenta emití la acción con "account".
+Si tiene UNA sola cuenta, usala sin preguntar.
+
 FECHAS: el campo "date" (formato "YYYY-MM-DD") es opcional. Si el usuario dice CUÁNDO fue el
 movimiento ("ayer", "anteayer", "el lunes", "el mes pasado", "el 5 de mayo", "la semana pasada"),
 calculá la fecha respecto de HOY (${c.today}) y ponela en "date". Si solo dice el mes sin día,
@@ -389,7 +392,19 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       if (!a.amount || a.amount <= 0) throw new Error("monto inválido");
       const cat = findCategory(c, a.category, type);
       // "reportOnly" → sin cuenta: queda en el reporte pero no mueve el saldo/patrimonio.
-      const acc = a.reportOnly ? null : findAccount(c, a.account) ?? defaultAccount(c);
+      // Backstop de "cuenta obligatoria": si es un movimiento real y no se aclaró
+      // la cuenta, con 1 sola cuenta la usamos; con 2+ preguntamos en vez de
+      // adivinar; con 0 cuentas se registra sin asociar.
+      let acc: SerializedAccount | null = null;
+      if (!a.reportOnly) {
+        acc = findAccount(c, a.account) ?? null;
+        if (!acc) {
+          if (c.accounts.length === 1) acc = c.accounts[0];
+          else if (c.accounts.length >= 2) {
+            return `📌 ¿Con qué cuenta registro ${type === "EXPENSE" ? "este gasto" : "este ingreso"} de ${money(a.amount, cur)}${a.description ? ` (${a.description})` : ""}? Tenés: ${c.accounts.map((x) => x.name).join(", ")}.`;
+          }
+        }
+      }
       const txDate = resolveDate(a.date, isoDate);
       await createTransaction(userId, {
         type,
