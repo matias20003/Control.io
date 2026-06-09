@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ArrowUpDown, Wallet, Target, HandCoins,
-  CreditCard, BarChart3, Settings, LogOut, MessageCircle,
+  CreditCard, BarChart3, MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
-import { signOutAction } from "@/app/actions/auth";
 
+// Configuración y Cerrar sesión viven en el menú del perfil (Topbar). En
+// mobile, Configuración está en "Más" y el logout dentro de Configuración.
 const navItems = [
   { href: "/dashboard",     icon: LayoutDashboard, label: "Inicio" },
   { href: "/movimientos",   icon: ArrowUpDown,     label: "Movimientos" },
@@ -18,7 +19,6 @@ const navItems = [
   { href: "/deudas",        icon: HandCoins,       label: "Deudas" },
   { href: "/cuotas",        icon: CreditCard,      label: "Cuotas" },
   { href: "/reporte",       icon: BarChart3,       label: "Análisis", match: ["/reporte", "/tendencias"] },
-  { href: "/configuracion", icon: Settings,        label: "Configuración" },
 ];
 
 export function Sidebar() {
@@ -64,7 +64,7 @@ export function Sidebar() {
       </nav>
 
       {/* Asistente C.io */}
-      <div className="px-2.5 pb-1">
+      <div className="px-2.5 pb-4 pt-1">
         <a
           href="https://wa.me/5493416041118"
           target="_blank"
@@ -81,23 +81,6 @@ export function Sidebar() {
             Chateá con <span className="text-primary font-medium">control.io →</span>
           </p>
         </a>
-      </div>
-
-      {/* Sign out */}
-      <div className="px-2.5 py-3 border-t border-[color:var(--glass-border)]">
-        <form action={signOutAction}>
-          <button
-            type="submit"
-            className={cn(
-              "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm w-full",
-              "text-muted hover:text-danger hover:bg-danger/8 transition-all duration-150",
-              "cursor-pointer font-normal"
-            )}
-          >
-            <LogOut size={15} strokeWidth={1.7} />
-            Cerrar sesión
-          </button>
-        </form>
       </div>
     </aside>
   );
