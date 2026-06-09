@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { registerAction, verifyOtpAction } from "@/app/actions/auth";
+import { GoogleButton } from "@/components/auth/GoogleButton";
 
 const schema = z
   .object({
@@ -146,6 +147,16 @@ export default function RegisterPage() {
       <div>
         <h1 className="text-2xl font-bold text-foreground tracking-tight">Crear cuenta</h1>
         <p className="mt-1.5 text-sm text-muted">Empezá a controlar tus finanzas hoy</p>
+      </div>
+
+      {/* Registro con Google */}
+      <GoogleButton label="Registrarme con Google" />
+
+      {/* Divisor */}
+      <div className="flex items-center gap-3">
+        <span className="h-px flex-1 bg-border" />
+        <span className="text-xs text-muted">o con tu email</span>
+        <span className="h-px flex-1 bg-border" />
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">

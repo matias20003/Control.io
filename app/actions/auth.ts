@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { z } from "zod";
 
 const loginSchema = z.object({
@@ -55,6 +56,33 @@ export async function loginAction(formData: FormData) {
   }
 
   redirect("/dashboard");
+}
+
+export async function signInWithGoogleAction() {
+  const supabase = await createClient();
+
+  // El origin del request cubre localhost y producción sin hardcodear.
+  // Caemos a NEXT_PUBLIC_SITE_URL si por algún motivo no viene la cabecera.
+  const hdrs = await headers();
+  const origin =
+    hdrs.get("origin") ??
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    "http://localhost:3000";
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      // Reutilizamos el callback que ya hace exchangeCodeForSession.
+      redirectTo: `${origin}/auth/callback?next=/dashboard`,
+    },
+  });
+
+  if (error || !data?.url) {
+    return { error: "No se pudo conectar con Google. Intentá de nuevo." };
+  }
+
+  // data.url es la pantalla de consentimiento de Google.
+  redirect(data.url);
 }
 
 export async function registerAction(formData: FormData) {

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { loginAction } from "@/app/actions/auth";
+import { GoogleButton } from "@/components/auth/GoogleButton";
 import { cn } from "@/lib/utils";
 
 const schema = z.object({
@@ -50,6 +51,16 @@ export default function LoginPage() {
         <p className="mt-1.5 text-sm text-muted">
           Ingresá a tu cuenta para continuar
         </p>
+      </div>
+
+      {/* Acceso con Google */}
+      <GoogleButton label="Ingresar con Google" />
+
+      {/* Divisor */}
+      <div className="flex items-center gap-3">
+        <span className="h-px flex-1 bg-border" />
+        <span className="text-xs text-muted">o con tu email</span>
+        <span className="h-px flex-1 bg-border" />
       </div>
 
       {/* Formulario */}
