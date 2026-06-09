@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { signOutAction, updatePasswordAction } from "@/app/actions/auth";
 import { deleteAllDataAction } from "@/app/actions/data";
 import { NotificacionesCard } from "./NotificacionesCard";
+import { ReporteSemanalCard } from "./ReporteSemanalCard";
 import { TwoFactorCard } from "./TwoFactorCard";
 import { WhatsappCard } from "./WhatsappCard";
 import { AppearanceCard } from "./AppearanceCard";
@@ -174,6 +175,7 @@ export function ProfileTab({
     { cat: "Asistente de WhatsApp", title: "Asistente de WhatsApp", kw: "whatsapp bot asistente numero mensajes audios chat", node: <WhatsappCard initialNumber={whatsappNumber} /> },
     { cat: "Seguridad", title: "Verificación en dos pasos", kw: "seguridad 2fa dos factores autenticacion codigos mfa autenticador", node: <TwoFactorCard mfaEnabled={mfaEnabled} recoveryCodesRemaining={recoveryCodesRemaining} /> },
     { cat: "Notificaciones", title: "Notificaciones", kw: "notificaciones push alertas avisos recordatorios", node: <NotificacionesCard /> },
+    { cat: "Notificaciones", title: "Reporte semanal por email", kw: "reporte semanal email correo resumen dia horario semana", node: <ReporteSemanalCard /> },
     { cat: "Datos", title: "Zona de peligro", kw: "eliminar borrar datos peligro reset limpiar", node: dangerCard },
   ];
 

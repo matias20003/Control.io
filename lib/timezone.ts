@@ -37,3 +37,13 @@ export function todayStringArg(): string {
   const nowInArg = toZonedTime(new Date(), ARG_TZ);
   return nowInArg.toISOString().slice(0, 10);
 }
+
+/**
+ * Día de la semana y hora actuales según Argentina.
+ * weekday: 0=Domingo … 6=Sábado (igual que Date.getDay()). hour: 0–23.
+ * Útil para crons que disparan según la preferencia horaria del usuario.
+ */
+export function nowArgParts(): { weekday: number; hour: number } {
+  const nowInArg = toZonedTime(new Date(), ARG_TZ);
+  return { weekday: nowInArg.getDay(), hour: nowInArg.getHours() };
+}

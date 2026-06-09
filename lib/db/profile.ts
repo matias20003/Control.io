@@ -83,3 +83,54 @@ export async function setWhatsappNumber(
   });
   return updated.whatsappNumber;
 }
+
+export type ReportPrefs = {
+  enabled: boolean;
+  /** 0=Domingo … 6=Sábado (JS getDay). null si nunca se configuró. */
+  day: number | null;
+  /** 0–23, hora Argentina. null si nunca se configuró. */
+  hour: number | null;
+};
+
+/** Preferencia de reporte semanal por email del usuario. */
+export async function getReportPrefs(userId: string): Promise<ReportPrefs> {
+  const p = await prisma.profile.findUnique({
+    where: { id: userId },
+    select: { weeklyReportEnabled: true, weeklyReportDay: true, weeklyReportHour: true },
+  });
+  return {
+    enabled: p?.weeklyReportEnabled ?? false,
+    day: p?.weeklyReportDay ?? null,
+    hour: p?.weeklyReportHour ?? null,
+  };
+}
+
+/** Actualiza la preferencia de reporte semanal. Valida rangos (day 0–6, hour 0–23). */
+export async function updateReportPrefs(
+  userId: string,
+  email: string,
+  name: string | undefined,
+  prefs: ReportPrefs
+): Promise<ReportPrefs> {
+  await getOrCreateProfile(userId, email, name);
+
+  const day =
+    prefs.day == null ? null : Math.min(6, Math.max(0, Math.trunc(prefs.day)));
+  const hour =
+    prefs.hour == null ? null : Math.min(23, Math.max(0, Math.trunc(prefs.hour)));
+
+  const updated = await prisma.profile.update({
+    where: { id: userId },
+    data: {
+      weeklyReportEnabled: prefs.enabled,
+      weeklyReportDay: day,
+      weeklyReportHour: hour,
+    },
+    select: { weeklyReportEnabled: true, weeklyReportDay: true, weeklyReportHour: true },
+  });
+  return {
+    enabled: updated.weeklyReportEnabled,
+    day: updated.weeklyReportDay,
+    hour: updated.weeklyReportHour,
+  };
+}
