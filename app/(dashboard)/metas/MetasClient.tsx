@@ -3,7 +3,7 @@ import { SectionTabs } from "@/components/layout/SectionTabs";
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, PiggyBank, DollarSign, Target, TrendingUp } from "lucide-react";
+import { Plus, Trash2, PiggyBank, DollarSign, Target, TrendingUp, Pencil } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,22 +15,39 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   createGoalAction,
+  updateGoalAction,
   addFundsAction,
   deleteGoalAction,
 } from "@/app/actions/goals";
 import type { SerializedGoal } from "@/lib/db/goals";
+import type { SerializedAccount } from "@/lib/db/accounts";
 
 interface Props {
   initialGoals: SerializedGoal[];
+  accounts: SerializedAccount[];
 }
 
-export function MetasClient({ initialGoals }: Props) {
+export function MetasClient({ initialGoals, accounts }: Props) {
   const [goals, setGoals] = useState<SerializedGoal[]>(initialGoals);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<SerializedGoal | null>(null);
   const [fundingGoal, setFundingGoal] = useState<SerializedGoal | null>(null);
   const [fundAmount, setFundAmount] = useState("");
   const [isPending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleUpdate = (formData: FormData) => {
+    if (!editingGoal) return;
+    startTransition(async () => {
+      const result = await updateGoalAction(editingGoal.id, formData);
+      if (result.error) toast.error(result.error);
+      else if (result.success && result.goal) {
+        setGoals((prev) => prev.map((g) => (g.id === editingGoal.id ? result.goal! : g)));
+        setEditingGoal(null);
+        toast.success("Meta actualizada");
+      }
+    });
+  };
 
   const active = goals.filter((g) => !g.isCompleted);
   const completed = goals.filter((g) => g.isCompleted);
@@ -148,6 +165,9 @@ export function MetasClient({ initialGoals }: Props) {
                           : `Vencida ${formatDate(g.deadline)}`}
                       </p>
                     )}
+                    {g.accountName && (
+                      <p className="text-xs text-muted">🏦 {g.accountName}</p>
+                    )}
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">
@@ -188,6 +208,14 @@ export function MetasClient({ initialGoals }: Props) {
                   <DollarSign size={12} className="mr-1" />
                   Agregar
                 </Button>
+                <button
+                  onClick={() => setEditingGoal(g)}
+                  disabled={isPending}
+                  title="Editar meta"
+                  className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+                >
+                  <Pencil size={13} />
+                </button>
                 <button
                   onClick={() => handleDelete(g.id)}
                   disabled={deletingId === g.id || isPending}
@@ -279,6 +307,17 @@ export function MetasClient({ initialGoals }: Props) {
               </div>
             </div>
 
+            <div className="space-y-1.5">
+              <Label htmlFor="goal-account">Cuenta</Label>
+              <Select id="goal-account" name="accountId" defaultValue="">
+                <option value="">Sin cuenta asignada</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>{a.icon || "🏦"} {a.name} ({a.currency})</option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted">Dónde guardás el dinero de esta meta (opcional).</p>
+            </div>
+
             <div className="flex gap-2 pt-1">
               <Button type="button" variant="ghost" className="flex-1" onClick={() => setIsCreateOpen(false)}>Cancelar</Button>
               <Button type="submit" className="flex-1" disabled={isPending}>{isPending ? "Creando..." : "Crear"}</Button>
@@ -286,6 +325,69 @@ export function MetasClient({ initialGoals }: Props) {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Edit dialog */}
+      {editingGoal && (
+        <Dialog open={!!editingGoal} onOpenChange={(o) => { if (!o) setEditingGoal(null); }}>
+          <DialogContent title="Editar meta">
+            <form action={handleUpdate} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-goal-name">Nombre *</Label>
+                <Input id="edit-goal-name" name="name" defaultValue={editingGoal.name} required />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-goal-target">Objetivo *</Label>
+                  <Input id="edit-goal-target" name="targetAmount" type="number" step="0.01" defaultValue={editingGoal.targetAmount} required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-goal-currency">Moneda</Label>
+                  <Select id="edit-goal-currency" name="currency" defaultValue={editingGoal.currency}>
+                    <option value="ARS">ARS</option>
+                    <option value="USD">USD</option>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-goal-deadline">Fecha límite</Label>
+                <Input id="edit-goal-deadline" name="deadline" type="date" defaultValue={editingGoal.deadline ? editingGoal.deadline.split("T")[0] : ""} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-goal-icon">Ícono</Label>
+                  <Input id="edit-goal-icon" name="icon" maxLength={4} defaultValue={editingGoal.icon ?? ""} placeholder="🎯" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-goal-color">Color</Label>
+                  <div className="flex gap-2 items-center">
+                    <Input id="edit-goal-color" name="color" type="color" defaultValue={editingGoal.color ?? "#38bdf8"} className="h-10 w-12 p-1 cursor-pointer" />
+                    <span className="text-xs text-muted">Opcional</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-goal-account">Cuenta</Label>
+                <Select id="edit-goal-account" name="accountId" defaultValue={editingGoal.accountId ?? ""}>
+                  <option value="">Sin cuenta asignada</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>{a.icon || "🏦"} {a.name} ({a.currency})</option>
+                  ))}
+                </Select>
+                <p className="text-xs text-muted">Dónde guardás el dinero de esta meta (opcional).</p>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <Button type="button" variant="ghost" className="flex-1" onClick={() => setEditingGoal(null)}>Cancelar</Button>
+                <Button type="submit" className="flex-1" disabled={isPending}>{isPending ? "Guardando..." : "Guardar"}</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Add funds dialog */}
       {fundingGoal && (

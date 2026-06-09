@@ -104,6 +104,7 @@ model Account {
   transactionsTo        Transaction[]          @relation("ToAccount")
   creditPurchases       CreditPurchase[]
   recurringTransactions RecurringTransaction[]
+  goals                 Goal[]
 
   @@index([userId])
   @@map("accounts")
@@ -307,6 +308,8 @@ model Goal {
   deadline      DateTime?
   icon          String?
   color         String?
+  accountId     String?
+  account       Account?  @relation(fields: [accountId], references: [id])
   isCompleted   Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

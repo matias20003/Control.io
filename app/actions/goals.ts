@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import { createGoal, addFundsToGoal, deleteGoal } from "@/lib/db/goals";
+import { createGoal, updateGoal, addFundsToGoal, deleteGoal } from "@/lib/db/goals";
 import { z } from "zod";
 
 const createSchema = z.object({
@@ -13,6 +13,17 @@ const createSchema = z.object({
   deadline: z.string().optional(),
   icon: z.string().optional(),
   color: z.string().optional(),
+  accountId: z.string().optional(),
+});
+
+const updateSchema = z.object({
+  name: z.string().min(1, "El nombre es requerido"),
+  targetAmount: z.coerce.number().positive("El objetivo debe ser positivo"),
+  currency: z.string().min(1),
+  deadline: z.string().optional(),
+  icon: z.string().optional(),
+  color: z.string().optional(),
+  accountId: z.string().optional(),
 });
 
 export async function createGoalAction(formData: FormData) {
@@ -30,6 +41,7 @@ export async function createGoalAction(formData: FormData) {
     deadline: formData.get("deadline") || undefined,
     icon: formData.get("icon") || undefined,
     color: formData.get("color") || undefined,
+    accountId: formData.get("accountId") || undefined,
   };
 
   const result = createSchema.safeParse(raw);
@@ -41,6 +53,33 @@ export async function createGoalAction(formData: FormData) {
     return { success: true, goal };
   } catch {
     return { error: "Error al crear la meta" };
+  }
+}
+
+export async function updateGoalAction(goalId: string, formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autorizado" };
+
+  const raw = {
+    name: formData.get("name"),
+    targetAmount: formData.get("targetAmount"),
+    currency: formData.get("currency"),
+    deadline: formData.get("deadline") || undefined,
+    icon: formData.get("icon") || undefined,
+    color: formData.get("color") || undefined,
+    accountId: formData.get("accountId") || undefined,
+  };
+
+  const result = updateSchema.safeParse(raw);
+  if (!result.success) return { error: result.error.issues[0].message };
+
+  try {
+    const goal = await updateGoal(user.id, goalId, result.data);
+    revalidatePath("/metas");
+    return { success: true, goal };
+  } catch {
+    return { error: "Error al actualizar la meta" };
   }
 }
 

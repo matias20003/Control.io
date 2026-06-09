@@ -10,6 +10,8 @@ export type SerializedGoal = {
   deadline: string | null;
   icon: string | null;
   color: string | null;
+  accountId: string | null;
+  accountName: string | null;
   isCompleted: boolean;
   percentage: number;
   createdAt: string;
@@ -37,6 +39,8 @@ function serialize(g: any): SerializedGoal {
         : (g.deadline ?? null),
     icon: g.icon ?? null,
     color: g.color ?? null,
+    accountId: g.accountId ?? null,
+    accountName: g.account ? (decrypt(g.account.name) ?? g.account.name ?? null) : null,
     isCompleted: g.isCompleted,
     percentage,
     createdAt:
@@ -44,10 +48,13 @@ function serialize(g: any): SerializedGoal {
   };
 }
 
+const withAccount = { account: { select: { name: true } } } as const;
+
 export async function getGoals(userId: string): Promise<SerializedGoal[]> {
   const rows = await prisma.goal.findMany({
     where: { userId },
     orderBy: [{ isCompleted: "asc" }, { createdAt: "desc" }],
+    include: withAccount,
   });
   return rows.map(serialize);
 }
@@ -62,6 +69,7 @@ export async function createGoal(
     deadline?: string;
     icon?: string;
     color?: string;
+    accountId?: string;
   }
 ): Promise<SerializedGoal> {
   const row = await prisma.goal.create({
@@ -74,7 +82,45 @@ export async function createGoal(
       deadline: data.deadline ? new Date(data.deadline) : null,
       icon: data.icon || null,
       color: data.color || null,
+      accountId: data.accountId || null,
     },
+    include: withAccount,
+  });
+  return serialize(row);
+}
+
+export async function updateGoal(
+  userId: string,
+  goalId: string,
+  data: {
+    name?: string;
+    targetAmount?: number;
+    currency?: string;
+    deadline?: string;
+    icon?: string;
+    color?: string;
+    accountId?: string;
+  }
+): Promise<SerializedGoal> {
+  const existing = await prisma.goal.findFirst({ where: { id: goalId, userId } });
+  if (!existing) throw new Error("Meta no encontrada");
+
+  const newTarget = data.targetAmount ?? toNum(existing.targetAmount);
+  const current = toNum(existing.currentAmount);
+
+  const row = await prisma.goal.update({
+    where: { id: goalId },
+    data: {
+      ...(data.name !== undefined && { name: encrypt(data.name) ?? data.name }),
+      ...(data.targetAmount !== undefined && { targetAmount: data.targetAmount }),
+      ...(data.currency !== undefined && { currency: data.currency }),
+      ...(data.deadline !== undefined && { deadline: data.deadline ? new Date(data.deadline) : null }),
+      ...(data.icon !== undefined && { icon: data.icon || null }),
+      ...(data.color !== undefined && { color: data.color || null }),
+      ...(data.accountId !== undefined && { accountId: data.accountId || null }),
+      isCompleted: current >= newTarget,
+    },
+    include: withAccount,
   });
   return serialize(row);
 }
@@ -95,6 +141,7 @@ export async function addFundsToGoal(
   const row = await prisma.goal.update({
     where: { id: goalId },
     data: { currentAmount: newAmount, isCompleted },
+    include: withAccount,
   });
   return serialize(row);
 }
