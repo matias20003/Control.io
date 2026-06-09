@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, Bell, ChevronDown, Settings, LogOut, HelpCircle, Calculator as CalcIcon } from "lucide-react";
+import { Search, Bell, ChevronDown, Settings, LogOut, Calculator as CalcIcon } from "lucide-react";
 import { signOutAction } from "@/app/actions/auth";
 
 /**
@@ -65,15 +65,6 @@ export function Topbar({ name, email }: { name: string; email: string }) {
         className="w-9 h-9 rounded-xl bg-surface border border-border flex items-center justify-center text-muted hover:text-foreground transition-colors shrink-0"
       >
         <Bell size={16} />
-      </Link>
-
-      {/* Ayuda */}
-      <Link
-        href="/configuracion"
-        title="Ayuda y preferencias"
-        className="w-9 h-9 rounded-xl bg-surface border border-border flex items-center justify-center text-muted hover:text-foreground transition-colors shrink-0"
-      >
-        <HelpCircle size={16} />
       </Link>
 
       {/* Menú de usuario */}
