@@ -31,6 +31,7 @@ export function OnboardingChecklist({ state }: Props) {
 
   const steps = [
     {
+      tour: "onb-account",
       done: state.hasAccount,
       title: "Creá tu primera cuenta",
       body: "Un banco, MercadoPago, USD en mano — lo que tengas.",
@@ -38,6 +39,7 @@ export function OnboardingChecklist({ state }: Props) {
       cta: { label: "Crear cuenta", href: "/cuentas" },
     },
     {
+      tour: "onb-transaction",
       done: state.hasTransaction,
       title: "Cargá tu primer movimiento",
       body: "Un ingreso o gasto. Recién ahí ves el dashboard con vida.",
@@ -45,6 +47,7 @@ export function OnboardingChecklist({ state }: Props) {
       cta: { label: "Nuevo movimiento", href: "/movimientos" },
     },
     {
+      tour: "onb-notifications",
       done: state.hasPushSubscription,
       title: "Activá las notificaciones",
       body: "Te avisamos de presupuestos, recurrentes y vencimientos.",
@@ -103,6 +106,7 @@ export function OnboardingChecklist({ state }: Props) {
         {steps.map((step, i) => (
           <li
             key={i}
+            data-tour={step.tour}
             className={`flex items-start gap-3 rounded-xl p-3 transition-colors ${
               step.done
                 ? "bg-success/5 border border-success/20"

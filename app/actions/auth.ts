@@ -98,7 +98,8 @@ export async function verifyOtpAction(email: string, token: string) {
     return { error: "Código incorrecto o expirado. Revisá tu email." };
   }
 
-  redirect("/dashboard");
+  // ?welcome=1 dispara el tour guiado solo para el usuario recién registrado.
+  redirect("/dashboard?welcome=1");
 }
 
 export async function forgotPasswordAction(formData: FormData) {

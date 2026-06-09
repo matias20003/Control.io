@@ -20,6 +20,7 @@ import { CategoryChart } from "./CategoryChart";
 import { IncomeExpenseChart, BalanceSparkline } from "./DashboardCharts";
 import { TodayDate } from "./TodayDate";
 import { OnboardingChecklist } from "@/components/OnboardingChecklist";
+import { GuidedTour } from "@/components/GuidedTour";
 import { WhatsappPromoModal } from "@/components/WhatsappPromoModal";
 import { getOnboardingState } from "@/lib/db/onboarding";
 import { getProfileWhatsapp } from "@/lib/db/profile";
@@ -42,11 +43,16 @@ function relTime(iso: string): string {
   return d.toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ welcome?: string }>;
+}) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { welcome } = await searchParams;
   const name = user.user_metadata?.name || user.email?.split("@")[0] || "Usuario";
 
   const now = new Date();
@@ -115,6 +121,7 @@ export default async function DashboardPage() {
       </div>
 
       <OnboardingChecklist state={onboarding} />
+      <GuidedTour enabled={welcome === "1"} userName={name} />
       <DashboardQuickAdd accounts={accounts} categories={categories} />
 
       {/* Banner comparativo del mes */}
