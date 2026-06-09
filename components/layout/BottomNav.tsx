@@ -48,37 +48,50 @@ export function BottomNav() {
       {open && (
         <>
           {/* Backdrop — position:fixed inline para que ningún stylesheet lo
-              tire al flujo normal (mismo motivo que el nav). */}
+              tire al flujo normal (mismo motivo que el nav). zIndex por encima
+              del nav (50) para que la barra quede atenuada y no asome. */}
           <div
-            className="md:hidden bg-background/70 backdrop-blur-sm"
-            style={{ position: "fixed", inset: 0, zIndex: 45 }}
+            className="md:hidden bg-background/70 backdrop-blur-sm animate-sheet-backdrop"
+            style={{ position: "fixed", inset: 0, zIndex: 52 }}
             onClick={() => setOpen(false)}
           />
 
-          {/* Sheet — fixed inline (la clase `fixed` de Tailwind se sobreescribía
-              y el menú caía al fondo de la página; por eso no aparecían las
-              opciones al instante). */}
+          {/* Sheet — anclado a bottom:0 y por encima del nav (z55). Cubre la
+              barra de forma limpia (antes se perchaba con un offset fijo de
+              57px que no contemplaba el área segura → se solapaba y cortaba).
+              El padding inferior respeta el área segura del gesto/home. */}
           <div
-            className="md:hidden bg-surface/95 backdrop-blur-xl glass-highlight border-t border-[color:var(--glass-border)] rounded-t-2xl shadow-[0_-8px_32px_oklch(0_0_0/40%)] flex flex-col overflow-hidden"
-            style={{ position: "fixed", left: 0, right: 0, bottom: 57, zIndex: 55, maxHeight: "calc(100dvh - 80px)" }}
+            className="md:hidden bg-surface border-t border-[color:var(--glass-border)] rounded-t-3xl shadow-[0_-10px_40px_oklch(0_0_0/30%)] flex flex-col animate-sheet-up"
+            style={{
+              position: "fixed",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 55,
+              maxHeight: "85dvh",
+              paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)",
+            }}
           >
-            {/* Header — fijo */}
-            <div className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0 border-b border-border/50">
-              <p className="text-xs font-semibold text-muted uppercase tracking-[0.08em]">
-                Más opciones
-              </p>
+            {/* Handle de arrastre */}
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <span className="h-1.5 w-10 rounded-full bg-border" />
+            </div>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 pt-1 pb-3 shrink-0">
+              <p className="text-sm font-semibold text-foreground">Más opciones</p>
               <button
                 aria-label="Cerrar menú"
                 onClick={() => setOpen(false)}
-                className="p-2.5 rounded-lg text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
+                className="-mr-2 p-2 rounded-lg text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
               >
                 <X size={18} strokeWidth={2} />
               </button>
             </div>
 
-            {/* Grid — scrollable */}
-            <div className="overflow-y-auto overscroll-contain flex-1 px-2 pt-2 pb-8">
-              <div className="grid grid-cols-3 gap-1.5">
+            {/* Grid 2×2 balanceado — scrollable si hiciera falta */}
+            <div className="overflow-y-auto overscroll-contain px-3 pb-2">
+              <div className="grid grid-cols-2 gap-2.5">
                 {moreItems.map((item) => {
                   const isActive = (item.match ?? [item.href]).some((m) => pathname.startsWith(m));
                   return (
@@ -87,14 +100,14 @@ export function BottomNav() {
                       href={item.href}
                       onClick={() => setOpen(false)}
                       className={cn(
-                        "flex flex-col items-center gap-2 px-2 py-4 rounded-xl transition-all duration-150",
+                        "flex flex-col items-center gap-2.5 px-3 py-5 rounded-2xl border transition-all duration-150",
                         isActive
-                          ? "bg-primary/10 text-primary"
-                          : "text-muted hover:text-foreground hover:bg-surface-2"
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-border bg-surface-2/40 text-muted hover:text-foreground hover:bg-surface-2"
                       )}
                     >
-                      <item.icon size={22} strokeWidth={isActive ? 2.2 : 1.7} />
-                      <span className="text-xs font-medium text-center leading-tight">
+                      <item.icon size={24} strokeWidth={isActive ? 2.2 : 1.7} />
+                      <span className="text-sm font-medium text-center leading-tight">
                         {item.label}
                       </span>
                     </Link>
