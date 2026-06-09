@@ -26,7 +26,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#111318",
+  // Default claro → la barra del navegador/PWA acompaña en claro.
+  themeColor: "#ffffff",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -36,18 +37,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh bg-background text-foreground antialiased" suppressHydrationWarning>
-        {/* Aplica el tema guardado antes de pintar para evitar el flash. */}
+        {/* Aplica el tema antes de pintar para evitar el flash.
+            Default = CLARO: agregamos la clase 'light' salvo que el usuario haya
+            elegido 'dark' explícitamente. (La landing se fuerza oscura por CSS). */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "(function(){try{if(localStorage.getItem('theme')==='light'){document.documentElement.classList.add('light');}}catch(e){}})();",
+              "(function(){try{if(localStorage.getItem('theme')!=='dark'){document.documentElement.classList.add('light');}}catch(e){document.documentElement.classList.add('light');}})();",
           }}
         />
         <PostHogProvider>{children}</PostHogProvider>
         <Analytics />
         <SpeedInsights />
         <Toaster
-          theme="dark"
+          theme="light"
           richColors
           position="top-center"
           toastOptions={{
