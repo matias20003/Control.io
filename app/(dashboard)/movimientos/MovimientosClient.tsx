@@ -446,117 +446,154 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
         </Card>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Buscar por descripción, categoría, cuenta..."
-          className="w-full pl-8 pr-8 py-2 text-sm rounded-xl border border-border bg-surface text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
-        />
-        {searchQuery && (
-          <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground">
-            <X size={14} />
-          </button>
-        )}
-      </div>
-
-      {/* Filters */}
-      <div className="flex gap-2 flex-wrap">
-        {(["ALL", "INCOME", "EXPENSE", "TRANSFER"] as const).map((t) => (
-          <button key={t} onClick={() => setFilterType(t)}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              filterType === t ? "bg-primary text-background" : "bg-surface-2 text-muted hover:text-foreground"
-            }`}>
-            {t === "ALL" ? "Todos" : t === "INCOME" ? "Ingresos" : t === "EXPENSE" ? "Gastos" : "Transferencias"}
-          </button>
-        ))}
-        {accounts.length > 0 && (
-          <select value={filterAccountId} onChange={(e) => setFilterAccountId(e.target.value)}
-            className="px-3 py-1 rounded-full text-xs font-medium bg-surface-2 text-muted border-none outline-none cursor-pointer">
-            <option value="ALL">Todas las cuentas</option>
-            {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        )}
-      </div>
-
-      {/* Transaction list */}
-      {filtered.length === 0 ? (
-        <EmptyState icon={Receipt} title="Sin movimientos"
-          description={searchQuery ? `No hay resultados para "${searchQuery}".`
-            : filterType === "ALL" && filterAccountId === "ALL"
-            ? "Registrá ingresos, gastos o transferencias para este mes."
-            : "No hay movimientos con los filtros seleccionados."}
-          action={!searchQuery && filterType === "ALL" && filterAccountId === "ALL" ? (
-            <div className="flex gap-2">
-              <Button variant="income" onClick={() => openCreate("INCOME")}><ArrowDownLeft size={15} />Ingreso</Button>
-              <Button variant="expense"  onClick={() => openCreate("EXPENSE")}><ArrowUpRight  size={15} />Gasto</Button>
+      {/* Historial de movimientos */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <p className="text-sm font-semibold text-foreground">Historial de movimientos</p>
+            <div className="relative w-full sm:w-72">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar movimiento, categoría, cuenta…"
+                className="w-full pl-8 pr-8 py-2 text-sm rounded-xl border border-border bg-surface-2 text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground">
+                  <X size={14} />
+                </button>
+              )}
             </div>
-          ) : undefined}
-        />
-      ) : (
-        <div className="space-y-2">
-          {filtered.map((tx) => {
-            const cfg      = TYPE_CONFIG[tx.type as TxType];
-            const Icon     = cfg?.icon ?? Receipt;
-            const isExpense  = tx.type === "EXPENSE";
-            const isTransfer = tx.type === "TRANSFER";
-            return (
-              <Card key={tx.id} className="group">
-                <CardContent className="p-3.5">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${cfg?.bg ?? "bg-surface-2"}`}>
-                      {tx.categoryIcon
-                        ? <span className="text-base">{tx.categoryIcon}</span>
-                        : <Icon size={15} className={cfg?.color ?? "text-muted"} />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {tx.description || tx.categoryName || cfg?.label}
-                      </p>
-                      <p className="text-xs text-muted truncate">
-                        {formatDate(tx.date)}
-                        {tx.accountName && ` · ${tx.accountName}`}
-                        {isTransfer && tx.toAccountName && ` → ${tx.toAccountName}`}
-                        {tx.description && tx.categoryName ? ` · ${tx.categoryName}` : ""}
-                      </p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
+          </div>
+
+          {/* Filtros */}
+          <div className="flex gap-2 flex-wrap mb-4">
+            {(["ALL", "INCOME", "EXPENSE", "TRANSFER"] as const).map((t) => (
+              <button key={t} onClick={() => setFilterType(t)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  filterType === t ? "bg-primary text-background" : "bg-surface-2 text-muted hover:text-foreground"
+                }`}>
+                {t === "ALL" ? "Todos" : t === "INCOME" ? "Ingresos" : t === "EXPENSE" ? "Gastos" : "Transferencias"}
+              </button>
+            ))}
+            {accounts.length > 0 && (
+              <select value={filterAccountId} onChange={(e) => setFilterAccountId(e.target.value)}
+                className="px-3 py-1 rounded-full text-xs font-medium bg-surface-2 text-muted border-none outline-none cursor-pointer">
+                <option value="ALL">Todas las cuentas</option>
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            )}
+          </div>
+
+          {filtered.length === 0 ? (
+            <EmptyState icon={Receipt} title="Sin movimientos"
+              description={searchQuery ? `No hay resultados para "${searchQuery}".`
+                : filterType === "ALL" && filterAccountId === "ALL"
+                ? "Registrá ingresos, gastos o transferencias para este mes."
+                : "No hay movimientos con los filtros seleccionados."}
+              action={!searchQuery && filterType === "ALL" && filterAccountId === "ALL" ? (
+                <div className="flex gap-2">
+                  <Button variant="income" onClick={() => openCreate("INCOME")}><ArrowDownLeft size={15} />Ingreso</Button>
+                  <Button variant="expense"  onClick={() => openCreate("EXPENSE")}><ArrowUpRight  size={15} />Gasto</Button>
+                </div>
+              ) : undefined}
+            />
+          ) : (
+            <>
+              {/* Tabla — desktop */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-muted border-b border-border">
+                      <th className="text-left font-medium py-2.5 px-2">Movimiento</th>
+                      <th className="text-left font-medium py-2.5 px-2">Tipo</th>
+                      <th className="text-left font-medium py-2.5 px-2">Categoría</th>
+                      <th className="text-left font-medium py-2.5 px-2">Fecha</th>
+                      <th className="text-left font-medium py-2.5 px-2">Cuenta</th>
+                      <th className="text-right font-medium py-2.5 px-2">Monto</th>
+                      <th className="py-2.5 px-2 w-16" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((tx) => {
+                      const cfg = TYPE_CONFIG[tx.type as TxType];
+                      const Icon = cfg?.icon ?? Receipt;
+                      const isExpense = tx.type === "EXPENSE";
+                      const isTransfer = tx.type === "TRANSFER";
+                      return (
+                        <tr key={tx.id} className="border-b border-border-subtle hover:bg-surface-2/40 group">
+                          <td className="py-2.5 px-2">
+                            <div className="flex items-center gap-2.5">
+                              <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${cfg?.bg ?? "bg-surface-2"}`}>
+                                {tx.categoryIcon ? <span className="text-sm">{tx.categoryIcon}</span> : <Icon size={14} className={cfg?.color ?? "text-muted"} />}
+                              </span>
+                              <span className="font-medium text-foreground truncate max-w-[200px]">{tx.description || tx.categoryName || cfg?.label}</span>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-2"><span className={`text-xs font-medium ${cfg?.color ?? "text-muted"}`}>{cfg?.label}</span></td>
+                          <td className="py-2.5 px-2 text-muted">{tx.categoryName || "—"}</td>
+                          <td className="py-2.5 px-2 text-muted whitespace-nowrap">{formatDate(tx.date)}</td>
+                          <td className="py-2.5 px-2 text-muted truncate max-w-[140px]">{tx.accountName || "—"}{isTransfer && tx.toAccountName ? ` → ${tx.toAccountName}` : ""}</td>
+                          <td className={`py-2.5 px-2 text-right font-bold font-mono whitespace-nowrap ${isExpense ? "text-danger" : isTransfer ? "text-primary" : "text-success"}`}>
+                            {isExpense ? "−" : isTransfer ? "" : "+"}{formatCurrency(tx.amount, tx.currency)}
+                          </td>
+                          <td className="py-2.5 px-2">
+                            <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => openEdit(tx)} className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10"><Pencil size={13} /></button>
+                              <button onClick={() => setConfirmDeleteId(tx.id)} className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10"><Trash2 size={13} /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Cards — mobile */}
+              <div className="md:hidden space-y-2">
+                {filtered.map((tx) => {
+                  const cfg = TYPE_CONFIG[tx.type as TxType];
+                  const Icon = cfg?.icon ?? Receipt;
+                  const isExpense = tx.type === "EXPENSE";
+                  const isTransfer = tx.type === "TRANSFER";
+                  return (
+                    <div key={tx.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface-2/40 p-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${cfg?.bg ?? "bg-surface-2"}`}>
+                        {tx.categoryIcon ? <span className="text-base">{tx.categoryIcon}</span> : <Icon size={15} className={cfg?.color ?? "text-muted"} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{tx.description || tx.categoryName || cfg?.label}</p>
+                        <p className="text-xs text-muted truncate">
+                          {formatDate(tx.date)}{tx.accountName && ` · ${tx.accountName}`}{isTransfer && tx.toAccountName && ` → ${tx.toAccountName}`}
+                        </p>
+                      </div>
                       <p className={`text-sm font-bold font-mono ${isExpense ? "text-danger" : isTransfer ? "text-primary" : "text-success"}`}>
-                        {isExpense ? "−" : isTransfer ? "" : "+"}
-                        {formatCurrency(tx.amount, tx.currency)}
+                        {isExpense ? "−" : isTransfer ? "" : "+"}{formatCurrency(tx.amount, tx.currency)}
                       </p>
+                      <div className="flex items-center gap-0.5">
+                        <button onClick={() => openEdit(tx)} className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10"><Pencil size={13} /></button>
+                        <button onClick={() => setConfirmDeleteId(tx.id)} className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10"><Trash2 size={13} /></button>
+                      </div>
                     </div>
-                    {/* Actions */}
-                    <div className="flex items-center gap-0.5 transition-opacity">
-                      <button onClick={() => openEdit(tx)}
-                        className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors">
-                        <Pencil size={13} />
-                      </button>
-                      <button onClick={() => setConfirmDeleteId(tx.id)}
-                        className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors">
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-          {hasMore && filterType === "ALL" && filterAccountId === "ALL" && !searchQuery && (
-            <div className="pt-3 flex flex-col items-center gap-2">
-              <p className="text-xs text-muted">
-                Mostrando {transactions.length} de {total} movimientos del mes
-              </p>
-              <Button variant="outline" onClick={loadMore} disabled={isPending}>
-                {isPending ? "Cargando..." : "Cargar más"}
-              </Button>
-            </div>
+                  );
+                })}
+              </div>
+
+              {hasMore && filterType === "ALL" && filterAccountId === "ALL" && !searchQuery && (
+                <div className="pt-4 flex flex-col items-center gap-2">
+                  <p className="text-xs text-muted">Mostrando {transactions.length} de {total} movimientos del mes</p>
+                  <Button variant="outline" onClick={loadMore} disabled={isPending}>
+                    {isPending ? "Cargando..." : "Cargar más"}
+                  </Button>
+                </div>
+              )}
+            </>
           )}
-        </div>
-      )}
+        </CardContent>
+      </Card>
 
       {/* Create Dialog */}
       <Dialog open={isOpen} onOpenChange={(o) => { if (!o) { setIsOpen(false); setLastDefaults({}); } }}>

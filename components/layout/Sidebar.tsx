@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ArrowUpDown, Wallet, Target, HandCoins,
-  CreditCard, BarChart3, Settings, LogOut,
+  CreditCard, BarChart3, Settings, LogOut, MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
@@ -62,6 +62,26 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Asistente C.io */}
+      <div className="px-2.5 pb-1">
+        <a
+          href="https://wa.me/5493416041118"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block rounded-xl border border-primary/25 bg-gradient-to-br from-primary/10 to-transparent p-3 hover:border-primary/50 transition-colors"
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-7 h-7 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
+              <MessageCircle size={15} />
+            </span>
+            <p className="text-xs font-semibold text-foreground leading-tight">¿Dudas con tus finanzas?</p>
+          </div>
+          <p className="text-[11px] text-muted leading-snug">
+            Chateá con <span className="text-primary font-medium">C.io →</span>
+          </p>
+        </a>
+      </div>
 
       {/* Sign out */}
       <div className="px-2.5 py-3 border-t border-[color:var(--glass-border)]">

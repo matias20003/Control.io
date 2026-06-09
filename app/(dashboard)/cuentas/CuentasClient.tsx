@@ -216,75 +216,85 @@ export function CuentasClient({ initialAccounts }: Props) {
           }
         />
       ) : (
-        <div className="space-y-2">
-          {accounts.map((account) => (
-            <Card key={account.id} className="group">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  {/* Icon */}
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                    style={{
-                      backgroundColor: account.color
-                        ? `${account.color}20`
-                        : "var(--color-surface-2)",
-                    }}
-                  >
-                    {account.icon ||
-                      ACCOUNT_TYPE_ICONS[account.type] ||
-                      "🏦"}
-                  </div>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-semibold text-foreground">Mis cuentas</p>
+              <p className="text-xs text-muted">{accounts.length} cuenta{accounts.length !== 1 ? "s" : ""}</p>
+            </div>
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">
-                      {account.name}
-                    </p>
-                    <p className="text-xs text-muted">
-                      {ACCOUNT_TYPE_LABELS[account.type] || account.type}
-                    </p>
-                  </div>
+            {/* Tabla — desktop */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-muted border-b border-border">
+                    <th className="text-left font-medium py-2.5 px-2">Cuenta</th>
+                    <th className="text-left font-medium py-2.5 px-2">Tipo</th>
+                    <th className="text-right font-medium py-2.5 px-2">Saldo disponible</th>
+                    <th className="text-left font-medium py-2.5 px-2 pl-4">Estado</th>
+                    <th className="py-2.5 px-2 w-20" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {accounts.map((account) => {
+                    const neg = account.balance < 0;
+                    return (
+                      <tr key={account.id} className="border-b border-border-subtle hover:bg-surface-2/40 group">
+                        <td className="py-2.5 px-2">
+                          <div className="flex items-center gap-2.5">
+                            <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ backgroundColor: account.color ? `${account.color}20` : "var(--color-surface-2)" }}>
+                              {account.icon || ACCOUNT_TYPE_ICONS[account.type] || "🏦"}
+                            </span>
+                            <span className="font-medium text-foreground">{account.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-2 text-muted">{ACCOUNT_TYPE_LABELS[account.type] || account.type}</td>
+                        <td className={`py-2.5 px-2 text-right font-mono font-bold ${neg ? "text-danger" : "text-foreground"}`}>
+                          {formatCurrency(account.balance, account.currency)} <span className="text-[11px] text-muted font-normal">{account.currency}</span>
+                        </td>
+                        <td className="py-2.5 px-2 pl-4">
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${neg ? "bg-danger/10 text-danger" : "bg-success/10 text-success"}`}>{neg ? "Deuda" : "Activa"}</span>
+                        </td>
+                        <td className="py-2.5 px-2">
+                          <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => setEditingAccount(account)} disabled={isPending} className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 disabled:opacity-50"><Pencil size={14} /></button>
+                            <button onClick={() => handleDelete(account.id)} disabled={deletingId === account.id || isPending} className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 disabled:opacity-50"><Trash2 size={14} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-                  {/* Balance */}
-                  <div className="text-right flex-shrink-0">
-                    <p
-                      className={`text-base font-bold font-mono ${
-                        account.balance >= 0
-                          ? "text-foreground"
-                          : "text-danger"
-                      }`}
-                    >
-                      {formatCurrency(account.balance, account.currency)}
-                    </p>
-                    <p className="text-xs text-muted">{account.currency}</p>
+            {/* Cards — mobile */}
+            <div className="md:hidden space-y-2">
+              {accounts.map((account) => {
+                const neg = account.balance < 0;
+                return (
+                  <div key={account.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface-2/40 p-3">
+                    <span className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0" style={{ backgroundColor: account.color ? `${account.color}20` : "var(--color-surface-2)" }}>
+                      {account.icon || ACCOUNT_TYPE_ICONS[account.type] || "🏦"}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{account.name}</p>
+                      <p className="text-xs text-muted">{ACCOUNT_TYPE_LABELS[account.type] || account.type}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-sm font-bold font-mono ${neg ? "text-danger" : "text-foreground"}`}>{formatCurrency(account.balance, account.currency)}</p>
+                      <p className="text-xs text-muted">{account.currency}</p>
+                    </div>
+                    <div className="flex items-center gap-0.5">
+                      <button onClick={() => setEditingAccount(account)} disabled={isPending} className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10"><Pencil size={14} /></button>
+                      <button onClick={() => handleDelete(account.id)} disabled={deletingId === account.id || isPending} className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10"><Trash2 size={14} /></button>
+                    </div>
                   </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-1 ml-2">
-                    <button
-                      onClick={() => setEditingAccount(account)}
-                      disabled={isPending}
-                      title="Editar cuenta"
-                      style={{ color: "#94a3b8" }}
-                      className="p-2 rounded-lg hover:bg-blue-500/20 hover:text-blue-400 transition-colors disabled:opacity-50"
-                    >
-                      <Pencil size={15} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(account.id)}
-                      disabled={deletingId === account.id || isPending}
-                      title="Eliminar cuenta"
-                      style={{ color: "#94a3b8" }}
-                      className="p-2 rounded-lg hover:bg-red-500/20 hover:text-red-400 transition-colors disabled:opacity-50"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Edit Account Dialog */}

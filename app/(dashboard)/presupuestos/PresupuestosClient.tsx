@@ -151,6 +151,39 @@ export function PresupuestosClient({
         </div>
       )}
 
+      {/* Estado general del presupuesto */}
+      {budgets.length > 0 && totalBudgeted > 0 && (
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-sm font-semibold text-foreground mb-3">Estado general del presupuesto</p>
+            <div className="flex h-9 rounded-lg overflow-hidden bg-surface-2">
+              {budgets.map((b) => {
+                const share = Math.round((b.amount / totalBudgeted) * 100);
+                return (
+                  <div
+                    key={b.id}
+                    className="flex items-center justify-center text-[11px] font-semibold text-white/90 min-w-0"
+                    style={{ width: `${share}%`, backgroundColor: b.categoryColor || "#3b82f6" }}
+                    title={`${b.categoryName} · ${share}%`}
+                  >
+                    {share >= 8 && <span className="truncate px-1">{b.categoryIcon} {share}%</span>}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
+              {budgets.map((b) => (
+                <div key={b.id} className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: b.categoryColor || "#3b82f6" }} />
+                  <span className="text-xs text-foreground">{b.categoryName}</span>
+                  <span className="text-xs text-muted">{Math.round((b.amount / totalBudgeted) * 100)}%</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Budget list */}
       {budgets.length === 0 ? (
         <EmptyState

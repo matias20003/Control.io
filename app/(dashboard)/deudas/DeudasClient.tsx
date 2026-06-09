@@ -159,36 +159,75 @@ export function DeudasClient({ initialDebts }: Props) {
         />
       )}
 
-      {/* I owe */}
-      {iOwe.length > 0 && (
-        <DebtGroup
-          title="Les debo"
-          debts={iOwe}
-          accent="text-danger"
-          onPay={(d) => {
-            setPayingDebt(d);
-            setPayAmount("");
-          }}
-          onDelete={handleDelete}
-          deletingId={deletingId}
-          isPending={isPending}
-        />
-      )}
+      {/* Detalle de deudas */}
+      {(iOwe.length > 0 || theyOwe.length > 0) && (
+        <>
+          {/* Tabla — desktop */}
+          <Card className="hidden md:block">
+            <CardContent className="p-5">
+              <p className="text-sm font-semibold text-foreground mb-4">Detalle de deudas</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-muted border-b border-border">
+                      <th className="text-left font-medium py-2.5 px-2">Persona</th>
+                      <th className="text-left font-medium py-2.5 px-2">Tipo</th>
+                      <th className="text-right font-medium py-2.5 px-2">Total</th>
+                      <th className="text-right font-medium py-2.5 px-2">Pagado</th>
+                      <th className="text-right font-medium py-2.5 px-2">Restante</th>
+                      <th className="text-left font-medium py-2.5 px-2 pl-4">Progreso</th>
+                      <th className="py-2.5 px-2 w-28" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...iOwe, ...theyOwe].map((d) => {
+                      const isOwe = d.direction === "I_OWE";
+                      const pct = d.totalAmount > 0 ? Math.round((d.paidAmount / d.totalAmount) * 100) : 0;
+                      return (
+                        <tr key={d.id} className="border-b border-border-subtle hover:bg-surface-2/40 group">
+                          <td className="py-2.5 px-2">
+                            <span className="font-medium text-foreground">{d.personName}</span>
+                            {d.description && <span className="block text-xs text-muted truncate max-w-[180px]">{d.description}</span>}
+                          </td>
+                          <td className="py-2.5 px-2">
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isOwe ? "bg-danger/10 text-danger" : "bg-success/10 text-success"}`}>
+                              {isOwe ? "Les debo" : "Me deben"}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-2 text-right font-mono text-muted">{formatCurrency(d.totalAmount, d.currency)}</td>
+                          <td className="py-2.5 px-2 text-right font-mono text-success">{formatCurrency(d.paidAmount, d.currency)}</td>
+                          <td className={`py-2.5 px-2 text-right font-mono font-bold ${isOwe ? "text-danger" : "text-success"}`}>{formatCurrency(d.remainingAmount, d.currency)}</td>
+                          <td className="py-2.5 px-2 pl-4">
+                            <div className="flex items-center gap-2">
+                              <div className="h-1.5 w-20 rounded-full bg-surface-2 overflow-hidden"><div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} /></div>
+                              <span className="text-xs text-muted">{pct}%</span>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-2">
+                            <div className="flex items-center justify-end gap-1">
+                              <button onClick={() => { setPayingDebt(d); setPayAmount(""); }} className="text-xs font-medium px-2 py-1 rounded-lg text-primary hover:bg-primary/10">Pago</button>
+                              <button onClick={() => handleDelete(d.id)} disabled={deletingId === d.id || isPending} className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10"><Trash2 size={13} /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* They owe */}
-      {theyOwe.length > 0 && (
-        <DebtGroup
-          title="Me deben"
-          debts={theyOwe}
-          accent="text-success"
-          onPay={(d) => {
-            setPayingDebt(d);
-            setPayAmount("");
-          }}
-          onDelete={handleDelete}
-          deletingId={deletingId}
-          isPending={isPending}
-        />
+          {/* Cards — mobile */}
+          <div className="md:hidden space-y-6">
+            {iOwe.length > 0 && (
+              <DebtGroup title="Les debo" debts={iOwe} accent="text-danger" onPay={(d) => { setPayingDebt(d); setPayAmount(""); }} onDelete={handleDelete} deletingId={deletingId} isPending={isPending} />
+            )}
+            {theyOwe.length > 0 && (
+              <DebtGroup title="Me deben" debts={theyOwe} accent="text-success" onPay={(d) => { setPayingDebt(d); setPayAmount(""); }} onDelete={handleDelete} deletingId={deletingId} isPending={isPending} />
+            )}
+          </div>
+        </>
       )}
 
       {/* Completed */}
