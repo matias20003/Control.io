@@ -61,6 +61,15 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
     0
   );
 
+  const upcomingInstallments = activePurchases
+    .flatMap((p) =>
+      p.installments
+        .filter((i) => !i.isPaid)
+        .map((i) => ({ ...i, purchase: p.description, currency: p.currency }))
+    )
+    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+    .slice(0, 6);
+
   const toggleExpanded = (id: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -174,6 +183,9 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
       )}
 
       {/* Active purchases */}
+      {activePurchases.length > 0 && (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-3">
       {activePurchases.map((p) => {
         const isExpanded = expanded.has(p.id);
         const nextUnpaid = p.installments.find((i) => !i.isPaid);
@@ -289,6 +301,34 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
           </Card>
         );
       })}
+        </div>
+
+        {/* Aside: próximas cuotas a vencer */}
+        <aside className="space-y-4">
+          <Card>
+            <CardContent className="p-5">
+              <p className="text-sm font-semibold text-foreground mb-3 flex items-center gap-1.5">
+                <CalendarClock size={15} className="text-muted" /> Próximas cuotas a vencer
+              </p>
+              <div className="space-y-2.5">
+                {upcomingInstallments.map((i) => {
+                  const dd = Math.ceil((new Date(i.dueDate).getTime() - Date.now()) / 86_400_000);
+                  return (
+                    <div key={i.id} className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{i.purchase}</p>
+                        <p className="text-[11px] text-muted">Cuota {i.installmentNumber} · {dd < 0 ? "vencida" : dd === 0 ? "vence hoy" : `vence en ${dd}d`}</p>
+                      </div>
+                      <p className="text-sm font-bold font-mono text-warning shrink-0">{formatCurrency(i.amount, i.currency)}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </aside>
+      </div>
+      )}
 
       {/* Completed */}
       {completedPurchases.length > 0 && (

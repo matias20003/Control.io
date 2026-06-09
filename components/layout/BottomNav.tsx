@@ -47,14 +47,21 @@ export function BottomNav() {
     <>
       {open && (
         <>
-          {/* Backdrop */}
+          {/* Backdrop — position:fixed inline para que ningún stylesheet lo
+              tire al flujo normal (mismo motivo que el nav). */}
           <div
-            className="md:hidden fixed inset-0 z-40 bg-background/70 backdrop-blur-sm"
+            className="md:hidden bg-background/70 backdrop-blur-sm"
+            style={{ position: "fixed", inset: 0, zIndex: 45 }}
             onClick={() => setOpen(false)}
           />
 
-          {/* Sheet */}
-          <div className="md:hidden fixed left-0 right-0 bottom-[57px] z-50 bg-surface/95 backdrop-blur-xl glass-highlight border-t border-[color:var(--glass-border)] rounded-t-2xl shadow-[0_-8px_32px_oklch(0_0_0/40%)] flex flex-col overflow-hidden" style={{ maxHeight: "calc(100dvh - 80px)" }}>
+          {/* Sheet — fixed inline (la clase `fixed` de Tailwind se sobreescribía
+              y el menú caía al fondo de la página; por eso no aparecían las
+              opciones al instante). */}
+          <div
+            className="md:hidden bg-surface/95 backdrop-blur-xl glass-highlight border-t border-[color:var(--glass-border)] rounded-t-2xl shadow-[0_-8px_32px_oklch(0_0_0/40%)] flex flex-col overflow-hidden"
+            style={{ position: "fixed", left: 0, right: 0, bottom: 57, zIndex: 55, maxHeight: "calc(100dvh - 80px)" }}
+          >
             {/* Header — fijo */}
             <div className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0 border-b border-border/50">
               <p className="text-xs font-semibold text-muted uppercase tracking-[0.08em]">
