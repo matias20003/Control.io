@@ -44,3 +44,8 @@ next-env.d.ts
 
 # Playwright MCP scratch output
 .playwright-mcp/
+
+# logs sueltos / scratch
+dev-verify.log
+*-verify.log
+logo-concepts.html
