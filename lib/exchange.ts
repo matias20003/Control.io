@@ -9,6 +9,9 @@
  * usuario lo vea como N/A en los reportes de ARS).
  */
 import { prisma } from "@/lib/prisma";
+import { averageRate, amountToArs } from "@/lib/exchange-utils";
+
+export { averageRate, amountToArs };
 
 function toNum(v: unknown): number {
   if (v === null || v === undefined) return 0;
@@ -21,12 +24,7 @@ export async function getUsdToArsRate(): Promise<number | null> {
     orderBy: { fetchedAt: "desc" },
   });
   if (!blue) return null;
-  const buy  = toNum(blue.buyRate);
-  const sell = toNum(blue.sellRate);
-  if (buy <= 0 && sell <= 0) return null;
-  if (buy <= 0)  return sell;
-  if (sell <= 0) return buy;
-  return (buy + sell) / 2;
+  return averageRate(toNum(blue.buyRate), toNum(blue.sellRate));
 }
 
 /**
@@ -39,11 +37,6 @@ export async function snapshotConversion(
   amount: number,
   currency: string,
 ): Promise<{ amountARS: number | null; exchangeRate: number | null }> {
-  if (currency === "ARS") return { amountARS: amount, exchangeRate: 1 };
-  if (currency === "USD") {
-    const rate = await getUsdToArsRate();
-    if (!rate) return { amountARS: null, exchangeRate: null };
-    return { amountARS: amount * rate, exchangeRate: rate };
-  }
-  return { amountARS: null, exchangeRate: null };
+  const rate = currency === "USD" ? await getUsdToArsRate() : null;
+  return amountToArs(amount, currency, rate);
 }

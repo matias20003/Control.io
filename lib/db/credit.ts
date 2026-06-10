@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { addMonths } from "date-fns";
 import { encrypt } from "@/lib/crypto";
+import { splitInstallments } from "@/lib/db/credit-utils";
+
+export { splitInstallments };
 
 export type SerializedCreditInstallment = {
   id: number;
@@ -92,20 +95,17 @@ export async function createCreditPurchase(
   }
 ): Promise<SerializedCreditPurchase> {
   const firstDate = new Date(data.firstPaymentDate);
-  const baseAmount = data.totalAmount / data.totalInstallments;
-  const rounded = parseFloat(baseAmount.toFixed(2));
 
-  // La última cuota absorbe el resto del redondeo para que la suma dé el total exacto
-  // (ej: 1000/3 → 333,33 + 333,33 + 333,34 = 1000, en vez de 999,99).
-  const lastAmount = parseFloat((data.totalAmount - rounded * (data.totalInstallments - 1)).toFixed(2));
-  const installmentsData = Array.from(
-    { length: data.totalInstallments },
-    (_, i) => ({
-      installmentNumber: i + 1,
-      amount: i === data.totalInstallments - 1 ? lastAmount : rounded,
-      dueDate: addMonths(firstDate, i),
-    })
-  );
+  // splitInstallments garantiza que la suma de cuotas dé el total exacto
+  // (la última absorbe el redondeo). Ver lib/db/credit-utils.ts.
+  const installmentsData = splitInstallments(
+    data.totalAmount,
+    data.totalInstallments
+  ).map((amount, i) => ({
+    installmentNumber: i + 1,
+    amount,
+    dueDate: addMonths(firstDate, i),
+  }));
 
   const row = await prisma.creditPurchase.create({
     data: {

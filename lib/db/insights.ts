@@ -115,22 +115,37 @@ export async function getInsights(userId: string): Promise<Insight[]> {
     }
   }
 
-  // ── 3. Presupuestos superados o cerca ────────────────────
-  for (const b of budgets) {
-    const txForCat = await prisma.transaction.aggregate({
-      where: { userId, type: "EXPENSE", categoryId: b.categoryId, currency: "ARS", date: { gte: thisStart, lte: thisEnd } },
+  // ── 3. Presupuestos superados ────────────────────────────
+  // Una sola query agrupada por categoría (antes era una por presupuesto: N+1).
+  if (budgets.length > 0) {
+    const spendByCat = await prisma.transaction.groupBy({
+      by: ["categoryId"],
+      where: {
+        userId,
+        type: "EXPENSE",
+        currency: "ARS",
+        date: { gte: thisStart, lte: thisEnd },
+        categoryId: { in: budgets.map((b) => b.categoryId) },
+      },
       _sum: { amount: true },
     });
-    const spent = toNum(txForCat._sum.amount);
-    const limit = toNum(b.amount);
-    const pct   = limit > 0 ? Math.round((spent / limit) * 100) : 0;
-    if (pct >= 100) {
-      insights.push({
-        type: "warning",
-        icon: b.category.icon ?? "🔴",
-        title: `Presupuesto de ${b.category.name} superado`,
-        body: `Gastaste ${pct}% del presupuesto. Quedan ${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - daysPassed} días del mes.`,
-      });
+    const spentByCat = new Map(
+      spendByCat.map((r) => [r.categoryId, toNum(r._sum.amount)])
+    );
+    const daysLeft = daysInMonth - daysPassed;
+
+    for (const b of budgets) {
+      const spent = spentByCat.get(b.categoryId) ?? 0;
+      const limit = toNum(b.amount);
+      const pct = limit > 0 ? Math.round((spent / limit) * 100) : 0;
+      if (pct >= 100) {
+        insights.push({
+          type: "warning",
+          icon: b.category.icon ?? "🔴",
+          title: `Presupuesto de ${b.category.name} superado`,
+          body: `Gastaste ${pct}% del presupuesto. Quedan ${daysLeft} días del mes.`,
+        });
+      }
     }
   }
 
@@ -170,6 +185,24 @@ export async function getInsights(userId: string): Promise<Insight[]> {
       });
     }
   }
+
+  // ── 6. Mayor categoría de gasto del mes (conciencia) ─────
+  // Solo si una categoría concentra ≥30% del gasto: ahí sí es accionable.
+  const topCat = Object.entries(thisCatMap).sort((a, b) => b[1] - a[1])[0];
+  if (topCat && thisExpense > 0 && topCat[1] / thisExpense >= 0.3) {
+    const pct = Math.round((topCat[1] / thisExpense) * 100);
+    insights.push({
+      type: "info",
+      icon: "📊",
+      title: `${topCat[0]} es tu mayor gasto`,
+      body: `Representa el ${pct}% de lo que gastaste este mes. Tenerlo presente ayuda a decidir dónde recortar.`,
+    });
+  }
+
+  // Priorizamos como lo haría un asesor: primero los problemas (warning),
+  // después los logros (success), al final lo informativo (info).
+  const orden = { warning: 0, success: 1, info: 2 } as const;
+  insights.sort((a, b) => orden[a.type] - orden[b.type]);
 
   return insights.slice(0, 4); // máximo 4 insights
 }

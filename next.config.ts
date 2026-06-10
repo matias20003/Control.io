@@ -21,8 +21,8 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self'",
-      // Supabase + PostHog (ingesta de eventos y assets) para analytics/session replay
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://us.i.posthog.com https://us-assets.i.posthog.com",
+      // Supabase + PostHog (ingesta de eventos y assets) + Sentry (errores)
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://us.i.posthog.com https://us-assets.i.posthog.com https://*.sentry.io https://*.ingest.sentry.io https://*.ingest.us.sentry.io",
       // Session replay de PostHog usa web workers (blob)
       "worker-src 'self' blob:",
       "frame-ancestors 'self'",

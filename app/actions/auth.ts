@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { z } from "zod";
+import { rateLimit, rateLimitMessage } from "@/lib/rate-limit";
 
 const loginSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -19,6 +20,10 @@ const registerSchema = z.object({
 });
 
 export async function loginAction(formData: FormData) {
+  // Anti fuerza bruta: 10 intentos cada 5 min por IP.
+  const rl = await rateLimit("login", 10, 5 * 60);
+  if (!rl.success) return { error: rateLimitMessage(rl.retryAfterSec) };
+
   const raw = Object.fromEntries(formData);
   const result = loginSchema.safeParse(raw);
 
@@ -86,6 +91,10 @@ export async function signInWithGoogleAction() {
 }
 
 export async function registerAction(formData: FormData) {
+  // Anti spam de cuentas: 5 registros cada 15 min por IP.
+  const rl = await rateLimit("register", 5, 15 * 60);
+  if (!rl.success) return { error: rateLimitMessage(rl.retryAfterSec) };
+
   const raw = Object.fromEntries(formData);
   const result = registerSchema.safeParse(raw);
 
@@ -115,6 +124,10 @@ export async function registerAction(formData: FormData) {
 }
 
 export async function verifyOtpAction(email: string, token: string) {
+  // Anti fuerza bruta del código de 6 dígitos: 10 intentos cada 10 min por IP.
+  const rl = await rateLimit("verify-otp", 10, 10 * 60);
+  if (!rl.success) return { error: rateLimitMessage(rl.retryAfterSec) };
+
   const supabase = await createClient();
   const { error } = await supabase.auth.verifyOtp({
     email,
@@ -131,6 +144,10 @@ export async function verifyOtpAction(email: string, token: string) {
 }
 
 export async function forgotPasswordAction(formData: FormData) {
+  // Anti email-bombing: 4 envíos cada 15 min por IP.
+  const rl = await rateLimit("forgot-password", 4, 15 * 60);
+  if (!rl.success) return { error: rateLimitMessage(rl.retryAfterSec) };
+
   const email = formData.get("email") as string;
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!email || !emailRegex.test(email)) return { error: "Email inválido" };

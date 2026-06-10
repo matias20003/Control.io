@@ -473,3 +473,39 @@ model ExchangeRate {
   @@index([type, currency, fetchedAt])
   @@map("exchange_rates")
 }
+
+// ─────────────────────────────────────────────
+// WHATSAPP BOT (Kapso) — el asesor financiero por WhatsApp
+// Estas tablas se escriben por SQL directo desde lib/whatsapp/*.
+// Se modelan acá solo para que Prisma las conozca y `migrate diff`
+// no las marque como drift. NO tienen FK a profiles (user_id es el
+// número de WhatsApp, no el id de Profile).
+// ─────────────────────────────────────────────
+
+model WhatsappChatHistory {
+  id        BigInt   @id @default(autoincrement())
+  userId    String   @map("user_id")
+  role      String
+  content   String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId, id], map: "wch_user_idx")
+  @@map("whatsapp_chat_history")
+}
+
+model WhatsappMemory {
+  id        BigInt   @id @default(autoincrement())
+  userId    String   @map("user_id")
+  fact      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId], map: "wm_user_idx")
+  @@map("whatsapp_memory")
+}
+
+model WhatsappProcessedMessage {
+  id        String   @id
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("whatsapp_processed_messages")
+}

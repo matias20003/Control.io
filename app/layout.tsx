@@ -42,8 +42,9 @@ export const viewport: Viewport = {
   themeColor: "#ffffff",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  // Llena el área del notch/safe-area; nuestro CSS ya usa env(safe-area-inset-*).
+  // NO bloqueamos el zoom (sin maximumScale): una app de finanzas que usan
+  // adultos mayores debe poder ampliarse. WCAG 2.1 exige zoom hasta 200%.
+  // El zoom-on-focus de iOS se evita con inputs de 16px, no bloqueando pinch.
   viewportFit: "cover",
 };
 
