@@ -84,6 +84,14 @@ export async function POST(req: NextRequest) {
 
     const profile = await findProfileByPhone(from);
     if (!profile) {
+      // Registramos el número entrante (best-effort) para diagnosticar si un
+      // número YA vinculado falla el matcheo, vs un tester que no vinculó.
+      try {
+        const tail = from.replace(/\D/g, "").slice(-10);
+        await prisma.$executeRaw`INSERT INTO "whatsapp_unmatched" (from_raw, tail) VALUES (${from}, ${tail})`;
+      } catch {
+        // no debe romper el flujo
+      }
       await sendText(
         from,
         "👋 Tu número todavía no está vinculado a ninguna cuenta.\n\nIniciá sesión en controlio.site, andá a *Configuración → Perfil* y agregá este número de WhatsApp para empezar a registrar tus gastos por acá."

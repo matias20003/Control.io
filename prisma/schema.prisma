@@ -509,3 +509,15 @@ model WhatsappProcessedMessage {
 
   @@map("whatsapp_processed_messages")
 }
+
+// Registro de números que escribieron al bot sin estar vinculados. Sirve para
+// diagnosticar si un número YA vinculado falla el matcheo (bug real) vs un
+// tester que todavía no vinculó (comportamiento esperado).
+model WhatsappUnmatched {
+  id        BigInt   @id @default(autoincrement())
+  fromRaw   String   @map("from_raw")
+  tail      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("whatsapp_unmatched")
+}
