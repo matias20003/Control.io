@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
     if (!profile) {
       await sendText(
         from,
-        "👋 Tu número no está vinculado a ninguna cuenta de control.io.\n\nIniciá sesión en la app, andá a *Configuración → Perfil* y agregá este número de WhatsApp para empezar a registrar tus gastos por acá."
+        "👋 Tu número todavía no está vinculado a ninguna cuenta.\n\nIniciá sesión en controlio.site, andá a *Configuración → Perfil* y agregá este número de WhatsApp para empezar a registrar tus gastos por acá."
       );
       return Response.json({ ok: true, linked: false });
     }
