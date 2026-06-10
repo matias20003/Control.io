@@ -64,26 +64,34 @@ export function LogoFull({
   const showTagline = tagline ?? (size === "md" || size === "lg" || size === "full");
 
   return (
-    <div className={cn("inline-flex flex-col", className)} aria-label="control.io">
-      <span
-        className="font-bold leading-none tracking-tight"
-        style={{ fontSize: Math.round(h * 0.46) }}
-      >
-        <span className="text-foreground">control</span>
-        <span className="text-primary">.io</span>
-      </span>
-      {showTagline && (
+    <div
+      className={cn("inline-flex items-center", className)}
+      style={{ gap: Math.round(h * 0.2) }}
+      aria-label="control.io"
+    >
+      {/* Ícono del gauge a la izquierda del wordmark (lockup ícono + texto). */}
+      <LogoIcon size={Math.round(h * 0.62)} />
+      <div className="inline-flex flex-col">
         <span
-          className="font-medium uppercase leading-none text-muted"
-          style={{
-            fontSize: Math.max(8, Math.round(h * 0.135)),
-            letterSpacing: Math.max(1, h * 0.05),
-            marginTop: Math.round(h * 0.08),
-          }}
+          className="font-bold leading-none tracking-tight"
+          style={{ fontSize: Math.round(h * 0.46) }}
         >
-          Entendé tu dinero.
+          <span className="text-foreground">control</span>
+          <span className="text-primary">.io</span>
         </span>
-      )}
+        {showTagline && (
+          <span
+            className="font-medium uppercase leading-none text-muted"
+            style={{
+              fontSize: Math.max(8, Math.round(h * 0.135)),
+              letterSpacing: Math.max(1, h * 0.05),
+              marginTop: Math.round(h * 0.08),
+            }}
+          >
+            Entendé tu dinero.
+          </span>
+        )}
+      </div>
     </div>
   );
 }
