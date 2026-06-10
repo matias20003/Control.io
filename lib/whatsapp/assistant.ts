@@ -348,6 +348,8 @@ REGLAS:
 - Usá el HISTORIAL de la charla para entender referencias ("¿y comparado con el mes pasado?", "sí, hacelo").
 - NUNCA inventes datos ni acciones que el usuario no pidió. "answer" siempre presente (vacío si no aplica).
 - NO repitas acciones: cada movimiento que menciona el usuario se registra UNA sola vez (no pongas la misma acción dos veces en "actions").
+- NUNCA vuelvas a registrar un movimiento que YA registraste antes. Si en el HISTORIAL ves un "✅ Hecho" tuyo con ese movimiento, o aparece en ÚLTIMOS MOVIMIENTOS, YA ESTÁ CARGADO: no lo emitas de nuevo.
+- Si el usuario responde "sí", "ok", "dale", "listo", "gracias", "perfecto" DESPUÉS de que registraste algo, es solo una CONFIRMACIÓN: usá intent "chat" con una respuesta breve (ej: "¡Listo! 👍"). NO registres nada de nuevo. Solo registrá movimientos que el usuario describe explícitamente en SU mensaje actual.
 - Cuando "intent" es "action" y registrás movimientos, la app YA muestra sola la confirmación (monto, descripción, categoría y cuenta). Por eso NO reescribas eso en "answer": dejá "answer" VACÍO. Usalo solo si tenés un dato EXTRA y breve que aporte de verdad (ej. "Ojo, ya vas *$40.000* en Comida este mes"). Nunca repitas el gasto/ingreso registrado.
 
 FORMATO de "answer" (WhatsApp): ordenado y fácil de escanear.
@@ -409,6 +411,13 @@ FORMATO de "answer" (WhatsApp): ordenado y fácil de escanear.
  */
 class NeedsAccount extends Error {}
 
+/**
+ * Se lanza cuando el modelo re-emite un movimiento que YA registramos hace
+ * poco (típico cuando el usuario dice "sí"/"ok" y el modelo re-procesa el
+ * historial). No se vuelve a cargar.
+ */
+class AlreadyRegistered extends Error {}
+
 /** Ejecuta una acción y devuelve la línea de confirmación, o lanza error. */
 async function runAction(userId: string, a: Action, c: FinancialContext, isoDate: string): Promise<string> {
   const cur = a.currency === "USD" ? "USD" : "ARS";
@@ -418,6 +427,20 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
     case "income": {
       const type = a.type === "expense" ? "EXPENSE" : "INCOME";
       if (!a.amount || a.amount <= 0) throw new Error("monto inválido");
+      const desc = a.description || (type === "EXPENSE" ? "Gasto" : "Ingreso");
+
+      // Anti-duplicado ENTRE turnos: si el modelo re-emite un movimiento que ya
+      // registramos recién (mismo tipo, monto y descripción en los últimos 15
+      // min), no lo cargamos de nuevo. Evita que un "Si"/"ok" duplique todo.
+      const dup = c.recent.find(
+        (t) =>
+          t.type === type &&
+          Math.abs(t.amount - a.amount!) < 0.01 &&
+          norm(t.description ?? "") === norm(desc) &&
+          Date.parse(isoDate) - Date.parse(t.createdAt) < 15 * 60 * 1000
+      );
+      if (dup) throw new AlreadyRegistered();
+
       const cat = findCategory(c, a.category, type);
       // "reportOnly" → sin cuenta: queda en el reporte pero no mueve el saldo/patrimonio.
       // Backstop de "cuenta obligatoria": si es un movimiento real y no se aclaró
@@ -452,7 +475,6 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
         ? ` 📅 ${new Date(txDate).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}`
         : "";
       const noteTxt = a.reportOnly ? "\n📝 _solo registro, no afecta el saldo_" : "";
-      const desc = a.description || (type === "EXPENSE" ? "Gasto" : "Ingreso");
       const meta = [cat ? `${cat.icon ?? "🏷️"} ${cat.name}` : null, acc ? `🏦 ${acc.name}` : null]
         .filter(Boolean)
         .join(" · ");
@@ -685,11 +707,13 @@ async function buildReply(
   });
 
   const clarifications: string[] = [];
+  let duplicates = 0;
   for (const action of actions) {
     try {
       lines.push(await runAction(userId, action, ctx, isoDate));
     } catch (err) {
       if (err instanceof NeedsAccount) clarifications.push(err.message);
+      else if (err instanceof AlreadyRegistered) duplicates++;
       else errors.push(err instanceof Error ? err.message : "error en una acción");
     }
   }
@@ -700,6 +724,11 @@ async function buildReply(
     return clarifications.length === 1
       ? clarifications[0]
       : `Necesito un dato para registrar:\n\n${clarifications.map((q) => `• ${q}`).join("\n")}`;
+  }
+
+  // Todo lo que mandó ya estaba registrado (re-emisión por un "sí"/"ok").
+  if (lines.length === 0 && duplicates > 0 && errors.length === 0) {
+    return "Eso ya lo tenía anotado ✅ — no lo dupliqué.";
   }
 
   if (lines.length === 0) {
