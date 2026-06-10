@@ -287,6 +287,19 @@ tiene MÁS DE UNA, NO registres todavía: respondé (intent "chat") preguntando 
 nombrando las cuentas disponibles. Recién cuando sepas la cuenta emití la acción con "account".
 Si tiene UNA sola cuenta, usala sin preguntar.
 
+SEGUIMIENTO DE CUENTA (MUY IMPORTANTE): si en un mensaje TUYO anterior (mirá el HISTORIAL)
+preguntaste con qué cuenta registrar uno o más movimientos, y AHORA el usuario responde indicando
+la(s) cuenta(s), TENÉS que emitir intent "action" RE-EMITIENDO esos movimientos COMPLETOS (cada uno
+con su amount, type, description y date originales, tomados del historial) y con el campo "account"
+ya resuelto. Mapeá cada monto a la cuenta que dijo el usuario. Ejemplos:
+- Vos preguntaste por un ingreso de $1.500 y un gasto de $2.500. Usuario: "1500 en efectivo y 2500
+  en mercado pago" → emití income 1500 account "Efectivo" + expense 2500 account "Mercado Pago".
+- Usuario responde solo "efectivo" y había UN movimiento pendiente → emitilo con account "Efectivo".
+- Usuario responde solo "efectivo" y había VARIOS pendientes sin aclarar cuál → asigná esa cuenta a
+  TODOS los pendientes.
+NUNCA vuelvas a hacer la misma pregunta si el usuario ya respondió la cuenta. NO uses intent "chat"
+para repetir la pregunta cuando ya tenés la respuesta.
+
 FECHAS: el campo "date" (formato "YYYY-MM-DD") es opcional. Si el usuario dice CUÁNDO fue el
 movimiento ("ayer", "anteayer", "el lunes", "el mes pasado", "el 5 de mayo", "la semana pasada"),
 calculá la fecha respecto de HOY (${c.today}) y ponela en "date". Si solo dice el mes sin día,
@@ -389,6 +402,13 @@ FORMATO de "answer" (WhatsApp): ordenado y fácil de escanear.
 
 // ─────────────────────────── Ejecución de acciones ───────────────────────────
 
+/**
+ * Se lanza cuando una acción no se puede completar porque falta la cuenta
+ * (con 2+ cuentas no adivinamos). NO es un error: es una pregunta al usuario.
+ * Se maneja aparte para no rotularla como "✅ Hecho".
+ */
+class NeedsAccount extends Error {}
+
 /** Ejecuta una acción y devuelve la línea de confirmación, o lanza error. */
 async function runAction(userId: string, a: Action, c: FinancialContext, isoDate: string): Promise<string> {
   const cur = a.currency === "USD" ? "USD" : "ARS";
@@ -409,7 +429,9 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
         if (!acc) {
           if (c.accounts.length === 1) acc = c.accounts[0];
           else if (c.accounts.length >= 2) {
-            return `📌 ¿Con qué cuenta registro ${type === "EXPENSE" ? "este gasto" : "este ingreso"} de ${money(a.amount, cur)}${a.description ? ` (${a.description})` : ""}? Tenés: ${c.accounts.map((x) => x.name).join(", ")}.`;
+            throw new NeedsAccount(
+              `📌 ¿Con qué cuenta registro ${type === "EXPENSE" ? "este gasto" : "este ingreso"} de ${money(a.amount, cur)}${a.description ? ` (${a.description})` : ""}? Tenés: ${c.accounts.map((x) => x.name).join(", ")}.`
+            );
           }
         }
       }
@@ -662,12 +684,22 @@ async function buildReply(
     return true;
   });
 
+  const clarifications: string[] = [];
   for (const action of actions) {
     try {
       lines.push(await runAction(userId, action, ctx, isoDate));
     } catch (err) {
-      errors.push(err instanceof Error ? err.message : "error en una acción");
+      if (err instanceof NeedsAccount) clarifications.push(err.message);
+      else errors.push(err instanceof Error ? err.message : "error en una acción");
     }
+  }
+
+  // No se registró nada y solo falta saber la cuenta → preguntamos claro,
+  // SIN rotular "✅ Hecho" (no se hizo nada todavía).
+  if (lines.length === 0 && clarifications.length > 0) {
+    return clarifications.length === 1
+      ? clarifications[0]
+      : `Necesito un dato para registrar:\n\n${clarifications.map((q) => `• ${q}`).join("\n")}`;
   }
 
   if (lines.length === 0) {
@@ -704,6 +736,8 @@ async function buildReply(
     reply += `\n\n${note}`;
   }
 
+  // Movimientos registrados + alguno que todavía necesita cuenta.
+  if (clarifications.length) reply += `\n\n${clarifications.join("\n")}`;
   if (errors.length) reply += `\n\n⚠️ No pude con: ${errors.join("; ")}`;
   return reply;
 }
