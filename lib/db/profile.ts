@@ -21,6 +21,10 @@ const DEFAULT_CATEGORIES = [
   { name: "Otros ingresos",   icon: "💰", color: "#94a3b8", type: "INCOME" as const },
 ];
 
+/** Cantidad de categorías sembradas por defecto al crear el perfil.
+ *  Sirve para detectar si el usuario agregó categorías propias (onboarding). */
+export const DEFAULT_CATEGORY_COUNT = DEFAULT_CATEGORIES.length;
+
 export async function getOrCreateProfile(userId: string, email: string, name?: string) {
   const existing = await prisma.profile.findUnique({ where: { id: userId } });
   if (existing) return existing;

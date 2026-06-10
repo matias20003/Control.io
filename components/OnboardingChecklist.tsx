@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { CheckCircle2, Circle, Wallet, ArrowUpDown, Bell, X, Sparkles } from "lucide-react";
+import { CheckCircle2, Circle, Wallet, ArrowUpDown, Bell, Tag, X, Sparkles } from "lucide-react";
 import type { OnboardingState } from "@/lib/db/onboarding";
 
 const SKIP_KEY = "control:onboarding-dismissed";
@@ -37,6 +37,14 @@ export function OnboardingChecklist({ state }: Props) {
       body: "Un banco, MercadoPago, USD en mano — lo que tengas.",
       icon: Wallet,
       cta: { label: "Crear cuenta", href: "/cuentas" },
+    },
+    {
+      tour: "onb-categories",
+      done: state.hasCustomCategory,
+      title: "Armá tus categorías",
+      body: "Sumá tus categorías de gastos e ingresos para ordenar tu plata a tu manera.",
+      icon: Tag,
+      cta: { label: "Personalizar", href: "/configuracion?tab=categorias" },
     },
     {
       tour: "onb-transaction",

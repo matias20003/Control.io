@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Tag, User, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/stat";
@@ -27,7 +28,11 @@ export function ConfiguracionClient({
   recoveryCodesRemaining,
   whatsappNumber,
 }: Props) {
-  const [tab, setTab] = useState<Tab>("perfil");
+  // Permite abrir directo una pestaña vía ?tab= (ej: el onboarding linkea a
+  // /configuracion?tab=categorias).
+  const searchParams = useSearchParams();
+  const initialTab: Tab = searchParams.get("tab") === "categorias" ? "categorias" : "perfil";
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [query, setQuery] = useState("");
 
   return (
