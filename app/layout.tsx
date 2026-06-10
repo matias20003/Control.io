@@ -22,8 +22,19 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: { default: "control.io", template: "%s — control.io" },
   description: "Tu sistema de finanzas personales. Entendé tu dinero.",
-  // Sin override de icons: Next.js detecta automáticamente app/icon.svg.
-  // Si hubiera "icons: { icon: ... }" acá, ese gana sobre la convención.
+  // icon/shortcut: Next.js detecta app/icon.svg solo; sumamos el apple-touch-icon
+  // PNG (Safari ignora SVG para el ícono de "Agregar a inicio").
+  icons: {
+    apple: "/apple-touch-icon.png",
+  },
+  // Modo app en iOS: pantalla completa al abrir desde el ícono de inicio.
+  // statusBarStyle "default" = barra blanca con texto oscuro, empalma con el
+  // tema claro y evita que el contenido quede debajo de la barra.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "control.io",
+  },
 };
 
 export const viewport: Viewport = {
@@ -32,6 +43,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  // Llena el área del notch/safe-area; nuestro CSS ya usa env(safe-area-inset-*).
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
