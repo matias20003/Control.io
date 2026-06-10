@@ -36,7 +36,7 @@ export default async function DashboardLayout({
   return (
     <div className="ambient-mesh min-h-dvh bg-background">
       <Sidebar />
-      <Header />
+      <Header name={name} email={user.email ?? ""} />
       <Calculator />
       <main className="md:ml-60 pb-20 md:pb-0 min-h-dvh">
         <Topbar name={name} email={user.email ?? ""} />
