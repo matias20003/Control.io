@@ -1,15 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Tile azul de marca con una sola "c": a tamaño de pestaña (16px) cuatro
-       caracteres no se leen; una inicial grande sí. -->
-  <rect width="64" height="64" rx="14" fill="#2563EB"/>
-  <text
-    x="50%"
-    y="50%"
-    fill="#ffffff"
-    font-family="Inter, 'Helvetica Neue', Arial, sans-serif"
-    font-size="46"
-    font-weight="600"
-    text-anchor="middle"
-    dominant-baseline="central"
-  >c</text>
+  <!-- Velocímetro de marca: gauge azul sobre tile oscuro. El azul (#2563EB y
+       derivados) es el color actual de la marca; el tramo inferior-derecho
+       queda tenue como un medidor real. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1b2740"/>
+      <stop offset="1" stop-color="#0e1626"/>
+    </linearGradient>
+    <linearGradient id="gauge" x1="18" y1="48" x2="46" y2="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1d4ed8"/>
+      <stop offset="0.55" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#7cb8ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#tile)"/>
+  <path d="M 20 46 A 17 17 0 1 1 44 46" fill="none" stroke="#27324d" stroke-width="5.5" stroke-linecap="round"/>
+  <path d="M 20 46 A 17 17 0 1 1 44 46" fill="none" stroke="url(#gauge)" stroke-width="5.5" stroke-linecap="round" stroke-dasharray="62 200"/>
+  <line x1="32" y1="34" x2="22" y2="24" stroke="#cfe2ff" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="32" cy="34" r="3.6" fill="#0e1626" stroke="#5b9bff" stroke-width="2"/>
+  <circle cx="32" cy="34" r="1.3" fill="#cfe2ff"/>
 </svg>

@@ -1,31 +1,40 @@
 import { cn } from "@/lib/utils";
 
 /**
- * LogoIcon — square brand mark ("c.io" on a rounded brand-blue tile).
+ * LogoIcon — square brand mark: velocímetro azul sobre tile oscuro.
  *
  * Used for square 1:1 slots where the full wordmark doesn't fit: favicon-style
- * chips, avatars, collapsed/mobile spots, and inside UI mockups. Pure CSS/text,
- * so it stays pixel-sharp at any size. Brand blue reads on both light & dark.
+ * chips, avatars, collapsed/mobile spots, and inside UI mockups. SVG vectorial,
+ * pixel-sharp a cualquier tamaño. Mismo diseño que app/icon.svg y los PNG PWA.
  */
 export function LogoIcon({ size = 32, className }: { size?: number; className?: string }) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center justify-center bg-primary font-bold text-white",
-        className,
-      )}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: Math.round(size * 0.22),
-        fontSize: Math.round(size * 0.4),
-        letterSpacing: "-0.04em",
-        lineHeight: 1,
-      }}
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      className={cn("inline-block", className)}
+      role="img"
       aria-label="control.io"
     >
-      c.io
-    </span>
+      <defs>
+        <linearGradient id="liTile" x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#1b2740" />
+          <stop offset="1" stopColor="#0e1626" />
+        </linearGradient>
+        <linearGradient id="liGauge" x1="18" y1="48" x2="46" y2="16" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#1d4ed8" />
+          <stop offset="0.55" stopColor="#3b82f6" />
+          <stop offset="1" stopColor="#7cb8ff" />
+        </linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="15" fill="url(#liTile)" />
+      <path d="M 20 46 A 17 17 0 1 1 44 46" fill="none" stroke="#27324d" strokeWidth="5.5" strokeLinecap="round" />
+      <path d="M 20 46 A 17 17 0 1 1 44 46" fill="none" stroke="url(#liGauge)" strokeWidth="5.5" strokeLinecap="round" strokeDasharray="62 200" />
+      <line x1="32" y1="34" x2="22" y2="24" stroke="#cfe2ff" strokeWidth="2.6" strokeLinecap="round" />
+      <circle cx="32" cy="34" r="3.6" fill="#0e1626" stroke="#5b9bff" strokeWidth="2" />
+      <circle cx="32" cy="34" r="1.3" fill="#cfe2ff" />
+    </svg>
   );
 }
 
