@@ -22,18 +22,18 @@ export function LogoIcon({ size = 32, className }: { size?: number; className?: 
           <stop offset="0" stopColor="#1b2740" />
           <stop offset="1" stopColor="#0e1626" />
         </linearGradient>
-        <linearGradient id="liGauge" x1="18" y1="48" x2="46" y2="16" gradientUnits="userSpaceOnUse">
+        <linearGradient id="liGauge" x1="16" y1="49" x2="48" y2="14" gradientUnits="userSpaceOnUse">
           <stop offset="0" stopColor="#1d4ed8" />
           <stop offset="0.55" stopColor="#3b82f6" />
           <stop offset="1" stopColor="#7cb8ff" />
         </linearGradient>
       </defs>
       <rect width="64" height="64" rx="15" fill="url(#liTile)" />
-      <path d="M 20 46 A 17 17 0 1 1 44 46" fill="none" stroke="#27324d" strokeWidth="5.5" strokeLinecap="round" />
-      <path d="M 20 46 A 17 17 0 1 1 44 46" fill="none" stroke="url(#liGauge)" strokeWidth="5.5" strokeLinecap="round" strokeDasharray="62 200" />
-      <line x1="32" y1="34" x2="22" y2="24" stroke="#cfe2ff" strokeWidth="2.6" strokeLinecap="round" />
-      <circle cx="32" cy="34" r="3.6" fill="#0e1626" stroke="#5b9bff" strokeWidth="2" />
-      <circle cx="32" cy="34" r="1.3" fill="#cfe2ff" />
+      <path d="M 18 47 A 20 20 0 1 1 46 47" fill="none" stroke="#27324d" strokeWidth="7" strokeLinecap="round" />
+      <path d="M 18 47 A 20 20 0 1 1 46 47" fill="none" stroke="url(#liGauge)" strokeWidth="7" strokeLinecap="round" strokeDasharray="72 240" />
+      <line x1="32" y1="33" x2="21" y2="22" stroke="#cfe2ff" strokeWidth="3.2" strokeLinecap="round" />
+      <circle cx="32" cy="33" r="4.2" fill="#0e1626" stroke="#5b9bff" strokeWidth="2.2" />
+      <circle cx="32" cy="33" r="1.5" fill="#cfe2ff" />
     </svg>
   );
 }
@@ -70,7 +70,7 @@ export function LogoFull({
       aria-label="control.io"
     >
       {/* Ícono del gauge a la izquierda del wordmark (lockup ícono + texto). */}
-      <LogoIcon size={Math.round(h * 0.62)} />
+      <LogoIcon size={Math.round(h * 0.82)} />
       <div className="inline-flex flex-col">
         <span
           className="font-bold leading-none tracking-tight"

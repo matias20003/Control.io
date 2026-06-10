@@ -1,7 +1,7 @@
 // control.io — Service Worker
 // Maneja push notifications + caché offline básico (app shell).
 
-const CACHE = "controlio-v3";
+const CACHE = "controlio-v4";
 
 // Assets mínimos para que la app abra sin conexión.
 const PRECACHE = ["/offline.html", "/icon-192.png", "/icon.svg"];
