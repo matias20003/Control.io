@@ -33,6 +33,7 @@ export async function createCategoryAction(formData: FormData) {
     const category = await createCategory(user.id, result.data);
     revalidatePath("/configuracion");
     revalidatePath("/movimientos");
+    revalidatePath("/dashboard"); // refresca el checklist de onboarding (paso categorías)
     return { success: true, category };
   } catch {
     return { error: "Error al crear la categoría" };
@@ -71,6 +72,7 @@ export async function deleteCategoryAction(categoryId: string) {
     await deleteCategory(user.id, categoryId);
     revalidatePath("/configuracion");
     revalidatePath("/movimientos");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch {
     return { error: "Error al eliminar la categoría" };

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-const DEFAULT_CATEGORIES = [
+export const DEFAULT_CATEGORIES = [
   // Gastos
   { name: "Comida y bebida",  icon: "🍕", color: "#ef4444", type: "EXPENSE" as const },
   { name: "Transporte",       icon: "🚗", color: "#f59e0b", type: "EXPENSE" as const },
@@ -21,9 +21,13 @@ const DEFAULT_CATEGORIES = [
   { name: "Otros ingresos",   icon: "💰", color: "#94a3b8", type: "INCOME" as const },
 ];
 
-/** Cantidad de categorías sembradas por defecto al crear el perfil.
- *  Sirve para detectar si el usuario agregó categorías propias (onboarding). */
-export const DEFAULT_CATEGORY_COUNT = DEFAULT_CATEGORIES.length;
+/** Claves "TYPE:nombre" de las categorías sembradas por defecto.
+ *  Sirve para detectar si el usuario agregó categorías propias (onboarding),
+ *  de forma robusta: cualquier categoría con nombre/tipo distinto a las
+ *  default cuenta como propia (aunque haya borrado alguna default). */
+export const DEFAULT_CATEGORY_KEYS = new Set(
+  DEFAULT_CATEGORIES.map((c) => `${c.type}:${c.name}`)
+);
 
 export async function getOrCreateProfile(userId: string, email: string, name?: string) {
   const existing = await prisma.profile.findUnique({ where: { id: userId } });
