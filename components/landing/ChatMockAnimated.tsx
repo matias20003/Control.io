@@ -130,8 +130,10 @@ export function ChatMockAnimated() {
             <p className="text-[11px] text-white/80">{typing ? "escribiendo…" : "en línea"}</p>
           </div>
         </div>
-        {/* Cuerpo */}
-        <div ref={bodyRef} className="h-[420px] space-y-2.5 overflow-y-auto overscroll-contain bg-[#0b141a] px-3 py-4 [scrollbar-width:none]">
+        {/* Cuerpo — overflow-hidden (no overflow-y-auto): la animación lo
+            auto-scrollea por JS igual, pero el dedo del usuario no queda
+            atrapado scrolleando el chat; el swipe pasa a la página. */}
+        <div ref={bodyRef} className="h-[420px] space-y-2.5 overflow-hidden bg-[#0b141a] px-3 py-4">
           {MESSAGES.slice(0, shown).map((m, i) => (
             <Bubble key={i} side={m.side} audio={m.audio}>
               {m.node}
