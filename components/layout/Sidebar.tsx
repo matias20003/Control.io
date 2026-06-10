@@ -29,7 +29,7 @@ export function Sidebar() {
     <aside className="hidden md:flex flex-col w-56 fixed left-0 top-0 bottom-0 z-30 glass-panel border-r border-r-[color:var(--glass-border)] border-l-0 border-t-0 border-b-0">
       {/* Logo */}
       <div className="px-4 pt-4 pb-3 border-b border-[color:var(--glass-border)]">
-        <LogoFull size="xs" />
+        <LogoFull size="sm" tagline />
       </div>
 
       {/* Nav */}
