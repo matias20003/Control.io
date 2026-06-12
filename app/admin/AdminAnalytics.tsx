@@ -5,6 +5,7 @@ import {
 } from "recharts";
 import { MessageCircle, Mail, Clock } from "lucide-react";
 import type { AdminAnalytics as Data } from "@/lib/db/admin-stats";
+import { ReactivationButton } from "./ReactivationButton";
 
 function shortDate(iso: string) {
   const [, m, d] = iso.split("-");
@@ -143,10 +144,13 @@ export function AdminAnalytics({ data }: { data: Data }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Pendientes */}
           <div className="rounded-xl border border-warning/30 bg-warning/5 p-4 space-y-2">
-            <p className="text-xs font-semibold text-warning flex items-center gap-1.5">
-              <Clock size={13} /> Pendientes de reactivar ({data.reactivation.pending.length})
-            </p>
-            <p className="text-[11px] text-muted">Registrados hace +20h, sin ningún movimiento. El cron les manda el email.</p>
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-xs font-semibold text-warning flex items-center gap-1.5">
+                <Clock size={13} /> Pendientes de reactivar ({data.reactivation.pending.length})
+              </p>
+              <ReactivationButton pending={data.reactivation.pending.length} />
+            </div>
+            <p className="text-[11px] text-muted">Registrados hace +20h, sin ningún movimiento. El cron les manda el email a las 10am, o tocá &ldquo;Enviar ahora&rdquo;.</p>
             {data.reactivation.pending.length === 0 ? (
               <p className="text-xs text-muted pt-1">Nadie pendiente 🎉</p>
             ) : (
