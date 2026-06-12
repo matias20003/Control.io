@@ -78,6 +78,10 @@ model Profile {
   // Recordatorio diario por WhatsApp — pregunta a las 20hs ARG si registró sus gastos.
   dailyReminderEnabled Boolean @default(false)
 
+  // Reactivación: timestamp del nudge de "cargá tu primer movimiento" enviado a
+  // usuarios que se registraron y no cargaron nada. Null = todavía no se envió.
+  reactivationNudgeAt DateTime?
+
   accounts              Account[]
   categories            Category[]
   transactions          Transaction[]
