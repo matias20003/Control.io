@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getReactivationCandidates } from "@/lib/reactivation";
 
 // Analítica avanzada para el panel de admin: series históricas, embudo de
 // activación, usuarios conectados y estado de reactivación.
@@ -14,7 +15,7 @@ export type ConnectedUser = {
   movs7: number;
 };
 export type ReactSent = { name: string | null; email: string; sentAt: string };
-export type ReactPending = { name: string | null; email: string; registeredAt: string };
+export type ReactPending = { name: string | null; email: string; dormant: boolean };
 
 export type AdminAnalytics = {
   daily: DailyPoint[];
@@ -27,7 +28,7 @@ export type AdminAnalytics = {
 export async function getAdminAnalytics(): Promise<AdminAnalytics> {
   const DAYS = 45;
 
-  const [txDaily, regDaily, funnelRow, connectedRows, sentRows, pendingRows, waAvgRows] =
+  const [txDaily, regDaily, funnelRow, connectedRows, sentRows, pendingCandidates, waAvgRows] =
     await Promise.all([
       prisma.$queryRaw<{ d: string; movs: number; activos: number }[]>`
         SELECT to_char(date_trunc('day', "createdAt"), 'YYYY-MM-DD') d,
@@ -55,13 +56,7 @@ export async function getAdminAnalytics(): Promise<AdminAnalytics> {
       prisma.$queryRaw<{ name: string | null; email: string; sent: Date }[]>`
         SELECT name, email, "reactivationNudgeAt" sent FROM profiles
         WHERE "reactivationNudgeAt" IS NOT NULL ORDER BY "reactivationNudgeAt" DESC LIMIT 50`,
-      prisma.$queryRaw<{ name: string | null; email: string; reg: Date }[]>`
-        SELECT p.name, p.email, p."createdAt" reg FROM profiles p
-        WHERE p."reactivationNudgeAt" IS NULL
-          AND p."createdAt" <= now() - interval '20 hours'
-          AND p."createdAt" >= now() - interval '7 days'
-          AND NOT EXISTS(SELECT 1 FROM transactions t WHERE t."userId"=p.id)
-        ORDER BY p."createdAt" DESC`,
+      getReactivationCandidates(),
       prisma.$queryRaw<{ wa: boolean; avg: number }[]>`
         SELECT (p."whatsappNumber" IS NOT NULL) wa,
           round(avg((SELECT count(*) FROM transactions t WHERE t."userId"=p.id)), 1)::float avg
@@ -112,7 +107,7 @@ export async function getAdminAnalytics(): Promise<AdminAnalytics> {
     reactivation: {
       sentCount: sentRows.length,
       sent: sentRows.map((r) => ({ name: r.name, email: r.email, sentAt: r.sent.toISOString() })),
-      pending: pendingRows.map((r) => ({ name: r.name, email: r.email, registeredAt: r.reg.toISOString() })),
+      pending: pendingCandidates.map((c) => ({ name: c.name, email: c.email, dormant: c.dormant })),
     },
     whatsappAvg: { conWa, sinWa },
   };

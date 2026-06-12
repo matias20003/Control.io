@@ -150,15 +150,17 @@ export function AdminAnalytics({ data }: { data: Data }) {
               </p>
               <ReactivationButton pending={data.reactivation.pending.length} />
             </div>
-            <p className="text-[11px] text-muted">Registrados hace +20h, sin ningún movimiento. El cron les manda el email a las 10am, o tocá &ldquo;Enviar ahora&rdquo;.</p>
+            <p className="text-[11px] text-muted">Nunca activaron, o dormidos (+14d sin actividad). El cron les manda el email a las 10am, o tocá &ldquo;Enviar ahora&rdquo;.</p>
             {data.reactivation.pending.length === 0 ? (
               <p className="text-xs text-muted pt-1">Nadie pendiente 🎉</p>
             ) : (
               <ul className="space-y-1 pt-1">
-                {data.reactivation.pending.slice(0, 12).map((u) => (
+                {data.reactivation.pending.slice(0, 14).map((u) => (
                   <li key={u.email} className="text-xs text-foreground flex justify-between gap-2">
                     <span className="truncate">{u.name ?? u.email}</span>
-                    <span className="text-muted shrink-0">{rel(u.registeredAt)}</span>
+                    <span className={`shrink-0 ${u.dormant ? "text-amber-500" : "text-muted"}`}>
+                      {u.dormant ? "dormido" : "nunca activó"}
+                    </span>
                   </li>
                 ))}
               </ul>
