@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { CheckCircle2, Circle, Wallet, ArrowUpDown, Bell, Tag, X, Sparkles } from "lucide-react";
+import { CheckCircle2, Circle, Wallet, ArrowUpDown, Bell, Tag, MessageCircle, X, Sparkles } from "lucide-react";
 import type { OnboardingState } from "@/lib/db/onboarding";
 
 const SKIP_KEY = "control:onboarding-dismissed";
@@ -37,6 +37,14 @@ export function OnboardingChecklist({ state }: Props) {
       body: "Un banco, MercadoPago, USD en mano — lo que tengas.",
       icon: Wallet,
       cta: { label: "Crear cuenta", href: "/cuentas" },
+    },
+    {
+      tour: "onb-whatsapp",
+      done: state.hasWhatsapp,
+      title: "Conectá WhatsApp 💬",
+      body: "Cargá gastos por chat: un texto, un audio o la foto de un ticket y se registra solo.",
+      icon: MessageCircle,
+      cta: { label: "Vincular", href: "/configuracion?tab=perfil" },
     },
     {
       tour: "onb-categories",

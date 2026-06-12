@@ -44,7 +44,7 @@ export function GuidedTour({ enabled, userName }: { enabled: boolean; userName?:
   const steps: Step[] = [
     {
       title: `¡Bienvenido, ${userName ?? "qué bueno verte"}! 👋`,
-      body: "Te muestro en 30 segundos cómo arrancar. Son 4 pasos simples.",
+      body: "Te muestro en 30 segundos cómo arrancar. Son 5 pasos simples.",
     },
     {
       selector: '[data-tour="onb-account"]',
@@ -52,18 +52,23 @@ export function GuidedTour({ enabled, userName }: { enabled: boolean; userName?:
       body: "Acá cargás tu banco, MercadoPago o el efectivo que tengas. Tocá “Crear cuenta”.",
     },
     {
+      selector: '[data-tour="onb-whatsapp"]',
+      title: "Paso 2 · Conectá WhatsApp 💬",
+      body: "Lo más cómodo: cargá gastos por chat. Mandás un texto, un audio o la foto de un ticket y se registra solo. Vinculá tu número.",
+    },
+    {
       selector: '[data-tour="onb-categories"]',
-      title: "Paso 2 · Armá tus categorías",
+      title: "Paso 3 · Armá tus categorías",
       body: "Sumá tus categorías de gastos e ingresos (alquiler, sueldo, salidas…) para que cada movimiento quede ordenado a tu manera.",
     },
     {
       selector: '[data-tour="onb-transaction"]',
-      title: "Paso 3 · Cargá un movimiento",
-      body: "Un gasto o un ingreso. Recién ahí el dashboard cobra vida con tus números.",
+      title: "Paso 4 · Cargá un movimiento",
+      body: "Un gasto o un ingreso (¡probá por WhatsApp!). Recién ahí el dashboard cobra vida con tus números.",
     },
     {
       selector: '[data-tour="onb-notifications"]',
-      title: "Paso 4 · Activá los avisos",
+      title: "Paso 5 · Activá los avisos",
       body: "Te avisamos de vencimientos, presupuestos y recurrentes para que no se te pase nada.",
     },
     {
