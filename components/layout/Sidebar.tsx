@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ArrowUpDown, Wallet, Target, HandCoins,
-  CreditCard, BarChart3, MessageCircle,
+  CreditCard, BarChart3, MessageCircle, CircleDollarSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
@@ -20,6 +20,7 @@ const navItems = [
   { href: "/deudas",        icon: HandCoins,       label: "Deudas" },
   { href: "/cuotas",        icon: CreditCard,      label: "Cuotas" },
   { href: "/reporte",       icon: BarChart3,       label: "Análisis", match: ["/reporte", "/tendencias"] },
+  { href: "/cotizaciones",  icon: CircleDollarSign, label: "Cotizaciones" },
 ];
 
 export function Sidebar() {
