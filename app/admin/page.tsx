@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { LogoFull } from "@/components/layout/Logo";
 import { MigrateButton } from "./MigrateButton";
+import { getAdminAnalytics } from "@/lib/db/admin-stats";
+import { AdminAnalytics } from "./AdminAnalytics";
 
 export const dynamic = "force-dynamic";
 
@@ -205,7 +207,7 @@ export default async function AdminPage() {
     redirect("/dashboard");
   }
 
-  const s = await getStats();
+  const [s, analytics] = await Promise.all([getStats(), getAdminAnalytics()]);
   const feedback = await prisma.feedback
     .findMany({ orderBy: { createdAt: "desc" }, take: 50 })
     .catch(() => []);
@@ -237,6 +239,9 @@ export default async function AdminPage() {
             Métricas del sistema — actualizado {now.toLocaleString("es-AR")}
           </p>
         </div>
+
+        {/* Analítica avanzada: evolución, embudo, conectados, reactivación */}
+        <AdminAnalytics data={analytics} />
 
         {/* Feedback de testers — lo primero del beta */}
         <section className="space-y-3">
