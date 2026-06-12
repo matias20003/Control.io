@@ -24,6 +24,7 @@ import { GuidedTour } from "@/components/GuidedTour";
 import { WhatsappPromoModal } from "@/components/WhatsappPromoModal";
 import { getOnboardingState } from "@/lib/db/onboarding";
 import { getProfileWhatsapp } from "@/lib/db/profile";
+import { getStreak } from "@/lib/db/streak";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -59,7 +60,7 @@ export default async function DashboardPage({
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber] =
+  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streak] =
     await Promise.all([
       getMonthSummary(user.id, month, year),
       getAccounts(user.id),
@@ -70,6 +71,7 @@ export default async function DashboardPage({
       getTransactions(user.id, { take: 6 }).then((r) => r.items).catch(() => []),
       getOnboardingState(user.id),
       getProfileWhatsapp(user.id).catch(() => null),
+      getStreak(user.id).catch(() => 0),
     ]);
 
   const agenda = await getAgenda(user.id, 30).catch(() => []);
@@ -159,6 +161,22 @@ export default async function DashboardPage({
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">Hola, {name} 👋</h1>
           <TodayDate />
         </div>
+        {streak >= 1 && (
+          <div
+            className="flex items-center gap-2.5 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-2.5"
+            title="Días seguidos registrando movimientos. ¡No la cortes!"
+          >
+            <span className="text-2xl leading-none">🔥</span>
+            <div className="leading-tight">
+              <p className="text-lg font-bold text-foreground">
+                {streak} {streak === 1 ? "día" : "días"}
+              </p>
+              <p className="text-[11px] font-medium text-orange-500/90">
+                {streak >= 3 ? "¡de racha! 💪" : "de racha"}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <OnboardingChecklist state={onboarding} />
