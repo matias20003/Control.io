@@ -174,29 +174,21 @@ export default async function DashboardPage({
         </div>
         {streak >= 1 ? (
           <div
-            className="flex items-center gap-2.5 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-2.5"
-            title={`Días seguidos registrando. Récord: ${streakInfo.longest}. ¡No la cortes!`}
+            className="inline-flex items-center gap-1.5 rounded-full border border-orange-500/25 bg-orange-500/10 px-2.5 py-1"
+            title={`Racha de ${streak} días · récord ${streakInfo.longest} · ${streakSubtitle}`}
           >
-            <span className="text-2xl leading-none">🔥</span>
-            <div className="leading-tight">
-              <p className="text-lg font-bold text-foreground">
-                {streak} {streak === 1 ? "día" : "días"}
-              </p>
-              <p className="text-[11px] font-medium text-orange-500/90">{streakSubtitle}</p>
-            </div>
+            <span className="text-sm leading-none">🔥</span>
+            <span className="text-xs font-semibold text-foreground">
+              {streak} {streak === 1 ? "día" : "días"}
+            </span>
           </div>
         ) : (
           <div
-            className="flex items-center gap-2.5 rounded-2xl border border-border bg-surface-2 px-4 py-2.5"
-            title={streakInfo.longest > 1 ? `Tu récord es de ${streakInfo.longest} días. ¡Retomala!` : "Registrá un movimiento hoy para arrancar tu racha."}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2.5 py-1"
+            title={streakInfo.longest > 1 ? `Tu récord es de ${streakInfo.longest} días. ¡Retomala hoy!` : "Registrá un movimiento hoy para arrancar tu racha."}
           >
-            <span className="text-2xl leading-none grayscale opacity-60">🔥</span>
-            <div className="leading-tight">
-              <p className="text-sm font-bold text-foreground">Sin racha</p>
-              <p className="text-[11px] font-medium text-muted">
-                {streakInfo.longest > 1 ? `récord: ${streakInfo.longest} días · retomala hoy` : "registrá hoy para empezar"}
-              </p>
-            </div>
+            <span className="text-sm leading-none opacity-50 grayscale">🔥</span>
+            <span className="text-xs font-medium text-muted">Sin racha</span>
           </div>
         )}
         <StreakCelebration current={streak} />
