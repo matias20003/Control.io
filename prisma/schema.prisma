@@ -529,3 +529,14 @@ model WhatsappUnmatched {
 
   @@map("whatsapp_unmatched")
 }
+
+// Días (ARG) en los que el usuario estuvo activo (abrió la app). Junto con los
+// días con movimientos, alimenta la racha — así un día sin gastos no la corta
+// si el usuario igual entró a revisar.
+model UserActiveDay {
+  userId String   @map("user_id")
+  day    DateTime @db.Date
+
+  @@id([userId, day])
+  @@map("user_active_days")
+}
