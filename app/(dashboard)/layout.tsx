@@ -44,7 +44,7 @@ export default async function DashboardLayout({
         {children}
       </main>
       <BottomNav />
-      <FeedbackButton />
+      <FeedbackButton registeredAt={user.created_at} />
     </div>
   );
 }

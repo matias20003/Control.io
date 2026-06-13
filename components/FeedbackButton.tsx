@@ -9,18 +9,20 @@ import { toast } from "sonner";
 /**
  * Feedback de testers. En vez de un botón flotante permanente (que tapaba
  * contenido), usa:
- *  1. Un popup OCASIONAL (cada ~3 días) que invita a dejar feedback, descartable.
+ *  1. Un popup que aparece UNA SOLA VEZ, a los 5 días del registro, y nunca más.
  *  2. Acceso on-demand desde el menú de usuario, vía el evento "feedback:open".
  */
-const PROMPT_KEY = "control:fb-prompt-at";
-const PROMPT_EVERY = 3 * 24 * 60 * 60 * 1000; // 3 días
+const SHOWN_KEY = "control:fb-shown";
+const DELAY_DAYS = 5;
 
-export function FeedbackButton() {
+export function FeedbackButton({ registeredAt }: { registeredAt?: string }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);     // modal
-  const [prompt, setPrompt] = useState(false); // popup ocasional
+  const [prompt, setPrompt] = useState(false); // popup
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
+
+  const markShown = () => { try { localStorage.setItem(SHOWN_KEY, "1"); } catch {} };
 
   // Abrir el modal desde cualquier lado (menú de usuario) sin acoplar componentes.
   useEffect(() => {
@@ -29,18 +31,21 @@ export function FeedbackButton() {
     return () => window.removeEventListener("feedback:open", handler);
   }, []);
 
-  // Popup ocasional: solo si pasaron +3 días desde la última vez.
+  // Popup: una sola vez, recién a los 5 días del registro. Después, nunca más.
   useEffect(() => {
-    let last = 0;
-    try { last = Number(localStorage.getItem(PROMPT_KEY)) || 0; } catch {}
-    if (Date.now() - last < PROMPT_EVERY) return;
-    const t = setTimeout(() => setPrompt(true), 14000); // a los ~14s de uso
+    if (!registeredAt) return;
+    let shown = false;
+    try { shown = localStorage.getItem(SHOWN_KEY) === "1"; } catch {}
+    if (shown) return;
+    const days = (Date.now() - new Date(registeredAt).getTime()) / 86_400_000;
+    if (days < DELAY_DAYS) return;
+    const t = setTimeout(() => { setPrompt(true); markShown(); }, 6000); // a los ~6s
     return () => clearTimeout(t);
-  }, []);
+  }, [registeredAt]);
 
   const snooze = () => {
     setPrompt(false);
-    try { localStorage.setItem(PROMPT_KEY, String(Date.now())); } catch {}
+    markShown();
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -65,7 +70,7 @@ export function FeedbackButton() {
       toast.success("¡Gracias por tu feedback! 🙌");
       setMessage("");
       setOpen(false);
-      try { localStorage.setItem(PROMPT_KEY, String(Date.now())); } catch {}
+      markShown();
     } catch {
       toast.error("No pudimos enviar tu feedback");
     } finally {
