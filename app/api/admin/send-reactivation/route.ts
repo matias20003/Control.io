@@ -12,7 +12,7 @@ export async function POST() {
       return Response.json({ error: "No autorizado" }, { status: 401 });
     }
 
-    const { sent, errors, total } = await sendReactivationNudges();
+    const { sent, errors, total, lastError } = await sendReactivationNudges();
     return Response.json({
       ok: true,
       sent,
@@ -21,7 +21,9 @@ export async function POST() {
       message:
         total === 0
           ? "No hay inactivos pendientes para reactivar ahora mismo."
-          : `Enviado a ${sent} de ${total}${errors ? ` (${errors} con error)` : ""}.`,
+          : errors
+            ? `Enviados ${sent}, ${errors} con error. Causa: ${lastError ?? "desconocida"}`
+            : `Enviado a ${sent} de ${total}. ✅`,
     });
   } catch (e: any) {
     return Response.json({ error: e?.message ?? "Error interno" }, { status: 500 });

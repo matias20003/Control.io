@@ -32,17 +32,22 @@ export async function getReactivationCandidates(): Promise<(Candidate & { dorman
  * Mensaje según segmento: "cargá tu primer movimiento" vs "te extrañamos, volvé".
  * Lo usan el cron diario y el botón "Enviar ahora" del admin.
  */
-export async function sendReactivationNudges(): Promise<{ sent: number; errors: number; total: number }> {
+export async function sendReactivationNudges(): Promise<{ sent: number; errors: number; total: number; lastError?: string }> {
   const appUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://controlio.site";
   const candidates = await getReactivationCandidates();
 
   let sent = 0;
   let errors = 0;
+  let lastError: string | undefined;
 
   for (const p of candidates) {
     const name = p.name || p.email.split("@")[0];
     try {
-      await getResend().emails.send({
+      // El SDK de Resend NO tira excepción ante errores de API: devuelve
+      // { data, error }. Hay que chequear el error a mano, sino marcaríamos
+      // como enviados emails que en realidad Resend rechazó (dominio sin
+      // verificar, etc.).
+      const { error: sendError } = await getResend().emails.send({
         from: FROM,
         to: p.email,
         subject: p.dormant
@@ -50,6 +55,7 @@ export async function sendReactivationNudges(): Promise<{ sent: number; errors: 
           : "¿Arrancamos? Cargá tu primer movimiento en control.io 💸",
         html: buildReactivationHtml({ name, appUrl, dormant: p.dormant }),
       });
+      if (sendError) throw new Error(sendError.message || "Resend rechazó el envío");
 
       sendPushToUser(p.id, {
         title: p.dormant ? "¡Te extrañamos! 👋" : "¿Arrancamos? 👋",
@@ -67,8 +73,9 @@ export async function sendReactivationNudges(): Promise<{ sent: number; errors: 
     } catch (err) {
       console.error(`[reactivation] error con ${p.email}:`, err);
       errors++;
+      if (!lastError) lastError = err instanceof Error ? err.message : String(err);
     }
   }
 
-  return { sent, errors, total: candidates.length };
+  return { sent, errors, total: candidates.length, lastError };
 }
