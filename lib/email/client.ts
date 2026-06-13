@@ -7,7 +7,8 @@ export function getResend(): Resend {
   return _resend;
 }
 
-// Sender por defecto. Override en producción via la env var RESEND_FROM en
-// Vercel para no hardcodear emails personales en el repo.
+// Sender por defecto: un dominio PROPIO (Resend no entrega desde gmail.com).
+// Requiere que controlio.site esté verificado en Resend (Domains + DNS).
+// Override con la env var RESEND_FROM en Vercel si querés otra dirección.
 export const FROM =
-  process.env.RESEND_FROM ?? "control.io <control.io.oficial@gmail.com>";
+  process.env.RESEND_FROM ?? "control.io <noreply@controlio.site>";
