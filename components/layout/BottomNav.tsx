@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ArrowUpDown, Wallet,
-  MoreHorizontal, X, BarChart2, CreditCard, Target, HandCoins, Settings, CircleDollarSign,
+  MoreHorizontal, X, BarChart2, CreditCard, Target, HandCoins, Settings, CircleDollarSign, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,7 @@ const rightItems: NavItem[] = [
 ];
 
 const moreItems: NavItem[] = [
+  { href: "/grupos",       icon: Users,      label: "Grupos" },
   { href: "/deudas",       icon: HandCoins,  label: "Deudas" },
   { href: "/cuotas",       icon: CreditCard, label: "Cuotas" },
   { href: "/reporte",      icon: BarChart2,  label: "Análisis", match: ["/reporte", "/tendencias"] },

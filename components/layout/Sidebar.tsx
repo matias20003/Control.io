@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ArrowUpDown, Wallet, Target, HandCoins,
-  CreditCard, BarChart3, MessageCircle, CircleDollarSign,
+  CreditCard, BarChart3, MessageCircle, CircleDollarSign, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
@@ -17,6 +17,7 @@ const navItems = [
   { href: "/movimientos",   icon: ArrowUpDown,     label: "Movimientos" },
   { href: "/cuentas",       icon: Wallet,          label: "Cuentas" },
   { href: "/presupuestos",  icon: Target,          label: "Planificá", match: ["/presupuestos", "/metas", "/recurrentes"] },
+  { href: "/grupos",        icon: Users,           label: "Grupos" },
   { href: "/deudas",        icon: HandCoins,       label: "Deudas" },
   { href: "/cuotas",        icon: CreditCard,      label: "Cuotas" },
   { href: "/reporte",       icon: BarChart3,       label: "Análisis", match: ["/reporte", "/tendencias"] },

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { getResend, FROM } from "@/lib/email/client";
@@ -397,8 +398,12 @@ export async function getOrCreateGrupoInviteLink(
     await prisma.grupoGasto.update({ where: { id: grupoId }, data: { inviteToken: token } });
   }
 
-  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://controlio.site";
-  return { url: `${base}/grupos/unirse/${token}` };
+  // Base URL del dominio REAL desde el que se navega (no de NEXT_PUBLIC_SITE_URL,
+  // que puede estar mal configurada como localhost en Vercel).
+  const h = await headers();
+  const host = h.get("host") ?? "controlio.site";
+  const proto = host.includes("localhost") ? "http" : "https";
+  return { url: `${proto}://${host}/grupos/unirse/${token}` };
 }
 
 /** Une al usuario logueado a un grupo vía su link reusable (inviteToken). */
