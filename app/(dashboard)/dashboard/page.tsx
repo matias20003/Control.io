@@ -24,7 +24,9 @@ import { GuidedTour } from "@/components/GuidedTour";
 import { WhatsappPromoModal } from "@/components/WhatsappPromoModal";
 import { getOnboardingState } from "@/lib/db/onboarding";
 import { getProfileWhatsapp } from "@/lib/db/profile";
-import { getStreak } from "@/lib/db/streak";
+import { getStreakInfo } from "@/lib/db/streak";
+import { nextStreakMilestone } from "@/lib/streak-utils";
+import { StreakCelebration } from "./StreakCelebration";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -60,7 +62,7 @@ export default async function DashboardPage({
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streak] =
+  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo] =
     await Promise.all([
       getMonthSummary(user.id, month, year),
       getAccounts(user.id),
@@ -71,8 +73,17 @@ export default async function DashboardPage({
       getTransactions(user.id, { take: 6 }).then((r) => r.items).catch(() => []),
       getOnboardingState(user.id),
       getProfileWhatsapp(user.id).catch(() => null),
-      getStreak(user.id).catch(() => 0),
+      getStreakInfo(user.id).catch(() => ({ current: 0, longest: 0 })),
     ]);
+
+  const streak = streakInfo.current;
+  const nextMilestone = nextStreakMilestone(streak);
+  const streakSubtitle =
+    streak >= 1 && streak === streakInfo.longest && streak > 1
+      ? "🏆 ¡tu récord!"
+      : nextMilestone
+        ? `faltan ${nextMilestone - streak} para ${nextMilestone} 🎯`
+        : "¡de racha! 💪";
 
   const agenda = await getAgenda(user.id, 30).catch(() => []);
 
@@ -164,19 +175,18 @@ export default async function DashboardPage({
         {streak >= 1 && (
           <div
             className="flex items-center gap-2.5 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-2.5"
-            title="Días seguidos registrando movimientos. ¡No la cortes!"
+            title={`Días seguidos registrando. Récord: ${streakInfo.longest}. ¡No la cortes!`}
           >
             <span className="text-2xl leading-none">🔥</span>
             <div className="leading-tight">
               <p className="text-lg font-bold text-foreground">
                 {streak} {streak === 1 ? "día" : "días"}
               </p>
-              <p className="text-[11px] font-medium text-orange-500/90">
-                {streak >= 3 ? "¡de racha! 💪" : "de racha"}
-              </p>
+              <p className="text-[11px] font-medium text-orange-500/90">{streakSubtitle}</p>
             </div>
           </div>
         )}
+        <StreakCelebration current={streak} />
       </div>
 
       <OnboardingChecklist state={onboarding} />

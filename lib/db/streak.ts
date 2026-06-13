@@ -1,24 +1,31 @@
 import { prisma } from "@/lib/prisma";
 import { toZonedTime } from "date-fns-tz";
 import { ARG_TZ, todayStringArg } from "@/lib/timezone";
-import { calculateStreak } from "@/lib/streak-utils";
+import { calculateStreak, calculateLongestStreak } from "@/lib/streak-utils";
 
-/**
- * Racha actual del usuario: días ARG consecutivos en los que registró al menos
- * un movimiento (por fecha de carga). El motor de hábito del dashboard.
- */
-export async function getStreak(userId: string): Promise<number> {
-  // Con el último ~año de movimientos alcanza para cualquier racha real.
+/** Set de fechas ARG (YYYY-MM-DD) en las que el usuario registró algún movimiento. */
+async function getActiveDays(userId: string): Promise<Set<string>> {
   const txs = await prisma.transaction.findMany({
     where: { userId },
     select: { createdAt: true },
     orderBy: { createdAt: "desc" },
     take: 1000,
   });
-
-  const activeDays = new Set(
+  return new Set(
     txs.map((t) => toZonedTime(t.createdAt, ARG_TZ).toISOString().slice(0, 10))
   );
+}
 
-  return calculateStreak(activeDays, todayStringArg());
+/** Racha actual: días ARG consecutivos registrando (motor de hábito). */
+export async function getStreak(userId: string): Promise<number> {
+  return calculateStreak(await getActiveDays(userId), todayStringArg());
+}
+
+/** Racha actual + récord histórico (para el badge y los milestones). */
+export async function getStreakInfo(userId: string): Promise<{ current: number; longest: number }> {
+  const days = await getActiveDays(userId);
+  return {
+    current: calculateStreak(days, todayStringArg()),
+    longest: calculateLongestStreak(days),
+  };
 }
