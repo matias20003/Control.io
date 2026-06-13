@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Plus, Users, Trash2, Mail, UserPlus,
   TrendingUp, TrendingDown, Minus, ArrowRight, Receipt,
+  MessageCircle, Copy, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ import {
   agregarMiembroAction,
   eliminarGastoAction,
   eliminarGrupoAction,
+  getOrCreateGrupoInviteLink,
 } from "@/app/actions/grupos";
 import type {
   SerializedGrupoDetalle,
@@ -37,6 +39,9 @@ export function GrupoDetalleClient({ grupo: initialGrupo, currentUserId }: Props
   const [grupo, setGrupo] = useState(initialGrupo);
   const [tab, setTab] = useState<"gastos" | "balances" | "miembros">("gastos");
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [loadingLink, setLoadingLink] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [isDeleteGrupoOpen, setIsDeleteGrupoOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -60,6 +65,33 @@ export function GrupoDetalleClient({ grupo: initialGrupo, currentUserId }: Props
       }
     });
   };
+
+  // Abre el hub de invitación y trae (o crea) el link reusable del grupo.
+  const openInvite = () => {
+    setIsInviteOpen(true);
+    if (!inviteUrl) {
+      setLoadingLink(true);
+      getOrCreateGrupoInviteLink(grupo.id)
+        .then((r) => { if (r.url) setInviteUrl(r.url); })
+        .finally(() => setLoadingLink(false));
+    }
+  };
+
+  const copyLink = async () => {
+    if (!inviteUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success("Link copiado");
+    } catch {
+      toast.error("No pude copiar el link");
+    }
+  };
+
+  const waHref = inviteUrl
+    ? `https://wa.me/?text=${encodeURIComponent(`¡Sumate a "${grupo.nombre}" en control.io para dividir gastos entre todos! 👇\n${inviteUrl}`)}`
+    : "#";
 
   const handleAgregarMiembro = (formData: FormData) => {
     startTransition(async () => {
@@ -121,9 +153,9 @@ export function GrupoDetalleClient({ grupo: initialGrupo, currentUserId }: Props
             size="sm"
             variant="outline"
             className="gap-1.5"
-            onClick={() => setIsInviteOpen(true)}
+            onClick={openInvite}
           >
-            <Mail size={13} />
+            <MessageCircle size={13} />
             Invitar
           </Button>
           <Link href={`/grupos/${grupo.id}/gasto/nuevo`}>
@@ -303,31 +335,57 @@ export function GrupoDetalleClient({ grupo: initialGrupo, currentUserId }: Props
         </div>
       )}
 
-      {/* Dialog: Invitar por email */}
+      {/* Dialog: Invitar — WhatsApp/link protagonista, email como opción */}
       <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
-        <DialogContent title="Invitar por email">
-          <h2 className="text-lg font-semibold mb-4">Invitar por email</h2>
+        <DialogContent title="Invitar al grupo">
+          <h2 className="text-lg font-semibold mb-1">Invitá a tus amigos</h2>
+          <p className="text-sm text-muted mb-4">
+            Compartí el link y cualquiera que lo abra se suma al grupo.
+          </p>
+
+          {/* WhatsApp — el canal protagonista */}
+          <a
+            href={loadingLink || !inviteUrl ? undefined : waHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-disabled={loadingLink || !inviteUrl}
+            className={cn(
+              "flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl text-sm font-semibold text-white transition-opacity",
+              loadingLink || !inviteUrl ? "opacity-60 pointer-events-none" : "hover:opacity-90"
+            )}
+            style={{ backgroundColor: "#25D366" }}
+          >
+            <MessageCircle size={17} />
+            {loadingLink ? "Preparando link..." : "Compartir por WhatsApp"}
+          </a>
+
+          {/* Copiar link */}
+          <div className="mt-3 flex gap-2">
+            <Input readOnly value={inviteUrl ?? "Generando link..."} className="flex-1 text-xs font-mono" />
+            <Button type="button" variant="outline" size="sm" onClick={copyLink} disabled={!inviteUrl} className="shrink-0 gap-1.5">
+              {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+              {copied ? "Copiado" : "Copiar"}
+            </Button>
+          </div>
+
+          {/* Divisor */}
+          <div className="flex items-center gap-3 my-5">
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted">o por email</span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* Email (opción secundaria) */}
           <form action={handleInvitar} className="space-y-3">
             <input type="hidden" name="grupoId" value={grupo.id} />
-            <div className="space-y-1.5">
-              <Label htmlFor="inv-nombre">Nombre (opcional)</Label>
-              <Input id="inv-nombre" name="nombre" placeholder="Juan García" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="inv-email">Email *</Label>
-              <Input id="inv-email" name="email" type="email" placeholder="juan@email.com" required />
-            </div>
-            <p className="text-xs text-muted">
-              Les llegará un email con un link para unirse al grupo. El link expira en 7 días.
-            </p>
-            <div className="flex gap-2 justify-end pt-1">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsInviteOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" size="sm" disabled={isPending}>
-                {isPending ? "Enviando..." : "Enviar invitación"}
+            <div className="flex gap-2">
+              <Input name="nombre" placeholder="Nombre (opcional)" className="w-1/3" />
+              <Input name="email" type="email" placeholder="email@ejemplo.com" required className="flex-1" />
+              <Button type="submit" size="sm" disabled={isPending} className="shrink-0">
+                <Mail size={14} />
               </Button>
             </div>
+            <p className="text-[11px] text-muted">Le llega un email con el link (requiere que el email esté configurado).</p>
           </form>
         </DialogContent>
       </Dialog>

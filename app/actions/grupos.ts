@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { getResend, FROM } from "@/lib/email/client";
 import { invitacionGrupoHtml } from "@/lib/email/invitacion-grupo";
+import { randomUUID } from "crypto";
 
 // ─── Recalcular divisiones iguales cuando cambia la cantidad de miembros ───
 // Se llama cada vez que se agrega un miembro al grupo.
@@ -372,4 +373,62 @@ export async function aceptarInvitacionAction(token: string) {
   revalidatePath(`/grupos/${invitacion.grupoId}`);
   revalidatePath("/grupos");
   redirect(`/grupos/${invitacion.grupoId}`);
+}
+
+// ─── Link de invitación REUSABLE (compartir por WhatsApp) ──────────────────
+
+/** Devuelve (creando si hace falta) el link reusable del grupo. Solo miembros. */
+export async function getOrCreateGrupoInviteLink(
+  grupoId: string
+): Promise<{ url?: string; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autorizado" };
+
+  const grupo = await prisma.grupoGasto.findFirst({
+    where: { id: grupoId, OR: [{ userId: user.id }, { miembros: { some: { userId: user.id } } }] },
+    select: { id: true, inviteToken: true },
+  });
+  if (!grupo) return { error: "No autorizado" };
+
+  let token = grupo.inviteToken;
+  if (!token) {
+    token = randomUUID();
+    await prisma.grupoGasto.update({ where: { id: grupoId }, data: { inviteToken: token } });
+  }
+
+  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://controlio.site";
+  return { url: `${base}/grupos/unirse/${token}` };
+}
+
+/** Une al usuario logueado a un grupo vía su link reusable (inviteToken). */
+export async function unirsePorLinkAction(inviteToken: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect(`/login?redirect=/grupos/unirse/${inviteToken}`);
+
+  const grupo = await prisma.grupoGasto.findUnique({
+    where: { inviteToken },
+    include: { miembros: true },
+  });
+  if (!grupo) return { error: "Link inválido" };
+
+  if (grupo.miembros.some((m) => m.userId === user.id)) {
+    redirect(`/grupos/${grupo.id}`);
+  }
+
+  const profile = await prisma.profile.findUnique({ where: { id: user.id } });
+  await prisma.miembroGrupo.create({
+    data: {
+      grupoId: grupo.id,
+      userId: user.id,
+      nombre: profile?.name ?? profile?.email ?? "Miembro",
+      email: profile?.email ?? null,
+    },
+  });
+
+  await recalcularDivisionesIguales(grupo.id);
+  revalidatePath(`/grupos/${grupo.id}`);
+  revalidatePath("/grupos");
+  redirect(`/grupos/${grupo.id}`);
 }

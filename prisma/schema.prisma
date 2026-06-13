@@ -368,6 +368,10 @@ model GrupoGasto {
   userId      String
   user        Profile   @relation("GruposCreados", fields: [userId], references: [id], onDelete: Cascade)
 
+  // Link de invitación REUSABLE (estilo invite de grupo de WhatsApp): cualquiera
+  // con el link se une. Se genera lazy la primera vez que se comparte.
+  inviteToken String?   @unique
+
   miembros     MiembroGrupo[]
   gastos       GastoGrupo[]
   invitaciones GrupoInvitacion[]

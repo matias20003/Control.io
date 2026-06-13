@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { getInvitacionByToken } from "@/lib/db/grupos";
-import { aceptarInvitacionAction } from "@/app/actions/grupos";
+import { getInvitacionByToken, getGrupoByInviteToken } from "@/lib/db/grupos";
+import { aceptarInvitacionAction, unirsePorLinkAction } from "@/app/actions/grupos";
 import { LogoFull } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/button";
 import { Users } from "lucide-react";
@@ -15,19 +15,31 @@ export default async function UnirseGrupoPage({ params }: Props) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  // El token puede ser: (a) una invitación por email (single-use) o (b) el
+  // link reusable del grupo (inviteToken). Resolvemos cuál es.
   const invitacion = await getInvitacionByToken(token);
 
-  // Token no existe
-  if (!invitacion) {
-    return <PaginaError mensaje="Esta invitación no existe o ya fue usada." />;
+  let grupo: { id: string; nombre: string; descripcion: string | null; miembros: { userId: string | null }[] } | null = null;
+  let viaLink = false;
+
+  if (invitacion) {
+    // Invitación por email: validamos estado/expiración.
+    if (invitacion.estado !== "pendiente" || invitacion.expiraEn < new Date()) {
+      return <PaginaError mensaje="Esta invitación ya expiró o fue usada." />;
+    }
+    grupo = invitacion.grupo;
+  } else {
+    // ¿Es el link reusable del grupo?
+    const g = await getGrupoByInviteToken(token);
+    if (g) {
+      grupo = g;
+      viaLink = true;
+    }
   }
 
-  // Invitación expirada o usada
-  if (invitacion.estado !== "pendiente" || invitacion.expiraEn < new Date()) {
-    return <PaginaError mensaje="Esta invitación ya expiró o fue usada." />;
+  if (!grupo) {
+    return <PaginaError mensaje="Este link no existe o ya no es válido." />;
   }
-
-  const grupo = invitacion.grupo;
 
   // Si no está logueado → redirigir a login con redirect param
   if (!user) {
@@ -73,11 +85,12 @@ export default async function UnirseGrupoPage({ params }: Props) {
             {grupo.miembros.length} {grupo.miembros.length === 1 ? "miembro" : "miembros"} ya en el grupo
           </div>
 
-          {/* Acción: aceptar */}
+          {/* Acción: aceptar (invitación por email o link reusable) */}
           <form
             action={async () => {
               "use server";
-              await aceptarInvitacionAction(token);
+              if (viaLink) await unirsePorLinkAction(token);
+              else await aceptarInvitacionAction(token);
             }}
           >
             <Button type="submit" className="w-full">

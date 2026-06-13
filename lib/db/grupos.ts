@@ -126,3 +126,11 @@ export async function getInvitacionByToken(token: string) {
     include: { grupo: { include: { miembros: true } } },
   });
 }
+
+/** Grupo por su link reusable (inviteToken). Para el flujo de "unirse por link". */
+export async function getGrupoByInviteToken(token: string) {
+  return prisma.grupoGasto.findUnique({
+    where: { inviteToken: token },
+    include: { miembros: true },
+  });
+}
