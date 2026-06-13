@@ -172,7 +172,7 @@ export default async function DashboardPage({
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">Hola, {name} 👋</h1>
           <TodayDate />
         </div>
-        {streak >= 1 && (
+        {streak >= 1 ? (
           <div
             className="flex items-center gap-2.5 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-2.5"
             title={`Días seguidos registrando. Récord: ${streakInfo.longest}. ¡No la cortes!`}
@@ -183,6 +183,19 @@ export default async function DashboardPage({
                 {streak} {streak === 1 ? "día" : "días"}
               </p>
               <p className="text-[11px] font-medium text-orange-500/90">{streakSubtitle}</p>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="flex items-center gap-2.5 rounded-2xl border border-border bg-surface-2 px-4 py-2.5"
+            title={streakInfo.longest > 1 ? `Tu récord es de ${streakInfo.longest} días. ¡Retomala!` : "Registrá un movimiento hoy para arrancar tu racha."}
+          >
+            <span className="text-2xl leading-none grayscale opacity-60">🔥</span>
+            <div className="leading-tight">
+              <p className="text-sm font-bold text-foreground">Sin racha</p>
+              <p className="text-[11px] font-medium text-muted">
+                {streakInfo.longest > 1 ? `récord: ${streakInfo.longest} días · retomala hoy` : "registrá hoy para empezar"}
+              </p>
             </div>
           </div>
         )}
