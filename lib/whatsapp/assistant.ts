@@ -12,7 +12,7 @@
  *   OPENAI_BASE_URL  → opcional, default https://api.openai.com/v1
  *   CHAT_MODEL       → opcional, default "gpt-4o-mini"
  */
-import { getAccounts, createAccount, type SerializedAccount } from "@/lib/db/accounts";
+import { getAccounts, createAccount, updateAccount, type SerializedAccount } from "@/lib/db/accounts";
 import { getCategories, type SerializedCategory } from "@/lib/db/categories";
 import {
   createTransaction,
@@ -287,6 +287,12 @@ tiene MÁS DE UNA, NO registres todavía: respondé (intent "chat") preguntando 
 nombrando las cuentas disponibles. Recién cuando sepas la cuenta emití la acción con "account".
 Si tiene UNA sola cuenta, usala sin preguntar.
 
+AJUSTAR SALDO (set_balance): si el usuario te dice CUÁNTO TIENE en una cuenta —"en Mercado Pago
+tengo 50.000", "mi saldo del banco es 120 lucas", "tengo 30k en efectivo", "corregí/poné el saldo
+de X en Y"— usá intent "action" con set_balance { account, balance }. Esto FIJA el saldo de esa
+cuenta a ese valor: NO lo registres como ingreso ni gasto (no es plata que entró/salió, es el
+saldo real que el usuario está informando). El "account" tiene que ser una de las cuentas existentes.
+
 SEGUIMIENTO DE CUENTA (MUY IMPORTANTE): si en un mensaje TUYO anterior (mirá el HISTORIAL)
 preguntaste con qué cuenta registrar uno o más movimientos, y AHORA el usuario responde indicando
 la(s) cuenta(s), TENÉS que emitir intent "action" RE-EMITIENDO esos movimientos COMPLETOS (cada uno
@@ -327,6 +333,7 @@ TIPOS DE ACCIÓN (campo "type"):
 - "expense" / "income": { amount, currency, description, category, account, date, reportOnly }
 - "transfer": { amount, currency, description, fromAccount, toAccount, date }
 - "create_account": { name, accountType, currency, balance }   // accountType de la lista
+- "set_balance": { account, balance }   // FIJA el saldo ACTUAL de una cuenta existente (no es ingreso ni gasto)
 - "create_debt": { direction: "i_owe"|"they_owe", personName, amount, currency, description }
 - "pay_debt": { personName, amount }
 - "create_budget": { category, amount }                        // categoría de gasto, mes actual
@@ -508,6 +515,17 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
         balance: a.balance ?? 0,
       });
       return `🏦 Cuenta creada: ${a.name} (saldo ${money(a.balance ?? 0, cur)})`;
+    }
+
+    case "set_balance": {
+      const acc = findAccount(c, a.account);
+      if (!acc) throw new Error(`no encontré la cuenta "${a.account ?? ""}"`);
+      const value = a.balance ?? a.amount;
+      if (value === undefined || value === null || isNaN(value)) {
+        throw new Error("no entendí a cuánto poner el saldo");
+      }
+      await updateAccount(userId, acc.id, { balance: value });
+      return `🏦 Saldo de ${acc.name} actualizado a *${money(value, acc.currency)}*`;
     }
 
     case "create_debt": {
