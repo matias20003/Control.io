@@ -5,8 +5,10 @@ import { sendPushToUser } from "@/lib/push/send";
 import { encrypt } from "@/lib/crypto";
 import { startOfTodayArg } from "@/lib/timezone";
 import { snapshotConversion } from "@/lib/exchange";
+import { sendReactivationNudges } from "@/lib/reactivation";
 
-// Vercel Cron: diariamente a las 11:00 UTC (08:00 ARG)
+// Vercel Cron: diariamente a las 11:00 UTC (08:00 ARG).
+// Consolida recurrentes + reactivación (límite de 2 crons en Vercel Hobby).
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -151,5 +153,8 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return Response.json({ ok: true, executed, skipped, total: recurrentes.length });
+  // Reactivación de inactivos (consolidado acá, best-effort).
+  const reactivation = await sendReactivationNudges().catch(() => ({ sent: 0, errors: 0, total: 0 }));
+
+  return Response.json({ ok: true, executed, skipped, total: recurrentes.length, reactivation });
 }

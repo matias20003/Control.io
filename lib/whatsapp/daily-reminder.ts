@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { sendText } from "@/lib/whatsapp/kapso";
 import { getDailyReminderRecipients } from "@/lib/db/profile";
 import { getStreak } from "@/lib/db/streak";
+import { sendPushToUser } from "@/lib/push/send";
 import { startOfTodayArg } from "@/lib/timezone";
 
 const MESSAGE =
@@ -40,13 +41,23 @@ export async function sendDailyReminders(): Promise<{ sent: number; skipped: num
       continue;
     }
 
+    const streak = await getStreak(r.id).catch(() => 0);
+
+    // Push: NO tiene el límite de la ventana de 24h de WhatsApp, así que llega
+    // a quien tenga notificaciones activas aunque no haya escrito al bot hoy.
+    sendPushToUser(r.id, {
+      title: "📝 ¿Registraste tus gastos de hoy?",
+      body: streak >= 2
+        ? `🔥 Llevás ${streak} días de racha. ¡No la cortes!`
+        : "Te toma menos de 1 minuto. Tocá para cargar.",
+      url: "/dashboard",
+    }).catch(() => {});
+
     try {
-      // Con racha viva (≥2 días) usamos el mensaje que tira de ella.
-      const streak = await getStreak(r.id).catch(() => 0);
       await sendText(r.whatsappNumber, streak >= 2 ? streakMessage(streak) : MESSAGE);
       sent++;
     } catch {
-      // Fuera de la ventana de 24hs o error transitorio: lo ignoramos.
+      // Fuera de la ventana de 24hs o error transitorio: lo ignoramos (queda el push).
       failed++;
     }
   }
