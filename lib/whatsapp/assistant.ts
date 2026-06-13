@@ -429,6 +429,12 @@ class AlreadyRegistered extends Error {}
 async function runAction(userId: string, a: Action, c: FinancialContext, isoDate: string): Promise<string> {
   const cur = a.currency === "USD" ? "USD" : "ARS";
 
+  // Normalización defensiva: el modelo a veces omite "type" o usa un alias al
+  // ajustar el saldo. Si trae balance + cuenta y no es claramente otra cosa, es set_balance.
+  if (!a.type || ["update_balance", "ajustar_saldo", "set-balance", "saldo", "balance"].includes(a.type)) {
+    if (a.balance !== undefined && a.account) a.type = "set_balance";
+  }
+
   switch (a.type) {
     case "expense":
     case "income": {
@@ -624,7 +630,7 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
     }
 
     default:
-      throw new Error(`acción no soportada: ${a.type}`);
+      throw new Error(a.type ? `acción no reconocida (${a.type})` : "no entendí bien qué querías hacer");
   }
 }
 
