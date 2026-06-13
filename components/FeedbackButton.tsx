@@ -1,20 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { MessageSquarePlus, X, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 
 /**
- * Botón flotante de feedback para testers del beta. Abre un modal con un
- * textarea y manda el reporte (+ la página actual) a /api/feedback.
+ * Feedback de testers. En vez de un botón flotante permanente (que tapaba
+ * contenido), usa:
+ *  1. Un popup OCASIONAL (cada ~3 días) que invita a dejar feedback, descartable.
+ *  2. Acceso on-demand desde el menú de usuario, vía el evento "feedback:open".
  */
+const PROMPT_KEY = "control:fb-prompt-at";
+const PROMPT_EVERY = 3 * 24 * 60 * 60 * 1000; // 3 días
+
 export function FeedbackButton() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false);     // modal
+  const [prompt, setPrompt] = useState(false); // popup ocasional
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
+
+  // Abrir el modal desde cualquier lado (menú de usuario) sin acoplar componentes.
+  useEffect(() => {
+    const handler = () => { setOpen(true); setPrompt(false); };
+    window.addEventListener("feedback:open", handler);
+    return () => window.removeEventListener("feedback:open", handler);
+  }, []);
+
+  // Popup ocasional: solo si pasaron +3 días desde la última vez.
+  useEffect(() => {
+    let last = 0;
+    try { last = Number(localStorage.getItem(PROMPT_KEY)) || 0; } catch {}
+    if (Date.now() - last < PROMPT_EVERY) return;
+    const t = setTimeout(() => setPrompt(true), 14000); // a los ~14s de uso
+    return () => clearTimeout(t);
+  }, []);
+
+  const snooze = () => {
+    setPrompt(false);
+    try { localStorage.setItem(PROMPT_KEY, String(Date.now())); } catch {}
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,6 +65,7 @@ export function FeedbackButton() {
       toast.success("¡Gracias por tu feedback! 🙌");
       setMessage("");
       setOpen(false);
+      try { localStorage.setItem(PROMPT_KEY, String(Date.now())); } catch {}
     } catch {
       toast.error("No pudimos enviar tu feedback");
     } finally {
@@ -47,17 +75,51 @@ export function FeedbackButton() {
 
   return (
     <>
-      {/* Botón flotante — sobre el bottom nav en mobile, abajo a la derecha en desktop */}
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Enviar feedback"
-        className="fixed right-4 bottom-32 z-[45] flex items-center gap-2 rounded-full border border-primary/40 bg-surface/95 px-5 py-3.5 text-sm font-semibold text-primary shadow-xl backdrop-blur-md transition-colors hover:bg-surface md:bottom-6"
-      >
-        <MessageSquarePlus size={22} />
-        <span className="hidden sm:inline">Feedback</span>
-      </button>
+      {/* Popup ocasional — chico, descartable, arriba de la barra en mobile */}
+      {prompt &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed bottom-24 right-3 left-3 z-[44] sm:bottom-5 sm:right-5 sm:left-auto sm:w-80 animate-sheet-up">
+            <div className="relative rounded-2xl border border-border bg-surface p-4 shadow-2xl">
+              <button
+                type="button"
+                onClick={snooze}
+                aria-label="Cerrar"
+                className="absolute right-2 top-2 rounded-lg p-1.5 text-muted hover:bg-surface-2"
+              >
+                <X size={15} />
+              </button>
+              <div className="flex items-center gap-2 pr-6">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">
+                  <MessageSquarePlus size={16} />
+                </span>
+                <p className="text-sm font-semibold text-foreground">¿Cómo venís usando control.io?</p>
+              </div>
+              <p className="mt-2 text-xs text-muted">
+                Si algo te molestó o se te ocurre una mejora, contanos — nos ayuda un montón. 🙏
+              </p>
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={snooze}
+                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface-2"
+                >
+                  Ahora no
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setPrompt(false); setOpen(true); }}
+                  className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+                >
+                  Dar feedback
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
 
+      {/* Modal */}
       {open &&
         typeof document !== "undefined" &&
         createPortal(

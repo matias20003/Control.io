@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, Bell, ChevronDown, Settings, LogOut, Calculator as CalcIcon } from "lucide-react";
+import { Search, Bell, ChevronDown, Settings, LogOut, Calculator as CalcIcon, MessageSquarePlus } from "lucide-react";
 import { signOutAction } from "@/app/actions/auth";
 
 /**
@@ -94,6 +94,13 @@ export function Topbar({ name, email }: { name: string; email: string }) {
             >
               <Settings size={15} /> Configuración
             </Link>
+            <button
+              type="button"
+              onClick={() => { setOpen(false); window.dispatchEvent(new Event("feedback:open")); }}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
+            >
+              <MessageSquarePlus size={15} /> Enviar feedback
+            </button>
             <form action={signOutAction}>
               <button
                 type="submit"
