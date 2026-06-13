@@ -69,6 +69,46 @@ export function IncomeExpenseChart({ data }: { data: MonthPoint[] }) {
   );
 }
 
+function NWTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-surface border border-border rounded-xl px-3 py-2 shadow-xl text-xs">
+      <p className="font-semibold text-foreground capitalize mb-1">{label}</p>
+      <p className="font-mono text-primary">{formatCurrency(payload[0].value, "ARS")}</p>
+    </div>
+  );
+}
+
+export function NetWorthChart({ data }: { data: { label: string; patrimonio: number }[] }) {
+  return (
+    <div className="w-full h-[200px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 8, right: 4, left: -6, bottom: 0 }}>
+          <defs>
+            <linearGradient id="nw-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.32} />
+              <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 3" opacity={0.5} />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "var(--color-muted)", fontSize: 11 }} dy={4} />
+          <YAxis tickLine={false} axisLine={false} width={46} tick={{ fill: "var(--color-muted)", fontSize: 10 }} tickFormatter={kFormat} />
+          <Tooltip content={<NWTooltip />} cursor={{ stroke: "var(--color-border)" }} />
+          <Area
+            type="monotone"
+            dataKey="patrimonio"
+            stroke="var(--color-primary)"
+            strokeWidth={2.4}
+            fill="url(#nw-fill)"
+            dot={false}
+            animationDuration={700}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export function BalanceSparkline({ data }: { data: { label: string; balance: number }[] }) {
   const first = data[0]?.balance ?? 0;
   const last = data[data.length - 1]?.balance ?? 0;

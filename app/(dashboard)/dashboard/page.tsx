@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getMonthSummary, getTransactions } from "@/lib/db/transactions";
 import { getAccounts } from "@/lib/db/accounts";
 import { getCategories } from "@/lib/db/categories";
-import { getInsights } from "@/lib/db/insights";
+import { getInsights, getNetWorth } from "@/lib/db/insights";
 import { getTrends } from "@/lib/db/trends";
 import { getGoals } from "@/lib/db/goals";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,7 +17,7 @@ import {
 import { getAgenda } from "@/lib/db/agenda";
 import { DashboardQuickAdd } from "./DashboardQuickAdd";
 import { CategoryChart } from "./CategoryChart";
-import { IncomeExpenseChart, BalanceSparkline } from "./DashboardCharts";
+import { IncomeExpenseChart, BalanceSparkline, NetWorthChart } from "./DashboardCharts";
 import { TodayDate } from "./TodayDate";
 import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 import { GuidedTour } from "@/components/GuidedTour";
@@ -62,7 +62,7 @@ export default async function DashboardPage({
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo] =
+  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo, netWorth] =
     await Promise.all([
       getMonthSummary(user.id, month, year),
       getAccounts(user.id),
@@ -74,6 +74,7 @@ export default async function DashboardPage({
       getOnboardingState(user.id),
       getProfileWhatsapp(user.id).catch(() => null),
       getStreakInfo(user.id).catch(() => ({ current: 0, longest: 0 })),
+      getNetWorth(user.id).catch(() => null),
     ]);
 
   const streak = streakInfo.current;
@@ -95,6 +96,18 @@ export default async function DashboardPage({
   const cur = series[series.length - 1];
   const prev = series[series.length - 2];
   const balanceSeries = series.map((m) => ({ label: m.label, balance: m.balance }));
+
+  // Patrimonio neto en el tiempo: anclamos el último mes en el patrimonio actual
+  // y caminamos hacia atrás restando el neto (ingresos − gastos) de cada mes.
+  const nwSeries: { label: string; patrimonio: number }[] = [];
+  if (netWorth && series.length) {
+    let nw = netWorth.netWorth;
+    for (let i = series.length - 1; i >= 0; i--) {
+      nwSeries[i] = { label: series[i].label, patrimonio: Math.round(nw) };
+      nw -= series[i].balance;
+    }
+  }
+  const nwDelta = nwSeries.length > 1 ? nwSeries[nwSeries.length - 1].patrimonio - nwSeries[0].patrimonio : null;
   const ieSeries = series.map((m) => ({ label: m.label, income: m.income, expense: m.expense, balance: m.balance }));
   const balanceDelta = cur && prev ? cur.balance - prev.balance : null;
   const incomeDelta = pctDelta(cur?.income, prev?.income);
@@ -279,6 +292,32 @@ export default async function DashboardPage({
 
       {/* ── CHARTS ROW ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* Patrimonio neto en el tiempo */}
+        {netWorth && (
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Patrimonio neto</p>
+                  <p className="text-2xl md:text-3xl font-bold font-mono mt-1 text-foreground">
+                    {formatCurrency(netWorth.netWorth, "ARS")}
+                  </p>
+                  <p className="text-xs text-muted mt-0.5">
+                    activos {formatCurrency(netWorth.totalAssets, "ARS")} · deudas {formatCurrency(netWorth.totalLiabilities, "ARS")}
+                  </p>
+                </div>
+                {nwDelta != null && (
+                  <div className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium ${nwDelta >= 0 ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
+                    {nwDelta >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                    {formatCurrency(Math.abs(nwDelta), "ARS")} en {series.length} meses
+                  </div>
+                )}
+              </div>
+              {nwSeries.length > 1 && <NetWorthChart data={nwSeries} />}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Evolución ingresos vs gastos */}
         {ieSeries.length > 0 && (
