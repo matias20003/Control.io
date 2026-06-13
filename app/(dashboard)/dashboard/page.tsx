@@ -223,14 +223,14 @@ export default async function DashboardPage({
       {/* ── HERO ROW ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-        {/* Disponible para gastar */}
+        {/* Balance del mes (ingresos − gastos) — NO es el saldo total de cuentas */}
         <Card>
           <CardContent className="p-5">
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Disponible este mes</p>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Balance del mes</p>
             <p className={`text-3xl md:text-4xl font-bold font-mono mt-2 ${balance >= 0 ? "text-foreground" : "text-danger"}`}>
               {formatCurrency(balance, "ARS")}
             </p>
-            <p className="text-xs text-muted mt-1">ingresos menos gastos</p>
+            <p className="text-xs text-muted mt-1">ingresos menos gastos de este mes</p>
             {balanceDelta != null && (
               <div className={`inline-flex items-center gap-1.5 mt-3 px-2.5 py-1.5 rounded-lg text-xs font-medium ${balanceBetter ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
                 {balanceBetter ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
