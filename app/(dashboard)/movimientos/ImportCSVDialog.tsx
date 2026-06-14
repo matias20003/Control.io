@@ -33,6 +33,10 @@ function autoDetect(headers: string[]): { date: string; description: string; amo
   };
 }
 
+// Recordamos el último mapeo (y modo) para no re-mapear cada vez que subís el
+// resumen del mismo banco/MercadoPago.
+const MAPPING_KEY = "csv_import_mapping";
+
 export function ImportCSVDialog({ open, onOpenChange, accounts, categories, onImported }: Props) {
   const [step, setStep]           = useState<Step>("upload");
   const [headers, setHeaders]     = useState<string[]>([]);
@@ -42,7 +46,7 @@ export function ImportCSVDialog({ open, onOpenChange, accounts, categories, onIm
   const [defaultType, setDefaultType] = useState<"INCOME" | "EXPENSE">("EXPENSE");
   const [accountId, setAccountId] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [result, setResult]       = useState<{ imported: number; errors: number; total: number } | null>(null);
+  const [result, setResult]       = useState<{ imported: number; skipped: number; errors: number; total: number } | null>(null);
   const [isPending, start]        = useTransition();
 
   function reset() {
@@ -69,13 +73,26 @@ export function ImportCSVDialog({ open, onOpenChange, accounts, categories, onIm
       complete: (res) => {
         const hdrs = res.meta.fields ?? [];
         const detected = autoDetect(hdrs);
+        let finalMapping = detected;
+
+        // Mapeo recordado: si TODAS sus columnas no vacías están en este CSV, lo
+        // usamos (mismo banco/MP de la última vez → no hace falta re-mapear).
+        try {
+          const saved = JSON.parse(localStorage.getItem(MAPPING_KEY) || "null");
+          const cols = saved ? [saved.date, saved.description, saved.amount, saved.debit, saved.credit].filter(Boolean) : [];
+          if (cols.length && cols.every((c: string) => hdrs.includes(c))) {
+            finalMapping = { date: saved.date || "", description: saved.description || "", amount: saved.amount || "", debit: saved.debit || "", credit: saved.credit || "" };
+            if (saved.mode === "split" || saved.mode === "single") setMode(saved.mode);
+          } else if (detected.debit && detected.credit && detected.debit !== detected.credit) {
+            setMode("split");
+          }
+        } catch {
+          if (detected.debit && detected.credit && detected.debit !== detected.credit) setMode("split");
+        }
+
         setHeaders(hdrs);
         setRawRows(res.data.slice(0, 500)); // cap at 500
-        setMapping(detected);
-        // Auto-detect mode
-        if (detected.debit && detected.credit && detected.debit !== detected.credit) {
-          setMode("split");
-        }
+        setMapping(finalMapping);
         setStep("map");
       },
       error: () => toast.error("Error al leer el archivo CSV"),
@@ -128,7 +145,7 @@ export function ImportCSVDialog({ open, onOpenChange, accounts, categories, onIm
       const res = await importTransactionsAction(rows);
       if ("error" in res && res.error) { toast.error(res.error); return; }
       if (res.ok) {
-        setResult({ imported: res.imported, errors: res.errors, total: res.total });
+        setResult({ imported: res.imported, skipped: res.skipped, errors: res.errors, total: res.total });
         setStep("done");
         onImported();
       }
@@ -159,9 +176,10 @@ export function ImportCSVDialog({ open, onOpenChange, accounts, categories, onIm
 
             <div className="bg-surface-2 rounded-xl p-3 text-xs text-muted space-y-1">
               <p className="font-medium text-foreground">Consejos:</p>
-              <p>• Exportá desde tu banco como CSV o Excel → Guardar como CSV</p>
+              <p>• Exportá desde MercadoPago o tu banco como CSV (o Excel → Guardar como CSV)</p>
+              <p>• 🔁 Re-subí el resumen completo cuando quieras: <span className="text-foreground">solo se agregan los movimientos nuevos</span>, no se duplican</p>
               <p>• Los montos negativos se detectan como gastos automáticamente</p>
-              <p>• Podés mapear columnas en el siguiente paso</p>
+              <p>• La próxima vez recordamos tu mapeo de columnas</p>
             </div>
           </div>
         )}
@@ -264,7 +282,10 @@ export function ImportCSVDialog({ open, onOpenChange, accounts, categories, onIm
               <Button variant="outline" className="flex-1" onClick={() => setStep("upload")}>Atrás</Button>
               <Button
                 className="flex-1"
-                onClick={() => setStep("preview")}
+                onClick={() => {
+                  try { localStorage.setItem(MAPPING_KEY, JSON.stringify({ ...mapping, mode })); } catch {}
+                  setStep("preview");
+                }}
                 disabled={!mapping.date || (mode === "single" ? !mapping.amount : !mapping.debit && !mapping.credit)}
               >
                 Vista previa <ChevronRight size={14} />
@@ -301,7 +322,7 @@ export function ImportCSVDialog({ open, onOpenChange, accounts, categories, onIm
 
             <div className="bg-primary/10 border border-primary/20 rounded-xl p-3 flex gap-2 text-sm">
               <AlertCircle size={16} className="text-primary shrink-0 mt-0.5" />
-              <p className="text-primary">Se van a crear {buildRows().length} movimientos. Esta acción no se puede deshacer fácilmente.</p>
+              <p className="text-primary">Se importan hasta {buildRows().length} movimientos. Los que ya estén cargados se omiten automáticamente (no se duplican).</p>
             </div>
 
             <div className="flex gap-2">
@@ -322,9 +343,13 @@ export function ImportCSVDialog({ open, onOpenChange, accounts, categories, onIm
             <div>
               <h2 className="text-lg font-bold text-foreground">¡Importación exitosa!</h2>
               <p className="text-sm text-muted mt-1">
-                {result.imported} movimientos importados correctamente
+                {result.imported} movimiento{result.imported === 1 ? "" : "s"} nuevo{result.imported === 1 ? "" : "s"} importado{result.imported === 1 ? "" : "s"}
+                {result.skipped > 0 && ` · ${result.skipped} ya estaban (no se duplicaron)`}
                 {result.errors > 0 && ` · ${result.errors} con errores`}
               </p>
+              {result.imported === 0 && result.skipped > 0 && (
+                <p className="text-xs text-muted mt-2">Todos los movimientos del archivo ya estaban cargados. 👍</p>
+              )}
             </div>
             <Button className="w-full" onClick={() => handleClose(false)}>Cerrar</Button>
           </div>

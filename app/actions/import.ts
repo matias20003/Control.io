@@ -44,46 +44,70 @@ export async function importTransactionsAction(rows: ImportRow[]) {
   const validCatIds = new Set(validCategories.map(c => c.id));
   const validAccIds = new Set(validAccounts.map(a => a.id));
 
-  let imported = 0;
-  let errors = 0;
-
-  for (const row of rows) {
-    try {
+  // Normalizamos (fecha, monto, IDs válidos) y descartamos inválidas.
+  const normalized = rows
+    .map((row) => {
       const date = parseDate(row.date);
-      if (isNaN(date.getTime())) { errors++; continue; }
-
       const amount = Math.abs(row.amount);
-      if (!amount || amount <= 0) { errors++; continue; }
-
       const safeCatId = (row.categoryId && validCatIds.has(row.categoryId)) ? row.categoryId : null;
       const safeAccId = (row.accountId && validAccIds.has(row.accountId)) ? row.accountId : null;
+      return { date, amount, type: row.type, description: row.description, categoryId: safeCatId, accountId: safeAccId };
+    })
+    .filter((n) => !isNaN(n.date.getTime()) && n.amount > 0);
 
-      // Crear + actualizar saldo en una sola tx para evitar inconsistencias
-      // si falla la segunda operación.
+  // ── Anti-duplicados ──
+  // Clave por (cuenta | fecha | monto | tipo). Contamos cuántos ya existen y
+  // salteamos esa cantidad: re-subir el resumen completo solo agrega lo NUEVO.
+  const keyOf = (accId: string | null, date: Date, amount: number, type: string) =>
+    `${accId ?? "-"}|${date.toISOString().slice(0, 10)}|${Math.round(amount * 100)}|${type}`;
+
+  const counts = new Map<string, number>();
+  if (normalized.length) {
+    const times = normalized.map((n) => n.date.getTime());
+    const min = new Date(Math.min(...times) - 86_400_000);
+    const max = new Date(Math.max(...times) + 86_400_000);
+    const existing = await prisma.transaction.findMany({
+      where: { userId: user.id, date: { gte: min, lte: max } },
+      select: { date: true, amount: true, type: true, accountId: true },
+    });
+    for (const e of existing) {
+      const k = keyOf(e.accountId, e.date, Number(e.amount), e.type);
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+  }
+
+  let imported = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  for (const n of normalized) {
+    const k = keyOf(n.accountId, n.date, n.amount, n.type);
+    const remaining = counts.get(k) ?? 0;
+    if (remaining > 0) { counts.set(k, remaining - 1); skipped++; continue; } // ya existía → no duplicamos
+
+    try {
       await prisma.$transaction(async (db) => {
         await db.transaction.create({
           data: {
             userId: user.id,
-            type: row.type,
-            amount,
+            type: n.type,
+            amount: n.amount,
             currency: "ARS",
-            description: encrypt(row.description?.slice(0, 255) || null),
-            date,
-            categoryId: safeCatId,
-            accountId: safeAccId,
-            notes: encrypt(row.notes || "Importado desde CSV"),
+            description: encrypt(n.description?.slice(0, 255) || null),
+            date: n.date,
+            categoryId: n.categoryId,
+            accountId: n.accountId,
+            notes: encrypt("Importado desde CSV"),
           },
         });
-
-        if (safeAccId) {
-          const delta = row.type === "INCOME" ? amount : -amount;
+        if (n.accountId) {
+          const delta = n.type === "INCOME" ? n.amount : -n.amount;
           await db.account.update({
-            where: { id: safeAccId, userId: user.id },
+            where: { id: n.accountId, userId: user.id },
             data: { balance: { increment: delta } },
           });
         }
       });
-
       imported++;
     } catch {
       errors++;
@@ -92,6 +116,7 @@ export async function importTransactionsAction(rows: ImportRow[]) {
 
   revalidatePath("/movimientos");
   revalidatePath("/dashboard");
+  revalidatePath("/cuentas");
 
-  return { ok: true, imported, errors, total: rows.length };
+  return { ok: true, imported, skipped, errors, total: rows.length };
 }
