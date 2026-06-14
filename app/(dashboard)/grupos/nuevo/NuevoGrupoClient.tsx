@@ -1,7 +1,6 @@
 "use client";
 
 import { useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Users } from "lucide-react";
 import Link from "next/link";

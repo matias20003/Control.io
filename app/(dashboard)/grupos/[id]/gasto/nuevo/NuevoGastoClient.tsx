@@ -201,7 +201,10 @@ export function NuevoGastoClient({ grupo, currentUserId }: Props) {
                   <span>Total asignado</span>
                   <span className="font-semibold">
                     {formatCurrency(totalCustom)}
-                    {diferencia > 0.01 && ` (faltan ${formatCurrency(montoNum - totalCustom)})`}
+                    {diferencia > 0.01 &&
+                      (totalCustom < montoNum
+                        ? ` (faltan ${formatCurrency(montoNum - totalCustom)})`
+                        : ` (sobran ${formatCurrency(totalCustom - montoNum)})`)}
                   </span>
                 </div>
               </div>
@@ -224,6 +227,11 @@ export function NuevoGastoClient({ grupo, currentUserId }: Props) {
             >
               {isPending ? "Guardando..." : "Agregar gasto"}
             </Button>
+            {tipo === "custom" && diferencia > 0.01 && (
+              <p className="text-center text-xs text-muted">
+                Los montos asignados tienen que sumar el total para poder guardar.
+              </p>
+            )}
           </form>
         </CardContent>
       </Card>

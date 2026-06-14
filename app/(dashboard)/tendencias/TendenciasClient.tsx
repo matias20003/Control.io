@@ -8,10 +8,12 @@ import {
 } from "recharts";
 import type { TrendsData } from "@/lib/db/trends";
 import { formatCurrency } from "@/lib/utils";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Sparkline } from "@/components/ui/sparkline";
-import { TrendingUp, TrendingDown, Wallet } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Plus } from "lucide-react";
 
 interface Props { trends: TrendsData }
 
@@ -61,6 +63,9 @@ export function TendenciasClient({ trends }: Props) {
         <p className="text-sm text-muted max-w-xs">
           Registrá movimientos durante algunos meses para ver tus tendencias.
         </p>
+        <Link href="/movimientos" className="mt-5">
+          <Button size="sm"><Plus size={14} className="mr-1.5" />Registrar movimiento</Button>
+        </Link>
       </div>
     );
   }

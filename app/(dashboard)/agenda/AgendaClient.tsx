@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import type { AgendaEvent } from "@/lib/db/agenda";
 import { CalendarClock, CreditCard, Repeat2, HandCoins } from "lucide-react";
@@ -32,6 +34,11 @@ export function AgendaClient({ events }: Props) {
         <p className="text-sm text-muted max-w-xs">
           Cuando tengas cuotas, deudas o recurrentes programados aparecerán acá.
         </p>
+        <div className="flex flex-wrap justify-center gap-2 mt-5">
+          <Link href="/recurrentes"><Button size="sm" variant="secondary"><Repeat2 size={14} className="mr-1.5" />Recurrente</Button></Link>
+          <Link href="/cuotas"><Button size="sm" variant="secondary"><CreditCard size={14} className="mr-1.5" />Cuota</Button></Link>
+          <Link href="/deudas"><Button size="sm" variant="secondary"><HandCoins size={14} className="mr-1.5" />Deuda</Button></Link>
+        </div>
       </div>
     );
   }
