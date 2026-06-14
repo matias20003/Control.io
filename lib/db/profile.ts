@@ -139,12 +139,13 @@ export async function setDailyReminderPref(
 }
 
 /** Usuarios con recordatorio diario activo y número de WhatsApp vinculado. */
-export async function getDailyReminderRecipients(): Promise<{ id: string; whatsappNumber: string }[]> {
-  const rows = await prisma.profile.findMany({
-    where: { dailyReminderEnabled: true, whatsappNumber: { not: null } },
+export async function getDailyReminderRecipients(): Promise<{ id: string; whatsappNumber: string | null }[]> {
+  // Todos los que activaron el recordatorio. El canal se decide al enviar:
+  // WhatsApp si está vinculado, y si no se puede, notificación push.
+  return prisma.profile.findMany({
+    where: { dailyReminderEnabled: true },
     select: { id: true, whatsappNumber: true },
   });
-  return rows.filter((r): r is { id: string; whatsappNumber: string } => !!r.whatsappNumber);
 }
 
 /** Actualiza la preferencia de reporte semanal. Valida rangos (day 0–6, hour 0–23). */

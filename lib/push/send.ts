@@ -20,30 +20,34 @@ export type PushPayload = {
   url?: string;
 };
 
-/** Envía push a todos los dispositivos de un usuario */
-export async function sendPushToUser(userId: string, payload: PushPayload) {
+/** Envía push a todos los dispositivos de un usuario. Devuelve cuántos lo recibieron. */
+export async function sendPushToUser(userId: string, payload: PushPayload): Promise<number> {
   ensureVapid();
 
   const subs = await prisma.pushSubscription.findMany({ where: { userId } });
-  if (!subs.length) return;
+  if (!subs.length) return 0;
 
   const data = JSON.stringify(payload);
 
-  await Promise.allSettled(
+  const results = await Promise.all(
     subs.map(async (sub) => {
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           data
         );
+        return true;
       } catch (err: unknown) {
         const code = (err as { statusCode?: number })?.statusCode;
         if (code === 410 || code === 404) {
           await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
         }
+        return false;
       }
     })
   );
+
+  return results.filter(Boolean).length;
 }
 
 /** Envía push a todos los usuarios (para crons globales) */

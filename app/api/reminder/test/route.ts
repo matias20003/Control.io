@@ -14,7 +14,9 @@ export async function POST() {
   return Response.json({
     ok: result.ok,
     message: result.ok
-      ? "✅ ¡Listo! Revisá tu WhatsApp (y push si lo tenés activo)."
+      ? result.channel === "whatsapp"
+        ? "✅ ¡Listo! Te lo mandé por WhatsApp."
+        : "✅ ¡Listo! Te lo mandé como notificación push (revisá tu celular/navegador)."
       : `No se pudo enviar: ${result.error}`,
   });
 }

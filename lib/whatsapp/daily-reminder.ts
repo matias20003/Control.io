@@ -43,23 +43,29 @@ export async function sendDailyReminders(): Promise<{ sent: number; skipped: num
 
     const streak = await getStreak(r.id).catch(() => 0);
 
-    // Push: NO tiene el límite de la ventana de 24h de WhatsApp, así que llega
-    // a quien tenga notificaciones activas aunque no haya escrito al bot hoy.
-    sendPushToUser(r.id, {
+    // 1) WhatsApp primero (si está vinculado). Si Meta lo entrega, listo: no
+    //    mandamos también el push para no duplicar.
+    if (r.whatsappNumber) {
+      try {
+        await sendText(r.whatsappNumber, streak >= 2 ? streakMessage(streak) : MESSAGE);
+        sent++;
+        continue;
+      } catch {
+        // Fuera de la ventana de 24hs o error: caemos al push.
+      }
+    }
+
+    // 2) Fallback: notificación push (no tiene el límite de 24h de WhatsApp).
+    const delivered = await sendPushToUser(r.id, {
       title: "📝 ¿Registraste tus gastos de hoy?",
       body: streak >= 2
         ? `🔥 Llevás ${streak} días de racha. ¡No la cortes!`
         : "Te toma menos de 1 minuto. Tocá para cargar.",
       url: "/dashboard",
-    }).catch(() => {});
+    }).catch(() => 0);
 
-    try {
-      await sendText(r.whatsappNumber, streak >= 2 ? streakMessage(streak) : MESSAGE);
-      sent++;
-    } catch {
-      // Fuera de la ventana de 24hs o error transitorio: lo ignoramos (queda el push).
-      failed++;
-    }
+    if (delivered > 0) sent++;
+    else failed++; // ni WhatsApp ni push: el usuario no tiene canal alcanzable
   }
 
   return { sent, skipped, failed };
@@ -70,28 +76,39 @@ export async function sendDailyReminders(): Promise<{ sent: number; skipped: num
  * ahora"). Ignora la regla de "ya cargó hoy". Devuelve si WhatsApp salió y por
  * qué falló si no (ej. fuera de la ventana de 24h de Meta).
  */
-export async function sendReminderToUser(userId: string): Promise<{ ok: boolean; error?: string }> {
+export async function sendReminderToUser(
+  userId: string
+): Promise<{ ok: boolean; channel?: "whatsapp" | "push"; error?: string }> {
   const profile = await prisma.profile.findUnique({
     where: { id: userId },
     select: { whatsappNumber: true },
   });
-  if (!profile?.whatsappNumber) {
-    return { ok: false, error: "No tenés un número de WhatsApp vinculado." };
-  }
 
   const streak = await getStreak(userId).catch(() => 0);
 
-  // Push best-effort (no rompe si no hay suscripción).
-  sendPushToUser(userId, {
+  // 1) WhatsApp primero.
+  if (profile?.whatsappNumber) {
+    try {
+      await sendText(profile.whatsappNumber, streak >= 2 ? streakMessage(streak) : MESSAGE);
+      return { ok: true, channel: "whatsapp" };
+    } catch {
+      // Fuera de la ventana de 24h o error: caemos al push.
+    }
+  }
+
+  // 2) Fallback: notificación push.
+  const delivered = await sendPushToUser(userId, {
     title: "📝 ¿Registraste tus gastos de hoy?",
     body: streak >= 2 ? `🔥 Llevás ${streak} días de racha. ¡No la cortes!` : "Te toma menos de 1 minuto. Tocá para cargar.",
     url: "/dashboard",
-  }).catch(() => {});
+  }).catch(() => 0);
 
-  try {
-    await sendText(profile.whatsappNumber, streak >= 2 ? streakMessage(streak) : MESSAGE);
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "WhatsApp rechazó el envío." };
-  }
+  if (delivered > 0) return { ok: true, channel: "push" };
+
+  return {
+    ok: false,
+    error: profile?.whatsappNumber
+      ? "WhatsApp no se pudo entregar (suele ser por la ventana de 24h: escribile algo al bot primero) y no tenés notificaciones push activas."
+      : "No tenés WhatsApp vinculado ni notificaciones push activas.",
+  };
 }

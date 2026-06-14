@@ -70,8 +70,10 @@ export function RecordatorioWhatsappCard({ hasWhatsapp }: { hasWhatsapp: boolean
         </div>
 
         <p className="text-xs text-muted">
-          Todos los días a las <span className="text-foreground">20:00</span> el asistente te escribe por
-          WhatsApp para recordarte registrar tus gastos. Si ya cargaste algo ese día, no te molesta.
+          Todos los días a las <span className="text-foreground">20:00</span> te recordamos registrar tus
+          gastos: primero por <span className="text-foreground">WhatsApp</span> y, si no se puede, como
+          <span className="text-foreground"> notificación push</span> (nunca por los dos a la vez). Si ya
+          cargaste algo ese día, no te molesta.
         </p>
 
         {!hasWhatsapp ? (
