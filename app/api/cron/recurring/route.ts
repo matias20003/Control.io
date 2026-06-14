@@ -6,6 +6,7 @@ import { encrypt } from "@/lib/crypto";
 import { startOfTodayArg } from "@/lib/timezone";
 import { snapshotConversion } from "@/lib/exchange";
 import { sendReactivationNudges } from "@/lib/reactivation";
+import { sendDueReminders } from "@/lib/db/due-reminders";
 
 // Vercel Cron: diariamente a las 11:00 UTC (08:00 ARG).
 // Consolida recurrentes + reactivación (límite de 2 crons en Vercel Hobby).
@@ -156,5 +157,8 @@ export async function GET(req: NextRequest) {
   // Reactivación de inactivos (consolidado acá, best-effort).
   const reactivation = await sendReactivationNudges().catch(() => ({ sent: 0, errors: 0, total: 0 }));
 
-  return Response.json({ ok: true, executed, skipped, total: recurrentes.length, reactivation });
+  // Recordatorios de vencimientos (cuotas + deudas que vencen hoy/mañana).
+  const dues = await sendDueReminders().catch(() => ({ users: 0 }));
+
+  return Response.json({ ok: true, executed, skipped, total: recurrentes.length, reactivation, dues });
 }

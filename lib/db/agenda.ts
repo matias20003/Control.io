@@ -89,14 +89,14 @@ export async function getAgenda(userId: string, days = 30): Promise<AgendaEvent[
       id: `debt-${debt.id}`,
       type: "debt",
       title: decrypt(debt.personName) ?? debt.personName,
-      subtitle: debt.direction === "I_OWE" ? "Te deben" : "Debés",
+      subtitle: debt.direction === "I_OWE" ? "Debés" : "Te deben",
       amount: toNum(debt.totalAmount) - toNum(debt.paidAmount),
       currency: debt.currency,
       date: d.toISOString(),
       dateLabel: dateLabel(d, today),
       daysUntil: differenceInDays(startOfDay(d), today),
-      icon: debt.direction === "I_OWE" ? "🤝" : "💸",
-      color: debt.direction === "I_OWE" ? "#22c55e" : "#ef4444",
+      icon: debt.direction === "I_OWE" ? "💸" : "🤝",
+      color: debt.direction === "I_OWE" ? "#ef4444" : "#22c55e",
     });
   }
 
