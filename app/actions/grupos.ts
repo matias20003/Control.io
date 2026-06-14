@@ -423,14 +423,20 @@ export async function unirsePorLinkAction(inviteToken: string) {
   }
 
   const profile = await prisma.profile.findUnique({ where: { id: user.id } });
-  await prisma.miembroGrupo.create({
-    data: {
-      grupoId: grupo.id,
-      userId: user.id,
-      nombre: profile?.name ?? profile?.email ?? "Miembro",
-      email: profile?.email ?? null,
-    },
-  });
+  try {
+    await prisma.miembroGrupo.create({
+      data: {
+        grupoId: grupo.id,
+        userId: user.id,
+        nombre: profile?.name ?? profile?.email ?? "Miembro",
+        email: profile?.email ?? null,
+      },
+    });
+  } catch (e: unknown) {
+    // Doble-submit/condición de carrera: si ya quedó como miembro (unique
+    // [grupoId,userId]), no es un error — seguimos al grupo.
+    if ((e as { code?: string })?.code !== "P2002") throw e;
+  }
 
   await recalcularDivisionesIguales(grupo.id);
   revalidatePath(`/grupos/${grupo.id}`);

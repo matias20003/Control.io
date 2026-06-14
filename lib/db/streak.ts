@@ -44,8 +44,11 @@ export async function getStreak(userId: string): Promise<number> {
  * visita de hoy (abrir la app cuenta para la racha).
  */
 export async function getStreakInfo(userId: string): Promise<{ current: number; longest: number }> {
-  await recordActiveDay(userId).catch(() => {});
+  // Persistimos la visita de hoy SIN bloquear el render (fire-and-forget).
+  void recordActiveDay(userId).catch(() => {});
   const days = await getActiveDays(userId);
+  // Abrir la app cuenta para hoy aunque el insert async todavía no haya impactado.
+  days.add(todayStringArg());
   return {
     current: calculateStreak(days, todayStringArg()),
     longest: calculateLongestStreak(days),

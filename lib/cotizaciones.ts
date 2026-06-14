@@ -109,11 +109,14 @@ function sortItems(items: CotizacionItem[]): CotizacionItem[] {
 
 /** Trae cotizaciones frescas (de caché o de la API externa). */
 export async function getCotizaciones(): Promise<CotizacionItem[]> {
-  const latest = await prisma.exchangeRate.findFirst({
-    orderBy: { fetchedAt: "desc" },
-    select: { fetchedAt: true },
-  });
-  const isFresh = latest && (Date.now() - latest.fetchedAt.getTime()) < STALE_MS;
+  // Frescura por separado para USD y para las otras monedas: si las "otras"
+  // nunca se trajeron (o quedaron viejas), refrescamos aunque USD esté fresco.
+  const [latestUsd, latestOther] = await Promise.all([
+    prisma.exchangeRate.findFirst({ where: { currency: "USD" }, orderBy: { fetchedAt: "desc" }, select: { fetchedAt: true } }),
+    prisma.exchangeRate.findFirst({ where: { currency: { not: "USD" } }, orderBy: { fetchedAt: "desc" }, select: { fetchedAt: true } }),
+  ]);
+  const fresh = (d: { fetchedAt: Date } | null) => !!d && Date.now() - d.fetchedAt.getTime() < STALE_MS;
+  const isFresh = fresh(latestUsd) && fresh(latestOther);
 
   if (!isFresh) {
     // USD y otras monedas en paralelo; si una falla, guardamos lo que haya.
