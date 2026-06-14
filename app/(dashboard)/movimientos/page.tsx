@@ -20,7 +20,7 @@ export default async function MovimientosPage() {
   const year = now.getFullYear();
 
   const [page, accounts, categories] = await Promise.all([
-    getTransactions(user.id, { month, year }),
+    getTransactions(user.id, { month, year, withTotals: true }),
     getAccounts(user.id),
     getCategories(user.id),
   ]);
@@ -30,6 +30,7 @@ export default async function MovimientosPage() {
       initialTransactions={page.items}
       initialTotal={page.total}
       initialHasMore={page.hasMore}
+      initialTotals={page.totals ?? { income: 0, expense: 0 }}
       accounts={accounts}
       categories={categories}
       initialMonth={month}

@@ -41,6 +41,7 @@ import {
   updateTransactionAction,
   deleteTransactionAction,
   getTransactionsAction,
+  searchTransactionsAction,
 } from "@/app/actions/transactions";
 import type { SerializedTransaction } from "@/lib/db/transactions";
 import type { SerializedAccount } from "@/lib/db/accounts";
@@ -58,22 +59,28 @@ interface Props {
   initialTransactions: SerializedTransaction[];
   initialTotal: number;
   initialHasMore: boolean;
+  initialTotals: { income: number; expense: number };
   accounts: SerializedAccount[];
   categories: SerializedCategory[];
   initialMonth: number;
   initialYear: number;
 }
 
-export function MovimientosClient({ initialTransactions, initialTotal, initialHasMore, accounts, categories, initialMonth, initialYear }: Props) {
+export function MovimientosClient({ initialTransactions, initialTotal, initialHasMore, initialTotals, accounts, categories, initialMonth, initialYear }: Props) {
   const now = new Date();
   const [month, setMonth]             = useState(initialMonth);
   const [year, setYear]               = useState(initialYear);
   const [transactions, setTransactions] = useState<SerializedTransaction[]>(initialTransactions);
   const [total, setTotal]             = useState(initialTotal);
   const [hasMore, setHasMore]         = useState(initialHasMore);
+  const [totals, setTotals]           = useState(initialTotals);
   const [filterType, setFilterType]   = useState<string>("ALL");
   const [filterAccountId, setFilterAccountId] = useState<string>("ALL");
-  const [searchQuery, setSearchQuery] = useState("");
+  const searchParams = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get("q") ?? "");
+  // Resultados de búsqueda server-side (sobre 6 meses, no solo la página cargada).
+  const [searchResults, setSearchResults] = useState<SerializedTransaction[]>([]);
+  const [searching, setSearching]     = useState(false);
 
   // Create dialog
   const [isOpen, setIsOpen]           = useState(false);
@@ -90,10 +97,26 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
   const [importOpen, setImportOpen] = useState(false);
 
   // Abrir el import directo cuando se llega con ?import=1 (ej: banner "actualizá tus movimientos").
-  const searchParams = useSearchParams();
   useEffect(() => {
     if (searchParams.get("import") === "1") setImportOpen(true);
   }, [searchParams]);
+
+  // Búsqueda server-side con debounce: busca en los últimos 6 meses, no solo
+  // en la página cargada (antes un movimiento real podía quedar oculto).
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) { setSearchResults([]); setSearching(false); return; }
+    setSearching(true);
+    const handle = setTimeout(async () => {
+      try {
+        const res = await searchTransactionsAction(q);
+        setSearchResults(res);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [searchQuery]);
 
   const [isPending, startTransition]  = useTransition();
 
@@ -121,10 +144,11 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
     setMonth(newMonth);
     setYear(newYear);
     startTransition(async () => {
-      const page = await getTransactionsAction(newMonth, newYear);
+      const page = await getTransactionsAction(newMonth, newYear, { withTotals: true });
       setTransactions(page.items);
       setTotal(page.total);
       setHasMore(page.hasMore);
+      if (page.totals) setTotals(page.totals);
     });
   };
 
@@ -136,23 +160,21 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
     });
   };
 
-  // Filtered + searched transactions
+  // En modo búsqueda mostramos los resultados del server (6 meses); si no, la
+  // página del mes. Los filtros de tipo/cuenta se aplican en cliente sobre eso.
+  const isSearchMode = searchQuery.trim().length > 0;
   const filtered = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    return transactions.filter((tx) => {
+    const base = isSearchMode ? searchResults : transactions;
+    return base.filter((tx) => {
       if (filterType !== "ALL" && tx.type !== filterType) return false;
       if (filterAccountId !== "ALL" && tx.accountId !== filterAccountId) return false;
-      if (q) {
-        const haystack = [tx.description, tx.notes, tx.categoryName, tx.accountName, tx.toAccountName]
-          .filter(Boolean).join(" ").toLowerCase();
-        if (!haystack.includes(q)) return false;
-      }
       return true;
     });
-  }, [transactions, filterType, filterAccountId, searchQuery]);
+  }, [isSearchMode, searchResults, transactions, filterType, filterAccountId]);
 
-  const totalIncome  = transactions.filter((t) => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
-  const totalExpense = transactions.filter((t) => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0);
+  // KPIs del MES completo (calculados en el server), no de la página cargada.
+  const totalIncome  = totals.income;
+  const totalExpense = totals.expense;
   const balanceNeto  = totalIncome - totalExpense;
 
   // Serie diaria del mes (para el gráfico de flujo neto)
@@ -184,6 +206,10 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
         const txDate = new Date(tx.date);
         if (txDate.getMonth() + 1 === month && txDate.getFullYear() === year) {
           setTransactions((prev) => [tx, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+          setTotals((prev) => ({
+            income: prev.income + (tx.type === "INCOME" ? tx.amount : 0),
+            expense: prev.expense + (tx.type === "EXPENSE" ? tx.amount : 0),
+          }));
         }
         toast.success(`${TYPE_CONFIG[tx.type as TxType]?.label ?? "Movimiento"} registrado ✓`);
         if (saveAction === "save_and_another") {
@@ -213,6 +239,24 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
           prev.map((t) => t.id === editingTx.id ? result.transaction! : t)
               .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         );
+        // Mantener consistentes los resultados de búsqueda (pueden ser de otro mes).
+        setSearchResults((prev) => prev.map((t) => t.id === editingTx.id ? result.transaction! : t));
+        // Ajustar los KPIs del mes: quitar el aporte viejo, sumar el nuevo.
+        setTotals((prev) => {
+          let { income, expense } = prev;
+          const oldD = new Date(editingTx.date);
+          if (oldD.getMonth() + 1 === month && oldD.getFullYear() === year) {
+            if (editingTx.type === "INCOME") income -= editingTx.amount;
+            else if (editingTx.type === "EXPENSE") expense -= editingTx.amount;
+          }
+          const nt = result.transaction!;
+          const newD = new Date(nt.date);
+          if (newD.getMonth() + 1 === month && newD.getFullYear() === year) {
+            if (nt.type === "INCOME") income += nt.amount;
+            else if (nt.type === "EXPENSE") expense += nt.amount;
+          }
+          return { income, expense };
+        });
         setEditingTx(null);
         toast.success("Movimiento actualizado ✓");
       }
@@ -220,10 +264,22 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
   };
 
   const handleDelete = (id: string) => {
+    const removed = transactions.find((t) => t.id === id) ?? searchResults.find((t) => t.id === id);
     startTransition(async () => {
       const result = await deleteTransactionAction(id);
       if (result.error) { toast.error(result.error); return; }
       setTransactions((prev) => prev.filter((t) => t.id !== id));
+      setSearchResults((prev) => prev.filter((t) => t.id !== id));
+      // Ajustar los KPIs del mes si el borrado era de este mes.
+      if (removed) {
+        const d = new Date(removed.date);
+        if (d.getMonth() + 1 === month && d.getFullYear() === year) {
+          setTotals((prev) => ({
+            income: prev.income - (removed.type === "INCOME" ? removed.amount : 0),
+            expense: prev.expense - (removed.type === "EXPENSE" ? removed.amount : 0),
+          }));
+        }
+      }
       setConfirmDeleteId(null);
       toast.success("Movimiento eliminado");
     });
@@ -558,7 +614,17 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
             )}
           </div>
 
+          {isSearchMode && !searching && filtered.length > 0 && (
+            <p className="px-1 pb-2 text-xs text-muted">
+              {filtered.length} resultado{filtered.length !== 1 ? "s" : ""} en los últimos 6 meses
+              {searchResults.length >= 50 ? " (primeros 50)" : ""}
+            </p>
+          )}
+
           {filtered.length === 0 ? (
+            searching ? (
+              <div className="py-16 text-center text-sm text-muted">Buscando…</div>
+            ) : (
             <EmptyState icon={Receipt} title="Sin movimientos"
               description={searchQuery ? `No hay resultados para "${searchQuery}".`
                 : filterType === "ALL" && filterAccountId === "ALL"
@@ -571,6 +637,7 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
                 </div>
               ) : undefined}
             />
+            )
           ) : (
             <>
               {/* Tabla — desktop */}
@@ -702,10 +769,11 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
         accounts={accounts}
         categories={categories}
         onImported={async () => {
-          const page = await getTransactionsAction(month, year);
+          const page = await getTransactionsAction(month, year, { withTotals: true });
           setTransactions(page.items);
           setTotal(page.total);
           setHasMore(page.hasMore);
+          if (page.totals) setTotals(page.totals);
         }}
       />
     </div>

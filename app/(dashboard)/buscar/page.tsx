@@ -64,7 +64,7 @@ export default async function BuscarPage({
                 const isIncome = t.type === "INCOME";
                 const isTransfer = t.type === "TRANSFER";
                 return (
-                  <Link key={t.id} href="/movimientos" className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2/50 transition-colors">
+                  <Link key={t.id} href={`/movimientos?q=${encodeURIComponent(t.description || t.categoryName || "")}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2/50 transition-colors">
                     <span className="w-9 h-9 rounded-xl flex items-center justify-center text-sm shrink-0" style={{ backgroundColor: t.categoryColor ? `${t.categoryColor}22` : "var(--color-surface-2)" }}>
                       {t.categoryIcon || (isTransfer ? "🔁" : isIncome ? "💰" : "💸")}
                     </span>

@@ -7,6 +7,7 @@ import {
   updateTransaction,
   deleteTransaction,
   getTransactions,
+  searchTransactions,
 } from "@/lib/db/transactions";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
@@ -126,7 +127,7 @@ export async function deleteTransactionAction(transactionId: string) {
 export async function getTransactionsAction(
   month: number,
   year: number,
-  filters: { type?: string; accountId?: string; take?: number; skip?: number } = {}
+  filters: { type?: string; accountId?: string; take?: number; skip?: number; withTotals?: boolean } = {}
 ) {
   const supabase = await createClient();
   const {
@@ -135,4 +136,15 @@ export async function getTransactionsAction(
   if (!user) return { items: [], total: 0, hasMore: false };
 
   return getTransactions(user.id, { ...filters, month, year });
+}
+
+/** Búsqueda libre de movimientos (server-side, sobre los últimos 6 meses). */
+export async function searchTransactionsAction(q: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  return searchTransactions(user.id, q, 50);
 }

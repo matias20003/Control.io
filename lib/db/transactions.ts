@@ -53,6 +53,7 @@ export type TransactionsPage = {
   items: SerializedTransaction[];
   total: number;
   hasMore: boolean;
+  totals?: { income: number; expense: number }; // del mes completo (no solo la página)
 };
 
 const DEFAULT_PAGE_SIZE = 100;
@@ -72,6 +73,7 @@ export async function getTransactions(
     year?: number;
     take?: number;
     skip?: number;
+    withTotals?: boolean;
   } = {}
 ): Promise<TransactionsPage> {
   const now = new Date();
@@ -91,7 +93,16 @@ export async function getTransactions(
     date: { gte: dateFrom, lte: dateTo },
   };
 
-  const [rows, total] = await Promise.all([
+  // Totales del MES completo (income/expense), independientes de la paginación
+  // y del filtro de tipo. Antes el cliente los sumaba sobre la página cargada,
+  // así que con más de una página los KPIs quedaban incompletos.
+  const totalsWhere = {
+    userId,
+    ...(filters.accountId && { accountId: filters.accountId }),
+    date: { gte: dateFrom, lte: dateTo },
+  };
+
+  const [rows, total, grouped] = await Promise.all([
     prisma.transaction.findMany({
       where,
       include: {
@@ -104,12 +115,25 @@ export async function getTransactions(
       skip,
     }),
     prisma.transaction.count({ where }),
+    filters.withTotals
+      ? prisma.transaction.groupBy({ by: ["type"], where: totalsWhere, _sum: { amount: true } })
+      : Promise.resolve(null),
   ]);
+
+  let totals: { income: number; expense: number } | undefined;
+  if (grouped) {
+    totals = { income: 0, expense: 0 };
+    for (const g of grouped) {
+      if (g.type === "INCOME") totals.income = toNum(g._sum.amount);
+      else if (g.type === "EXPENSE") totals.expense = toNum(g._sum.amount);
+    }
+  }
 
   return {
     items: rows.map(serialize),
     total,
     hasMore: skip + rows.length < total,
+    totals,
   };
 }
 
