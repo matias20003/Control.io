@@ -54,6 +54,8 @@ export async function POST(req: NextRequest) {
   }
 
   let from: string | null = null;
+  let claimedId: string | null = null; // id que reservamos en processed_messages
+  let processed = false;                // true una vez que el mensaje YA se procesó
 
   try {
     const body = JSON.parse(raw) as Record<string, unknown>;
@@ -80,6 +82,7 @@ export async function POST(req: NextRequest) {
         INSERT INTO "whatsapp_processed_messages" (id) VALUES (${message.id})
         ON CONFLICT (id) DO NOTHING`;
       if (inserted === 0) return Response.json({ ok: true, duplicate: true });
+      claimedId = message.id; // reservado; se libera si fallamos antes de procesar
     }
 
     const profile = await findProfileByPhone(from);
@@ -125,20 +128,40 @@ export async function POST(req: NextRequest) {
     }
 
     const reply = await handleUserMessage(profile.id, text ?? "", imageUrl);
-    await sendText(from, reply);
+
+    // A partir de acá el mensaje YA se procesó (puede haber creado un
+    // movimiento). No liberamos el claim ni reintentamos aunque falle el envío
+    // de la respuesta — reprocesarlo duplicaría el gasto.
+    processed = true;
+    try {
+      await sendText(from, reply);
+    } catch (err) {
+      console.error("[kapso webhook] no pude enviar la respuesta:", err);
+    }
 
     return Response.json({ ok: true });
   } catch (err) {
     console.error("[kapso webhook] error:", err);
-    if (from) {
+
+    // Si fallamos ANTES de procesar, liberamos el claim para que el reintento de
+    // Kapso vuelva a procesar el mensaje (en vez de perderlo en silencio).
+    if (claimedId && !processed) {
+      await prisma
+        .$executeRaw`DELETE FROM "whatsapp_processed_messages" WHERE id = ${claimedId}`
+        .catch(() => {});
+    }
+
+    if (from && !processed) {
       try {
         await sendText(from, "⚠️ Uy, tuve un problema procesando tu mensaje. Probá de nuevo en un momento.");
       } catch {
         // ignore
       }
     }
-    // Respondemos 200 para que Kapso no reintente en loop.
-    return Response.json({ ok: false });
+
+    // 500 si no llegamos a procesar → Kapso reintenta y no se pierde el mensaje.
+    // Si ya procesamos, 200 para no reprocesar (evita duplicar el movimiento).
+    return Response.json({ ok: processed }, { status: processed ? 200 : 500 });
   }
 }
 

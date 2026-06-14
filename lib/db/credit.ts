@@ -209,16 +209,27 @@ export async function updateCreditPurchase(
   const unpaid = current.installments.filter((i) => !i.isPaid);
   const newFirstDate = data.firstPaymentDate ? new Date(data.firstPaymentDate) : null;
   const newAmount = data.totalAmount;
-  const baseAmount = newAmount !== undefined
-    ? parseFloat((newAmount / current.totalInstallments).toFixed(2))
-    : null;
+
+  // Si cambia el monto total, re-dividimos SOLO lo que falta pagar entre las
+  // cuotas impagas, de modo que (pagado + impago) sume EXACTAMENTE el nuevo
+  // total (la última cuota absorbe el redondeo). Antes ponía total/n por cuota
+  // y la suma no cerraba, además de ignorar lo ya pagado.
+  let newUnpaidAmounts: number[] | null = null;
+  if (newAmount !== undefined && unpaid.length > 0) {
+    const paidSum = current.installments
+      .filter((i) => i.isPaid)
+      .reduce((s, i) => s + toNum(i.amount), 0);
+    const remaining = Math.max(0, newAmount - paidSum);
+    newUnpaidAmounts = splitInstallments(remaining, unpaid.length);
+  }
 
   const row = await prisma.$transaction(async (tx) => {
     // Recalculate unpaid installments if date or amount changed
-    for (const inst of unpaid) {
+    for (let idx = 0; idx < unpaid.length; idx++) {
+      const inst = unpaid[idx];
       const updates: any = {};
       if (newFirstDate) updates.dueDate = addMonths(newFirstDate, inst.installmentNumber - 1);
-      if (baseAmount !== null) updates.amount = baseAmount;
+      if (newUnpaidAmounts) updates.amount = newUnpaidAmounts[idx];
       if (Object.keys(updates).length > 0) {
         await tx.creditInstallment.update({ where: { id: inst.id }, data: updates });
       }
