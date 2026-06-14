@@ -2,8 +2,23 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import { createOrUpdateBudget, deleteBudget } from "@/lib/db/budgets";
+import { createOrUpdateBudget, deleteBudget, getBudgets } from "@/lib/db/budgets";
 import { z } from "zod";
+
+export async function getBudgetsAction(month: number, year: number) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autorizado" as const };
+
+  try {
+    const budgets = await getBudgets(user.id, month, year);
+    return { budgets };
+  } catch {
+    return { error: "Error al cargar los presupuestos" as const };
+  }
+}
 
 const schema = z.object({
   categoryId: z.string().min(1, "La categoría es requerida"),

@@ -61,7 +61,9 @@ export async function getBudgets(
     const amount = toNum(b.amount);
     const spent = spentMap[b.categoryId] ?? 0;
     const remaining = amount - spent;
-    const percentage = amount > 0 ? Math.min(Math.round((spent / amount) * 100), 100) : 0;
+    // Sin tope en 100: el detalle y el aside necesitan el % real (ej: 130%)
+    // para mostrar cuánto se excedió. La barra ya lo clampa visualmente.
+    const percentage = amount > 0 ? Math.round((spent / amount) * 100) : 0;
     return {
       id: b.id,
       categoryId: b.categoryId,

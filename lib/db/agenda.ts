@@ -38,21 +38,39 @@ export async function getAgenda(userId: string, days = 30): Promise<AgendaEvent[
 
   const events: AgendaEvent[] = [];
 
-  // ── 1. Próximas cuotas de crédito ──────────────────────────
-  const creditInstallments = await prisma.creditInstallment.findMany({
-    where: {
-      creditPurchase: { userId },
-      isPaid: false,
-      dueDate: { gte: fromDate, lte: toDate },
-    },
-    include: {
-      creditPurchase: {
-        select: { description: true, totalInstallments: true, currency: true },
+  // Las 3 fuentes (cuotas, deudas, recurrentes) se piden en paralelo: antes
+  // corrían en serie y eran la cola lenta del dashboard.
+  const [creditInstallments, debts, recurrentes] = await Promise.all([
+    prisma.creditInstallment.findMany({
+      where: {
+        creditPurchase: { userId },
+        isPaid: false,
+        dueDate: { gte: fromDate, lte: toDate },
       },
-    },
-    orderBy: { dueDate: "asc" },
-    take: 20,
-  });
+      include: {
+        creditPurchase: {
+          select: { description: true, totalInstallments: true, currency: true },
+        },
+      },
+      orderBy: { dueDate: "asc" },
+      take: 20,
+    }),
+    prisma.debt.findMany({
+      where: {
+        userId,
+        isCompleted: false,
+        dueDate: { gte: fromDate, lte: toDate },
+      },
+      orderBy: { dueDate: "asc" },
+      take: 10,
+    }),
+    prisma.recurringTransaction.findMany({
+      where: { userId, isActive: true },
+      include: { category: { select: { name: true, icon: true } } },
+    }),
+  ]);
+
+  // ── 1. Próximas cuotas de crédito ──────────────────────────
 
   for (const inst of creditInstallments) {
     const d = new Date(inst.dueDate);
@@ -72,16 +90,6 @@ export async function getAgenda(userId: string, days = 30): Promise<AgendaEvent[
   }
 
   // ── 2. Vencimientos de deudas ──────────────────────────────
-  const debts = await prisma.debt.findMany({
-    where: {
-      userId,
-      isCompleted: false,
-      dueDate: { gte: fromDate, lte: toDate },
-    },
-    orderBy: { dueDate: "asc" },
-    take: 10,
-  });
-
   for (const debt of debts) {
     if (!debt.dueDate) continue;
     const d = new Date(debt.dueDate);
@@ -101,11 +109,6 @@ export async function getAgenda(userId: string, days = 30): Promise<AgendaEvent[
   }
 
   // ── 3. Recurrentes que van a ejecutarse ────────────────────
-  const recurrentes = await prisma.recurringTransaction.findMany({
-    where: { userId, isActive: true },
-    include: { category: { select: { name: true, icon: true } } },
-  });
-
   for (const r of recurrentes) {
     const nextDate = getNextExecutionDate(r, today);
     if (!nextDate) continue;

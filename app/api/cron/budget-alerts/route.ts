@@ -78,24 +78,30 @@ export async function GET(req: NextRequest) {
     const icon = budget.category.icon ?? "📊";
     const name = budget.category.name;
 
-    // Alerta al 100% (superado)
+    // Umbral alcanzado: 100% (superado) o el configurado (ej: 80%).
+    const bucket = pct >= 100 ? 100 : pct >= budget.alertAt ? budget.alertAt : 0;
+
+    // Anti-spam: solo avisamos cuando se cruza un umbral NUEVO (más alto que el
+    // ya notificado este mes). Como hay una fila de presupuesto por mes/año,
+    // `alertedPct` se resetea solo al cambiar de mes.
+    if (bucket === 0 || bucket <= budget.alertedPct) continue;
+
     if (pct >= 100) {
       await sendPushToUser(budget.userId, {
         title: `⚠️ Presupuesto superado`,
         body: `${icon} ${name}: gastaste $${Math.round(spent).toLocaleString("es-AR")} de $${Math.round(amount).toLocaleString("es-AR")} (${pct}%)`,
         url: "/presupuestos",
       }).catch(() => {});
-      alerts++;
-    }
-    // Alerta al umbral configurado (ej: 80%)
-    else if (pct >= budget.alertAt && pct < 100) {
+    } else {
       await sendPushToUser(budget.userId, {
         title: `🔔 Presupuesto al ${pct}%`,
         body: `${icon} ${name}: $${Math.round(spent).toLocaleString("es-AR")} gastados de $${Math.round(amount).toLocaleString("es-AR")}`,
         url: "/presupuestos",
       }).catch(() => {});
-      alerts++;
     }
+
+    await prisma.budget.update({ where: { id: budget.id }, data: { alertedPct: bucket } }).catch(() => {});
+    alerts++;
   }
 
   return Response.json({ ok: true, alerts, budgets: budgets.length, reminder });

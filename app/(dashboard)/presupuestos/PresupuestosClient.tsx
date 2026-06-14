@@ -16,6 +16,7 @@ import { formatCurrency, formatMonth } from "@/lib/utils";
 import {
   createOrUpdateBudgetAction,
   deleteBudgetAction,
+  getBudgetsAction,
 } from "@/app/actions/budgets";
 import type { SerializedBudget } from "@/lib/db/budgets";
 import type { SerializedCategory } from "@/lib/db/categories";
@@ -47,6 +48,18 @@ export function PresupuestosClient({
     (c) => !budgetCatIds.has(c.id)
   );
 
+  const loadMonth = (m: number, y: number) => {
+    startTransition(async () => {
+      const res = await getBudgetsAction(m, y);
+      if ("error" in res) {
+        toast.error(res.error);
+        setBudgets([]);
+      } else {
+        setBudgets(res.budgets);
+      }
+    });
+  };
+
   const navigate = (delta: number) => {
     let m = month + delta;
     let y = year;
@@ -54,10 +67,8 @@ export function PresupuestosClient({
     else if (m > 12) { m = 1; y++; }
     setMonth(m);
     setYear(y);
-    // Re-fetch budgets for new month (server action would be needed here)
-    // For now: clear budgets since month changed
-    setBudgets([]);
-    toast.info("Cargá presupuestos para " + formatMonth(m, y));
+    // Traemos los presupuestos reales del mes elegido (antes mostraba vacío falso).
+    loadMonth(m, y);
   };
 
   const handleCreate = (formData: FormData) => {
@@ -69,8 +80,9 @@ export function PresupuestosClient({
       else {
         toast.success("Presupuesto guardado");
         setIsOpen(false);
-        // Reload page to get fresh data
-        window.location.reload();
+        // Refrescamos en el lugar (antes recargaba toda la página).
+        const res = await getBudgetsAction(month, year);
+        if (!("error" in res)) setBudgets(res.budgets);
       }
     });
   };

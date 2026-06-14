@@ -47,12 +47,15 @@ function shouldExecuteToday(
     case "BIWEEKLY":
       return daysSinceLast >= 14;
     case "MONTHLY": {
-      const targetDay = r.dayOfMonth ?? r.lastExecuted.getDate();
-      const sameDay = today.getDate() === targetDay;
-      const differentMonth =
+      // Día objetivo, acotado al último día en meses cortos (ej: 31 → 30/28).
+      const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+      const targetDay = Math.min(r.dayOfMonth ?? r.lastExecuted.getDate(), daysInMonth);
+      const notYetThisMonth =
         today.getMonth() !== r.lastExecuted.getMonth() ||
         today.getFullYear() !== r.lastExecuted.getFullYear();
-      return sameDay && differentMonth;
+      // Dispara el día objetivo O cualquier día posterior si el cron se lo
+      // perdió, mientras no se haya ejecutado ya este mes (a lo sumo 1 vez/mes).
+      return notYetThisMonth && today.getDate() >= targetDay;
     }
     case "QUARTERLY":
       return daysSinceLast >= 90;

@@ -63,7 +63,7 @@ export default async function DashboardPage({
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo, netWorth, lastMovementAt] =
+  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo, netWorth, lastMovementAt, agenda] =
     await Promise.all([
       getMonthSummary(user.id, month, year),
       getAccounts(user.id),
@@ -77,6 +77,7 @@ export default async function DashboardPage({
       getStreakInfo(user.id).catch(() => ({ current: 0, longest: 0 })),
       getNetWorth(user.id).catch(() => null),
       getLastMovementDate(user.id).catch(() => null),
+      getAgenda(user.id, 30).catch(() => []),
     ]);
 
   const daysSinceLastMovement = lastMovementAt
@@ -91,8 +92,6 @@ export default async function DashboardPage({
       : nextMilestone
         ? `faltan ${nextMilestone - streak} para ${nextMilestone} 🎯`
         : "¡de racha! 💪";
-
-  const agenda = await getAgenda(user.id, 30).catch(() => []);
 
   const { totalIncome, totalExpense, balance, byCategory } = summary;
   const savingsRate = totalIncome > 0 ? percentageOf(balance, totalIncome) : 0;

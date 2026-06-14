@@ -170,6 +170,7 @@ model Transaction {
 
   @@index([userId, date])
   @@index([userId, type])
+  @@index([userId, createdAt]) // racha: días activos ordenados por createdAt
   @@map("transactions")
 }
 
@@ -261,6 +262,7 @@ model CreditInstallment {
   paidAt            DateTime?
   createdAt         DateTime       @default(now())
 
+  @@index([creditPurchaseId, isPaid, dueDate]) // agenda/vencimientos: cuotas impagas por fecha
   @@map("credit_installments")
 }
 
@@ -302,6 +304,7 @@ model Budget {
   month      Int
   year       Int
   alertAt    Int      @default(80)
+  alertedPct Int      @default(0) // mayor umbral ya notificado este mes (evita spam diario)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

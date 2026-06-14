@@ -65,12 +65,15 @@ export async function GET(req: NextRequest) {
         appUrl,
       });
 
-      await getResend().emails.send({
+      const { error } = await getResend().emails.send({
         from: FROM,
         to: profile.email,
         subject: `📊 Tu reporte semanal — control.io`,
         html,
       });
+      // El SDK de Resend NO lanza excepción ante un error de la API (dominio sin
+      // verificar, rate limit, destinatario inválido): lo devuelve en `error`.
+      if (error) throw new Error(typeof error === "string" ? error : (error.message ?? "Resend error"));
 
       sent++;
     } catch (err) {
