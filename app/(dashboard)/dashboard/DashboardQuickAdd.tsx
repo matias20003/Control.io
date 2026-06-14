@@ -47,6 +47,12 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
   const filteredCategories = categories.filter((c) => c.type === txType);
 
   const handleCreate = (formData: FormData) => {
+    if (txType === "TRANSFER") {
+      const from = formData.get("accountId");
+      const to = formData.get("toAccountId");
+      if (!from || !to) { toast.error("Elegí las cuentas de origen y destino"); return; }
+      if (from === to) { toast.error("La cuenta de origen y la de destino deben ser distintas"); return; }
+    }
     const saveAction = formData.get("save_action") as string;
     startTransition(async () => {
       const result = await createTransactionAction(formData);
@@ -183,7 +189,7 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
           {txType !== "TRANSFER" ? (
             <div className="space-y-1.5">
               <Label htmlFor="dqa-account">Cuenta {accounts.length > 0 ? "*" : ""}</Label>
-              <Select id="dqa-account" name="accountId" defaultValue={lastDefaults.accountId ?? ""} required={accounts.length > 0}>
+              <Select id="dqa-account" name="accountId" defaultValue={lastDefaults.accountId ?? accounts[0]?.id ?? ""} required={accounts.length > 0}>
                 <option value="" disabled={accounts.length > 0}>{accounts.length > 0 ? "Seleccioná una cuenta" : "Sin cuenta"}</option>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
@@ -194,14 +200,14 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="dqa-from">Desde *</Label>
-                <Select id="dqa-from" name="accountId" defaultValue="">
+                <Select id="dqa-from" name="accountId" defaultValue="" required>
                   <option value="">Seleccionar</option>
                   {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </Select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="dqa-to">Hacia *</Label>
-                <Select id="dqa-to" name="toAccountId" defaultValue="">
+                <Select id="dqa-to" name="toAccountId" defaultValue="" required>
                   <option value="">Seleccionar</option>
                   {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </Select>

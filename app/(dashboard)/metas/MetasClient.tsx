@@ -73,6 +73,11 @@ export function MetasClient({ initialGoals, accounts }: Props) {
     if (!fundingGoal) return;
     const amount = parseFloat(fundAmount);
     if (!amount || amount <= 0) { toast.error("Ingresá un monto válido"); return; }
+    const remaining = fundingGoal.targetAmount - fundingGoal.currentAmount;
+    if (amount > remaining + 0.01) {
+      toast.error(`Con ${formatCurrency(remaining, fundingGoal.currency)} ya completás la meta`);
+      return;
+    }
     startTransition(async () => {
       const result = await addFundsAction(fundingGoal.id, amount);
       if (result.error) toast.error(result.error);
@@ -405,7 +410,7 @@ export function MetasClient({ initialGoals, accounts }: Props) {
               </div>
               <div className="space-y-1.5">
                 <Label>Monto *</Label>
-                <Input type="number" step="0.01" value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} placeholder="0.00" />
+                <Input type="number" step="0.01" min="0.01" max={fundingGoal.targetAmount - fundingGoal.currentAmount} value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} placeholder={`Hasta ${(fundingGoal.targetAmount - fundingGoal.currentAmount).toFixed(2)}`} />
               </div>
               <div className="flex gap-2">
                 <Button variant="ghost" className="flex-1" onClick={() => setFundingGoal(null)}>Cancelar</Button>

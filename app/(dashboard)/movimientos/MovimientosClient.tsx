@@ -275,6 +275,17 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
         toast.error("error" in res && res.error ? res.error : "No se pudo crear la categoría");
       }
     };
+    // Para transferencias validamos en el cliente: ambas cuentas y distintas.
+    const submitForm = (fd: FormData) => {
+      if (type === "TRANSFER") {
+        const from = fd.get("accountId");
+        const to = fd.get("toAccountId");
+        if (!from || !to) { toast.error("Elegí las cuentas de origen y destino"); return; }
+        if (from === to) { toast.error("La cuenta de origen y la de destino deben ser distintas"); return; }
+      }
+      onSubmit(fd);
+    };
+
     return (
       <>
         <div className="flex rounded-xl overflow-hidden border border-border mb-5">
@@ -289,7 +300,7 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
             </button>
           ))}
         </div>
-        <form action={onSubmit} className="space-y-4">
+        <form action={submitForm} className="space-y-4">
           <input type="hidden" name="type" value={type} />
           {/* Currency: hidden input when collapsed, visible select when expanded */}
           {!showMore && (
@@ -350,7 +361,7 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
           {type !== "TRANSFER" ? (
             <div className="space-y-1.5">
               <Label htmlFor="f-account">Cuenta {accounts.length > 0 ? "*" : ""}</Label>
-              <Select id="f-account" name="accountId" defaultValue={defaultValues?.accountId ?? ""} required={accounts.length > 0}>
+              <Select id="f-account" name="accountId" defaultValue={defaultValues?.accountId ?? accounts[0]?.id ?? ""} required={accounts.length > 0}>
                 <option value="" disabled={accounts.length > 0}>{accounts.length > 0 ? "Seleccioná una cuenta" : "Sin cuenta"}</option>
                 {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
               </Select>
@@ -359,14 +370,14 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="f-from">Desde *</Label>
-                <Select id="f-from" name="accountId" defaultValue={defaultValues?.accountId ?? ""}>
+                <Select id="f-from" name="accountId" defaultValue={defaultValues?.accountId ?? ""} required>
                   <option value="">Seleccionar</option>
                   {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </Select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="f-to">Hacia *</Label>
-                <Select id="f-to" name="toAccountId" defaultValue={defaultValues?.toAccountId ?? ""}>
+                <Select id="f-to" name="toAccountId" defaultValue={defaultValues?.toAccountId ?? ""} required>
                   <option value="">Seleccionar</option>
                   {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </Select>

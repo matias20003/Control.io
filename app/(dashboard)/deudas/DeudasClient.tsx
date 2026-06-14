@@ -86,6 +86,10 @@ export function DeudasClient({ initialDebts }: Props) {
       toast.error("Ingresá un monto válido");
       return;
     }
+    if (amount > payingDebt.remainingAmount + 0.01) {
+      toast.error(`El máximo pendiente es ${formatCurrency(payingDebt.remainingAmount, payingDebt.currency)}`);
+      return;
+    }
     startTransition(async () => {
       const result = await payDebtAction(payingDebt.id, amount);
       if (result.error) toast.error(result.error);
@@ -457,6 +461,8 @@ export function DeudasClient({ initialDebts }: Props) {
                 <Input
                   type="number"
                   step="0.01"
+                  min="0.01"
+                  max={payingDebt.remainingAmount}
                   value={payAmount}
                   onChange={(e) => setPayAmount(e.target.value)}
                   placeholder={`Hasta ${payingDebt.remainingAmount.toFixed(2)}`}
