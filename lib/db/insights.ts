@@ -24,11 +24,11 @@ export async function getInsights(userId: string): Promise<Insight[]> {
   const [thisTxs, prevTxs, budgets, goals] = await Promise.all([
     prisma.transaction.findMany({
       where: { userId, type: { in: ["INCOME", "EXPENSE"] }, currency: "ARS", date: { gte: thisStart, lte: thisEnd } },
-      include: { category: { select: { name: true } } },
+      select: { type: true, amount: true, category: { select: { name: true } } },
     }),
     prisma.transaction.findMany({
       where: { userId, type: "EXPENSE", currency: "ARS", date: { gte: prevStart, lte: prevEnd } },
-      include: { category: { select: { name: true } } },
+      select: { type: true, amount: true, category: { select: { name: true } } },
     }),
     prisma.budget.findMany({
       where: { userId, month: now.getMonth() + 1, year: now.getFullYear() },

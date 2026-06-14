@@ -94,5 +94,12 @@ export function verifySignature(rawBody: string, signature: string | null): bool
   const expectedHex = hmac.digest("hex");
   const expectedB64 = crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");
 
-  return received === expectedHex || received === expectedB64;
+  // Comparación de tiempo constante para no filtrar el secreto por timing.
+  const safeEqual = (a: string, b: string): boolean => {
+    const ba = Buffer.from(a);
+    const bb = Buffer.from(b);
+    return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
+  };
+
+  return safeEqual(received, expectedHex) || safeEqual(received, expectedB64);
 }

@@ -347,7 +347,8 @@ export async function getMonthSummary(userId: string, month?: number, year?: num
 
   const rows = await prisma.transaction.findMany({
     where: { userId, type: { in: ["INCOME", "EXPENSE"] }, date: { gte: dateFrom, lte: dateTo }, currency: "ARS" },
-    include: { category: { select: { id: true, name: true, color: true, icon: true } } },
+    // Solo lo que se agrega (evita traer/desencriptar descripción y notas).
+    select: { type: true, amount: true, category: { select: { id: true, name: true, color: true, icon: true } } },
   });
 
   let totalIncome = 0;

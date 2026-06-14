@@ -17,7 +17,11 @@ export async function findProfileByPhone(phone: string): Promise<{ id: string } 
 
   for (const p of profiles) {
     const pd = (p.whatsappNumber ?? "").replace(/\D/g, "");
-    if (pd && (pd.slice(-10) === tail || pd.endsWith(tail) || digits.endsWith(pd.slice(-10)))) {
+    // Coincidencia ESTRICTA por los últimos 10 dígitos (área + abonado en AR),
+    // robusta al "+54 9" y a los formatos con/sin código de país. Antes el OR
+    // con endsWith en ambos sentidos podía cruzar dos números parecidos y
+    // atribuirle un mensaje al usuario equivocado.
+    if (pd.length >= 10 && pd.slice(-10) === tail) {
       return { id: p.id };
     }
   }
