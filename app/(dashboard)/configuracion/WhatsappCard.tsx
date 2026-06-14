@@ -124,7 +124,7 @@ export function WhatsappCard({ initialNumber }: { initialNumber: string | null }
             rel="noopener noreferrer"
             onClick={() => {
               try {
-                localStorage.setItem(WA_PROMO_KEY, "1");
+                localStorage.setItem(WA_PROMO_KEY, String(Date.now()));
               } catch {
                 // ignore
               }

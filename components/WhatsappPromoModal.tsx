@@ -1,66 +1,44 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MessageCircle, Mic, Zap, Clock } from "lucide-react";
+import { MessageCircle, Mic, Camera, Zap } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
-// Número del bot (solo dígitos, con código de país) para el link click-to-chat.
-const BOT_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_BOT_NUMBER;
-const CHAT_HREF = BOT_NUMBER
-  ? `https://wa.me/${BOT_NUMBER}?text=${encodeURIComponent("Hola! Quiero registrar un movimiento 💸")}`
-  : null;
-
-// Flag compartido: una vez que el usuario abre el bot (desde acá o desde
-// Configuración), no volvemos a mostrar el popup.
-export const WA_PROMO_KEY = "wa_bot_promo_opened";
+// Timestamp de la última vez que mostramos el popup. Vuelve a aparecer cada
+// COOLDOWN mientras el usuario siga SIN vincular su número.
+export const WA_PROMO_KEY = "wa_promo_shown_at";
+const COOLDOWN = 2 * 24 * 60 * 60 * 1000; // 2 días
 
 const BENEFITS = [
   { icon: Mic, text: "Mandá un audio: “gasté 3 lucas en el súper” y se carga solo" },
-  { icon: Zap, text: "Texto o voz: la IA lo interpreta y lo registra al instante" },
-  { icon: Clock, text: "Sin abrir la app, desde cualquier lado, en segundos" },
+  { icon: Camera, text: "Sacale una foto al ticket y la IA lo registra" },
+  { icon: Zap, text: "Sin abrir la app, desde cualquier lado, en segundos" },
 ];
 
 export function WhatsappPromoModal({ isLinked }: { isLinked: boolean }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (!CHAT_HREF) return;
-    try {
-      if (localStorage.getItem(WA_PROMO_KEY) !== "1") setOpen(true);
-    } catch {
-      // localStorage no disponible (modo incógnito, etc.) → no mostramos.
-    }
-  }, []);
+    if (isLinked) return; // ya vinculó → no lo molestamos más
+    let last = 0;
+    try { last = Number(localStorage.getItem(WA_PROMO_KEY)) || 0; } catch {}
+    if (Date.now() - last < COOLDOWN) return;
+    const t = setTimeout(() => { setOpen(true); mark(); }, 2500);
+    return () => clearTimeout(t);
+  }, [isLinked]);
 
-  if (!CHAT_HREF) return null;
-
-  // Una vez visto (lo cierre como lo cierre), no se muestra más.
-  const markSeen = () => {
-    try {
-      localStorage.setItem(WA_PROMO_KEY, "1");
-    } catch {
-      // ignore
-    }
+  const mark = () => {
+    try { localStorage.setItem(WA_PROMO_KEY, String(Date.now())); } catch {}
   };
-
-  const dismiss = () => {
-    markSeen();
-    setOpen(false);
-  };
+  const dismiss = () => setOpen(false);
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        if (!o) markSeen();
-        setOpen(o);
-      }}
-    >
-      <DialogContent title="Registrá tus gastos por WhatsApp 🤖">
+    <Dialog open={open} onOpenChange={(o) => { if (!o) dismiss(); setOpen(o); }}>
+      <DialogContent title="Cargá tus gastos por WhatsApp 🤖">
         <div className="space-y-4">
           <p className="text-sm text-muted">
-            Ahora podés cargar tus movimientos sin abrir la app. Escribile o mandale un audio al
-            asistente y se registra solo.
+            Vinculá tu número y registrá movimientos <span className="text-foreground font-medium">sin abrir la app</span> —
+            por texto, audio o foto del ticket. Es la forma más cómoda y la que más se usa.
           </p>
 
           <ul className="space-y-2.5">
@@ -74,26 +52,14 @@ export function WhatsappPromoModal({ isLinked }: { isLinked: boolean }) {
             ))}
           </ul>
 
-          {!isLinked && (
-            <p className="text-xs text-muted">
-              Tip: vinculá tu número en{" "}
-              <a href="/configuracion" className="text-primary hover:underline">
-                Configuración
-              </a>{" "}
-              para que el bot te reconozca.
-            </p>
-          )}
-
           <a
-            href={CHAT_HREF}
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/configuracion?tab=perfil"
             onClick={dismiss}
             className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: "#25D366" }}
           >
             <MessageCircle size={16} />
-            Abrir asistente en WhatsApp
+            Vincular mi WhatsApp
           </a>
 
           <button
