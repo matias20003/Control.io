@@ -64,3 +64,34 @@ export async function sendDailyReminders(): Promise<{ sent: number; skipped: num
 
   return { sent, skipped, failed };
 }
+
+/**
+ * Envía el recordatorio a UN usuario en el momento (para el botón "Probar
+ * ahora"). Ignora la regla de "ya cargó hoy". Devuelve si WhatsApp salió y por
+ * qué falló si no (ej. fuera de la ventana de 24h de Meta).
+ */
+export async function sendReminderToUser(userId: string): Promise<{ ok: boolean; error?: string }> {
+  const profile = await prisma.profile.findUnique({
+    where: { id: userId },
+    select: { whatsappNumber: true },
+  });
+  if (!profile?.whatsappNumber) {
+    return { ok: false, error: "No tenés un número de WhatsApp vinculado." };
+  }
+
+  const streak = await getStreak(userId).catch(() => 0);
+
+  // Push best-effort (no rompe si no hay suscripción).
+  sendPushToUser(userId, {
+    title: "📝 ¿Registraste tus gastos de hoy?",
+    body: streak >= 2 ? `🔥 Llevás ${streak} días de racha. ¡No la cortes!` : "Te toma menos de 1 minuto. Tocá para cargar.",
+    url: "/dashboard",
+  }).catch(() => {});
+
+  try {
+    await sendText(profile.whatsappNumber, streak >= 2 ? streakMessage(streak) : MESSAGE);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "WhatsApp rechazó el envío." };
+  }
+}

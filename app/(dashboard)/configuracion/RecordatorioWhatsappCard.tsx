@@ -9,7 +9,22 @@ import { getDailyReminderPrefAction, updateDailyReminderPrefAction } from "@/app
 export function RecordatorioWhatsappCard({ hasWhatsapp }: { hasWhatsapp: boolean }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [enabled, setEnabled] = useState(false);
+
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      const res = await fetch("/api/reminder/test", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (data.ok) toast.success(data.message ?? "Enviado");
+      else toast.error(data.message ?? data.error ?? "No se pudo enviar");
+    } catch {
+      toast.error("No se pudo enviar la prueba");
+    } finally {
+      setTesting(false);
+    }
+  };
 
   useEffect(() => {
     getDailyReminderPrefAction()
@@ -66,18 +81,30 @@ export function RecordatorioWhatsappCard({ hasWhatsapp }: { hasWhatsapp: boolean
             <Loader2 size={14} className="animate-spin" /> Cargando preferencia…
           </div>
         ) : (
-          <button
-            onClick={handleToggle}
-            disabled={saving}
-            className={`py-2 px-4 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50 flex items-center justify-center gap-2 ${
-              enabled
-                ? "border border-border text-foreground hover:bg-surface-2"
-                : "bg-primary text-white hover:opacity-90"
-            }`}
-          >
-            {saving && <Loader2 size={14} className="animate-spin" />}
-            {enabled ? "Desactivar recordatorio" : "Activar recordatorio diario"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleToggle}
+              disabled={saving}
+              className={`py-2 px-4 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50 flex items-center justify-center gap-2 ${
+                enabled
+                  ? "border border-border text-foreground hover:bg-surface-2"
+                  : "bg-primary text-white hover:opacity-90"
+              }`}
+            >
+              {saving && <Loader2 size={14} className="animate-spin" />}
+              {enabled ? "Desactivar recordatorio" : "Activar recordatorio diario"}
+            </button>
+            {enabled && (
+              <button
+                onClick={handleTest}
+                disabled={testing}
+                className="py-2 px-4 rounded-lg text-sm font-medium bg-primary text-white hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {testing ? <Loader2 size={14} className="animate-spin" /> : <BellRing size={14} />}
+                Probar ahora
+              </button>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
