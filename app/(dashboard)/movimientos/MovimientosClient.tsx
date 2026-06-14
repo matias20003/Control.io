@@ -426,7 +426,7 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
           { label: "Nuevo ingreso", icon: ArrowDownLeft, cls: "bg-success/10 text-success", on: () => openCreate("INCOME") },
           { label: "Nuevo gasto", icon: ArrowUpRight, cls: "bg-danger/10 text-danger", on: () => openCreate("EXPENSE") },
           { label: "Transferencia", icon: ArrowLeftRight, cls: "bg-primary/10 text-primary", on: () => openCreate("TRANSFER") },
-          { label: "Importar CSV", icon: Upload, cls: "bg-surface-2 text-muted", on: () => setImportOpen(true) },
+          { label: "Importar CSV", icon: Upload, cls: "bg-violet-500/10 text-violet-500", on: () => setImportOpen(true) },
         ].map((b) => (
           <button
             key={b.label}

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { toast } from "sonner";
 import { importTransactionsAction, type ImportRow } from "@/app/actions/import";
+import { parseAmount, parseDate, detectColumns } from "@/lib/import-utils";
 import type { SerializedAccount } from "@/lib/db/accounts";
 import type { SerializedCategory } from "@/lib/db/categories";
 
@@ -21,32 +22,15 @@ interface Props {
   onImported: () => void;
 }
 
-// Common column name patterns for auto-detection
-const DATE_PATTERNS    = ["fecha", "date", "fec", "dia", "día"];
-const DESC_PATTERNS    = ["descripcion", "descripción", "description", "concepto", "detalle", "motivo", "glosa"];
-const AMOUNT_PATTERNS  = ["importe", "monto", "amount", "valor", "total", "credito", "crédito", "debito", "débito"];
-const DEBIT_PATTERNS   = ["debito", "débito", "debit", "egreso", "gasto"];
-const CREDIT_PATTERNS  = ["credito", "crédito", "credit", "ingreso", "haber"];
-
 function autoDetect(headers: string[]): { date: string; description: string; amount: string; debit: string; credit: string } {
-  const norm = (h: string) => h.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  const find = (patterns: string[]) =>
-    headers.find((h) => patterns.some((p) => norm(h).includes(p))) ?? "";
-
+  const d = detectColumns(headers);
   return {
-    date:        find(DATE_PATTERNS),
-    description: find(DESC_PATTERNS),
-    amount:      find(AMOUNT_PATTERNS),
-    debit:       find(DEBIT_PATTERNS),
-    credit:      find(CREDIT_PATTERNS),
+    date: d.date ?? "",
+    description: d.description ?? "",
+    amount: d.amount ?? "",
+    debit: d.debit ?? "",
+    credit: d.credit ?? "",
   };
-}
-
-function parseAmount(raw: string): number {
-  if (!raw) return 0;
-  // Remove currency symbols, spaces, dots as thousand separators, convert comma decimal
-  const clean = raw.replace(/[$ ]/g, "").replace(/\./g, "").replace(",", ".");
-  return Math.abs(parseFloat(clean) || 0);
 }
 
 export function ImportCSVDialog({ open, onOpenChange, accounts, categories, onImported }: Props) {
@@ -99,28 +83,33 @@ export function ImportCSVDialog({ open, onOpenChange, accounts, categories, onIm
   }
 
   function buildRows(): ImportRow[] {
+    // ¿La columna de monto trae signos? (muchos exports usan negativo = gasto).
+    const columnHasNegatives =
+      mode === "single" && mapping.amount
+        ? rawRows.some((row) => (parseAmount(row[mapping.amount]) ?? 0) < 0)
+        : false;
+
     return rawRows
       .map((row) => {
-        const date        = row[mapping.date] ?? "";
+        const isoDate = parseDate(row[mapping.date] ?? "");
         const description = (row[mapping.description] ?? "").trim();
         let amount = 0;
         let type: "INCOME" | "EXPENSE" = defaultType;
 
         if (mode === "split") {
-          const debit  = parseAmount(row[mapping.debit]  ?? "");
-          const credit = parseAmount(row[mapping.credit] ?? "");
+          const debit = Math.abs(parseAmount(row[mapping.debit]) ?? 0);
+          const credit = Math.abs(parseAmount(row[mapping.credit]) ?? 0);
           if (credit > 0) { amount = credit; type = "INCOME"; }
           else            { amount = debit;  type = "EXPENSE"; }
         } else {
-          const raw = row[mapping.amount] ?? "";
-          amount = parseAmount(raw);
-          // Try to detect sign
-          const rawClean = raw.replace(/[$ .]/g, "").replace(",", ".");
-          if (rawClean.startsWith("-")) type = "EXPENSE";
+          const signed = parseAmount(row[mapping.amount]);
+          amount = Math.abs(signed ?? 0);
+          // Si la columna trae signos, clasificamos por signo; si no, tipo por defecto.
+          if (columnHasNegatives) type = (signed ?? 0) < 0 ? "EXPENSE" : "INCOME";
         }
 
         return {
-          date: date.trim(),
+          date: isoDate ?? "",
           description: description || "Sin descripción",
           amount,
           type,
