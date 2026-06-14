@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, HandCoins, DollarSign, TrendingDown, TrendingUp, ListChecks, AlertTriangle, Clock, CheckCircle2, Info, CalendarClock } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,6 +101,8 @@ export function DeudasClient({ initialDebts }: Props) {
       }
     });
   };
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleDelete = (id: string) => {
     setDeletingId(id);
@@ -233,7 +236,7 @@ export function DeudasClient({ initialDebts }: Props) {
                           <td className="py-2.5 px-2">
                             <div className="flex items-center justify-end gap-1">
                               <button onClick={() => { setPayingDebt(d); setPayAmount(""); }} className="text-xs font-medium px-2 py-1 rounded-lg text-primary hover:bg-primary/10">Pago</button>
-                              <button onClick={() => handleDelete(d.id)} disabled={deletingId === d.id || isPending} className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10"><Trash2 size={13} /></button>
+                              <button onClick={() => setConfirmDeleteId(d.id)} disabled={deletingId === d.id || isPending} className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10"><Trash2 size={13} /></button>
                             </div>
                           </td>
                         </tr>
@@ -248,10 +251,10 @@ export function DeudasClient({ initialDebts }: Props) {
           {/* Cards — mobile */}
           <div className="md:hidden space-y-6">
             {iOwe.length > 0 && (
-              <DebtGroup title="Les debo" debts={iOwe} accent="text-danger" onPay={(d) => { setPayingDebt(d); setPayAmount(""); }} onDelete={handleDelete} deletingId={deletingId} isPending={isPending} />
+              <DebtGroup title="Les debo" debts={iOwe} accent="text-danger" onPay={(d) => { setPayingDebt(d); setPayAmount(""); }} onDelete={setConfirmDeleteId} deletingId={deletingId} isPending={isPending} />
             )}
             {theyOwe.length > 0 && (
-              <DebtGroup title="Me deben" debts={theyOwe} accent="text-success" onPay={(d) => { setPayingDebt(d); setPayAmount(""); }} onDelete={handleDelete} deletingId={deletingId} isPending={isPending} />
+              <DebtGroup title="Me deben" debts={theyOwe} accent="text-success" onPay={(d) => { setPayingDebt(d); setPayAmount(""); }} onDelete={setConfirmDeleteId} deletingId={deletingId} isPending={isPending} />
             )}
           </div>
           </div>
@@ -324,7 +327,7 @@ export function DeudasClient({ initialDebts }: Props) {
                   </p>
                 </div>
                 <button
-                  onClick={() => handleDelete(d.id)}
+                  onClick={() => setConfirmDeleteId(d.id)}
                   disabled={deletingId === d.id || isPending}
                   className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors"
                 >
@@ -480,6 +483,16 @@ export function DeudasClient({ initialDebts }: Props) {
           </DialogContent>
         </Dialog>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        onOpenChange={(o) => { if (!o) setConfirmDeleteId(null); }}
+        title="Eliminar deuda"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={() => { if (confirmDeleteId) { handleDelete(confirmDeleteId); setConfirmDeleteId(null); } }}
+        isPending={isPending}
+      />
     </div>
   );
 }

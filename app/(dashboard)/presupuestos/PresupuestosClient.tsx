@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatMonth } from "@/lib/utils";
 import {
@@ -41,6 +42,7 @@ export function PresupuestosClient({
   const [isOpen, setIsOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const expenseCategories = categories.filter((c) => c.type === "EXPENSE");
   const budgetCatIds = new Set(budgets.map((b) => b.categoryId));
@@ -249,7 +251,7 @@ export function PresupuestosClient({
                       )}
                     </div>
                     <button
-                      onClick={() => handleDelete(b.id)}
+                      onClick={() => setConfirmDeleteId(b.id)}
                       disabled={deletingId === b.id || isPending}
                       className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
                     >
@@ -396,6 +398,16 @@ export function PresupuestosClient({
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        onOpenChange={(o) => { if (!o) setConfirmDeleteId(null); }}
+        title="Eliminar presupuesto"
+        description="Se quitará el límite de esta categoría para el mes. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={() => { if (confirmDeleteId) { handleDelete(confirmDeleteId); setConfirmDeleteId(null); } }}
+        isPending={isPending}
+      />
     </div>
   );
 }

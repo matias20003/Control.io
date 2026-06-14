@@ -4,6 +4,7 @@ import { SectionTabs } from "@/components/layout/SectionTabs";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, PiggyBank, DollarSign, Target, TrendingUp, Pencil } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,6 +84,8 @@ export function MetasClient({ initialGoals, accounts }: Props) {
       }
     });
   };
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleDelete = (id: string) => {
     setDeletingId(id);
@@ -217,7 +220,7 @@ export function MetasClient({ initialGoals, accounts }: Props) {
                   <Pencil size={13} />
                 </button>
                 <button
-                  onClick={() => handleDelete(g.id)}
+                  onClick={() => setConfirmDeleteId(g.id)}
                   disabled={deletingId === g.id || isPending}
                   className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
                 >
@@ -248,7 +251,7 @@ export function MetasClient({ initialGoals, accounts }: Props) {
                   </div>
                 </div>
                 <button
-                  onClick={() => handleDelete(g.id)}
+                  onClick={() => setConfirmDeleteId(g.id)}
                   disabled={deletingId === g.id || isPending}
                   className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors"
                 >
@@ -412,6 +415,16 @@ export function MetasClient({ initialGoals, accounts }: Props) {
           </DialogContent>
         </Dialog>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        onOpenChange={(o) => { if (!o) setConfirmDeleteId(null); }}
+        title="Eliminar meta"
+        description="Esta acción no se puede deshacer. El dinero de tus cuentas no se modifica."
+        confirmLabel="Eliminar"
+        onConfirm={() => { if (confirmDeleteId) { handleDelete(confirmDeleteId); setConfirmDeleteId(null); } }}
+        isPending={isPending}
+      />
     </div>
   );
 }

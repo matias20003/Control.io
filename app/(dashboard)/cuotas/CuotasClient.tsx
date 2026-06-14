@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Plus, Check, Trash2, CreditCard, Pencil, CalendarClock, ListChecks } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -131,6 +132,8 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
     });
   };
 
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   const handleDelete = (id: string) => {
     setDeletingId(id);
     startTransition(async () => {
@@ -219,7 +222,7 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
                     <Pencil size={13} />
                   </button>
                   <button
-                    onClick={() => handleDelete(p.id)}
+                    onClick={() => setConfirmDeleteId(p.id)}
                     disabled={deletingId === p.id || isPending}
                     className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
                   >
@@ -349,7 +352,7 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
                   </p>
                 </div>
                 <button
-                  onClick={() => handleDelete(p.id)}
+                  onClick={() => setConfirmDeleteId(p.id)}
                   disabled={deletingId === p.id || isPending}
                   className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors"
                 >
@@ -550,6 +553,16 @@ export function CuotasClient({ initialPurchases, accounts, categories }: Props) 
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        onOpenChange={(o) => { if (!o) setConfirmDeleteId(null); }}
+        title="Eliminar compra en cuotas"
+        description="Se eliminará el plan de cuotas. Los pagos ya registrados se conservan en tus movimientos. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={() => { if (confirmDeleteId) { handleDelete(confirmDeleteId); setConfirmDeleteId(null); } }}
+        isPending={isPending}
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, TrendingUp } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,6 +72,8 @@ export function InversionesClient({ initialInvestments, rates }: Props) {
       }
     });
   };
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleDelete = (id: string) => {
     setDeletingId(id);
@@ -197,7 +200,7 @@ export function InversionesClient({ initialInvestments, rates }: Props) {
                       </div>
                     </div>
                     <button
-                      onClick={() => handleDelete(inv.id)}
+                      onClick={() => setConfirmDeleteId(inv.id)}
                       disabled={deletingId === inv.id || isPending}
                       className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50 flex-shrink-0"
                     >
@@ -337,6 +340,16 @@ export function InversionesClient({ initialInvestments, rates }: Props) {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        onOpenChange={(o) => { if (!o) setConfirmDeleteId(null); }}
+        title="Eliminar inversión"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={() => { if (confirmDeleteId) { handleDelete(confirmDeleteId); setConfirmDeleteId(null); } }}
+        isPending={isPending}
+      />
     </div>
   );
 }

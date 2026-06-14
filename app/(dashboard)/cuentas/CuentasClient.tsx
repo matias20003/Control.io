@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2, Wallet, Pencil, Layers, Coins } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Sparkline } from "@/components/ui/sparkline";
 import { Button } from "@/components/ui/button";
@@ -110,6 +111,8 @@ export function CuentasClient({ initialAccounts, recentTx, sparklines }: Props) 
       }
     });
   };
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleDelete = (accountId: string) => {
     setDeletingId(accountId);
@@ -267,7 +270,7 @@ export function CuentasClient({ initialAccounts, recentTx, sparklines }: Props) 
                         <td className="py-2.5 px-2">
                           <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => setEditingAccount(account)} disabled={isPending} className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10 disabled:opacity-50"><Pencil size={14} /></button>
-                            <button onClick={() => handleDelete(account.id)} disabled={deletingId === account.id || isPending} className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 disabled:opacity-50"><Trash2 size={14} /></button>
+                            <button onClick={() => setConfirmDeleteId(account.id)} disabled={deletingId === account.id || isPending} className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 disabled:opacity-50"><Trash2 size={14} /></button>
                           </div>
                         </td>
                       </tr>
@@ -296,7 +299,7 @@ export function CuentasClient({ initialAccounts, recentTx, sparklines }: Props) 
                     </div>
                     <div className="flex items-center gap-0.5">
                       <button onClick={() => setEditingAccount(account)} disabled={isPending} className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10"><Pencil size={14} /></button>
-                      <button onClick={() => handleDelete(account.id)} disabled={deletingId === account.id || isPending} className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10"><Trash2 size={14} /></button>
+                      <button onClick={() => setConfirmDeleteId(account.id)} disabled={deletingId === account.id || isPending} className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10"><Trash2 size={14} /></button>
                     </div>
                   </div>
                 );
@@ -498,6 +501,16 @@ export function CuentasClient({ initialAccounts, recentTx, sparklines }: Props) 
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        onOpenChange={(o) => { if (!o) setConfirmDeleteId(null); }}
+        title="Eliminar cuenta"
+        description="Se eliminará la cuenta y todos sus movimientos asociados. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={() => { if (confirmDeleteId) { handleDelete(confirmDeleteId); setConfirmDeleteId(null); } }}
+        isPending={isPending}
+      />
     </div>
   );
 }
