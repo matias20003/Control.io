@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -87,6 +88,12 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
 
   // CSV import
   const [importOpen, setImportOpen] = useState(false);
+
+  // Abrir el import directo cuando se llega con ?import=1 (ej: banner "actualizá tus movimientos").
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("import") === "1") setImportOpen(true);
+  }, [searchParams]);
 
   const [isPending, startTransition]  = useTransition();
 

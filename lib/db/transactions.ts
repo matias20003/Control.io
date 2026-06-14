@@ -151,6 +151,16 @@ export async function searchTransactions(
     .slice(0, take);
 }
 
+/** Fecha de creación del último movimiento del usuario (o null si no tiene). */
+export async function getLastMovementDate(userId: string): Promise<Date | null> {
+  const tx = await prisma.transaction.findFirst({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  return tx?.createdAt ?? null;
+}
+
 export async function createTransaction(userId: string, data: {
   type: string; amount: number; currency: string; description?: string;
   date: string; categoryId?: string; accountId?: string; toAccountId?: string; notes?: string;

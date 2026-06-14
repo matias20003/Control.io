@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { getMonthSummary, getTransactions } from "@/lib/db/transactions";
+import { getMonthSummary, getTransactions, getLastMovementDate } from "@/lib/db/transactions";
 import { getAccounts } from "@/lib/db/accounts";
 import { getCategories } from "@/lib/db/categories";
 import { getInsights, getNetWorth } from "@/lib/db/insights";
@@ -27,6 +27,7 @@ import { getProfileWhatsapp } from "@/lib/db/profile";
 import { getStreakInfo } from "@/lib/db/streak";
 import { nextStreakMilestone } from "@/lib/streak-utils";
 import { StreakCelebration } from "./StreakCelebration";
+import { UpdateReminderBanner } from "./UpdateReminderBanner";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -62,7 +63,7 @@ export default async function DashboardPage({
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo, netWorth] =
+  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo, netWorth, lastMovementAt] =
     await Promise.all([
       getMonthSummary(user.id, month, year),
       getAccounts(user.id),
@@ -75,7 +76,12 @@ export default async function DashboardPage({
       getProfileWhatsapp(user.id).catch(() => null),
       getStreakInfo(user.id).catch(() => ({ current: 0, longest: 0 })),
       getNetWorth(user.id).catch(() => null),
+      getLastMovementDate(user.id).catch(() => null),
     ]);
+
+  const daysSinceLastMovement = lastMovementAt
+    ? Math.floor((Date.now() - new Date(lastMovementAt).getTime()) / 86_400_000)
+    : null;
 
   const streak = streakInfo.current;
   const nextMilestone = nextStreakMilestone(streak);
@@ -206,6 +212,8 @@ export default async function DashboardPage({
         )}
         <StreakCelebration current={streak} />
       </div>
+
+      <UpdateReminderBanner days={daysSinceLastMovement} />
 
       <OnboardingChecklist state={onboarding} />
       <GuidedTour enabled={welcome === "1"} userName={name} />
