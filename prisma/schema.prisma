@@ -82,6 +82,13 @@ model Profile {
   // usuarios que se registraron y no cargaron nada. Null = todavía no se envió.
   reactivationNudgeAt DateTime?
 
+  // Suscripción (monetización). plan: "free" | "premium". El acceso real se
+  // decide por premiumUntil (lo renueva/corta el webhook de MercadoPago); así
+  // un pago vencido cae a free solo, sin tocar nada más.
+  plan            String    @default("free")
+  premiumUntil    DateTime?
+  mpPreapprovalId String?   // id de la suscripción (preapproval) en MercadoPago
+
   accounts              Account[]
   categories            Category[]
   transactions          Transaction[]
