@@ -22,7 +22,7 @@ export const FEATURE_FLAGS: Record<FeatureFlag, Rollout> = {
   gastosHormiga: "testers", // detector de gastos hormiga / suscripciones
   finDeMes: "testers",      // proyección "¿llego a fin de mes?"
   tareas: "all",            // tareas / pendientes (app + bot) — para todos
-  recordatorios: "testers", // recordatorios con hora (necesita cron externo por minuto)
+  recordatorios: "all",     // recordatorios con hora (disparo vía QStash) — para todos
   premium: "testers",       // paywall + suscripción MercadoPago
   onboardingWa: "testers",  // hero de onboarding WhatsApp-first
 };
