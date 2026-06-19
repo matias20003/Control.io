@@ -30,6 +30,7 @@ import { getGoals, createGoal, addFundsToGoal, type SerializedGoal } from "@/lib
 import { getInvestments, type SerializedInvestment } from "@/lib/db/investments";
 import { createTask } from "@/lib/db/tasks";
 import { getIsTester } from "@/lib/db/profile";
+import { hasFeature } from "@/lib/feature-flags";
 import { getChatHistory, saveChatTurn, getMemory, addMemory, type ChatTurn } from "@/lib/whatsapp/memory";
 
 type Intent = "action" | "query" | "chat";
@@ -347,7 +348,7 @@ TIPOS DE ACCIÓN (campo "type"):
 - "delete_transaction": { ref }                                // ref = número [#N] de la lista
 - "update_transaction": { ref, amount, description, category, account }  // solo los campos a cambiar
 - "remember": { fact }   // guardar un dato DURABLE del usuario en tu memoria
-${c.isTester ? `- "create_task": { title, dueDate }   // pendiente/recordatorio NO financiero ("recordame entregar el TP el martes", "anotá comprar pilas"); dueDate "YYYY-MM-DD" opcional, calculada relativo a HOY` : ``}
+${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, dueDate }   // pendiente/recordatorio NO financiero ("recordame entregar el TP el martes", "anotá comprar pilas"); dueDate "YYYY-MM-DD" opcional, calculada relativo a HOY` : ``}
 REGLAS:
 - "intent":"action" cuando hay que ejecutar algo (llená "actions"). Podés poner varias acciones.
 - "intent":"query" para preguntas, análisis o consejos: "actions" vacío, respondé en "answer" usando los datos reales (montos con $ y miles), con diagnóstico + recomendación concreta.
@@ -635,7 +636,7 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
     }
 
     case "create_task": {
-      if (!c.isTester) throw new Error("esa función todavía no está disponible");
+      if (!hasFeature("tareas", { isTester: c.isTester })) throw new Error("esa función todavía no está disponible");
       if (!a.title) throw new Error("falta la tarea");
       const due = a.dueDate ? new Date(a.dueDate) : null;
       const validDue = due && !isNaN(due.getTime()) ? due : null;

@@ -15,7 +15,7 @@ export type FeatureFlag = "gastosHormiga" | "finDeMes" | "tareas" | "premium" | 
 export const FEATURE_FLAGS: Record<FeatureFlag, Rollout> = {
   gastosHormiga: "testers", // detector de gastos hormiga / suscripciones
   finDeMes: "testers",      // proyección "¿llego a fin de mes?"
-  tareas: "testers",        // tareas financieras inteligentes
+  tareas: "all",            // tareas / pendientes (app + bot) — para todos
   premium: "testers",       // paywall + suscripción MercadoPago
   onboardingWa: "testers",  // hero de onboarding WhatsApp-first
 };
