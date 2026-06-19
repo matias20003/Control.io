@@ -72,6 +72,15 @@ export async function getProfileWhatsapp(userId: string): Promise<string | null>
   return p?.whatsappNumber ?? null;
 }
 
+/** ¿La cuenta está marcada como tester? (para ver features en desarrollo). */
+export async function getIsTester(userId: string): Promise<boolean> {
+  const p = await prisma.profile.findUnique({
+    where: { id: userId },
+    select: { isTester: true },
+  });
+  return p?.isTester ?? false;
+}
+
 /**
  * Vincula (o desvincula con null) el número de WhatsApp del usuario.
  * Lanza error con code "P2002" si el número ya está en uso por otra cuenta.

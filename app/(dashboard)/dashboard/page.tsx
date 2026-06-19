@@ -23,7 +23,8 @@ import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 import { GuidedTour } from "@/components/GuidedTour";
 import { WhatsappPromoModal } from "@/components/WhatsappPromoModal";
 import { getOnboardingState } from "@/lib/db/onboarding";
-import { getProfileWhatsapp } from "@/lib/db/profile";
+import { getProfileWhatsapp, getIsTester } from "@/lib/db/profile";
+import { hasFeature } from "@/lib/feature-flags";
 import { getStreakInfo } from "@/lib/db/streak";
 import { nextStreakMilestone } from "@/lib/streak-utils";
 import { StreakCelebration } from "./StreakCelebration";
@@ -63,7 +64,7 @@ export default async function DashboardPage({
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo, netWorth, lastMovementAt, agenda] =
+  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo, netWorth, lastMovementAt, agenda, isTester] =
     await Promise.all([
       getMonthSummary(user.id, month, year),
       getAccounts(user.id),
@@ -78,6 +79,7 @@ export default async function DashboardPage({
       getNetWorth(user.id).catch(() => null),
       getLastMovementDate(user.id).catch(() => null),
       getAgenda(user.id, 30).catch(() => []),
+      getIsTester(user.id).catch(() => false),
     ]);
 
   const daysSinceLastMovement = lastMovementAt
@@ -213,6 +215,20 @@ export default async function DashboardPage({
       </div>
 
       <UpdateReminderBanner days={daysSinceLastMovement} />
+
+      {hasFeature("gastosHormiga", { isTester }) && (
+        <Link
+          href="/gastos-hormiga"
+          className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 transition-colors hover:border-amber-500/50"
+        >
+          <span className="text-xl shrink-0">🐜</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-foreground">Detector de gastos hormiga</p>
+            <p className="text-xs text-muted">Descubrí suscripciones y plata que se te escapa todos los meses.</p>
+          </div>
+          <ChevronRight size={16} className="shrink-0 text-amber-500" />
+        </Link>
+      )}
 
       <OnboardingChecklist state={onboarding} />
       <GuidedTour enabled={welcome === "1"} userName={name} />
