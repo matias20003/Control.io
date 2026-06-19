@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { encrypt, decrypt } from "@/lib/crypto";
+import { scheduleReminderDelivery } from "@/lib/qstash";
 
 export type SerializedReminder = { id: string; text: string; remindAt: string };
 
@@ -10,6 +11,8 @@ export async function createReminder(
   const row = await prisma.reminder.create({
     data: { userId, text: encrypt(data.text) ?? data.text, remindAt: data.remindAt },
   });
+  // Programa el disparo exacto en QStash (no-op si no está configurado).
+  await scheduleReminderDelivery(row.id, row.remindAt).catch(() => {});
   return { id: row.id, text: data.text, remindAt: row.remindAt.toISOString() };
 }
 
