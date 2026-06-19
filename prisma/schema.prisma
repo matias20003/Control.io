@@ -107,6 +107,7 @@ model Profile {
   gruposCreados         GrupoGasto[]          @relation("GruposCreados")
   gruposMiembro         MiembroGrupo[]        @relation("GruposMiembro")
   tasks                 Task[]
+  reminders             Reminder[]
 
   @@map("profiles")
 }
@@ -361,6 +362,21 @@ model Task {
 
   @@index([userId, done, dueDate])
   @@map("tasks")
+}
+
+// Recordatorios con hora exacta ("haceme acordar en 5 min de X"). Se disparan
+// por /api/cron/reminders (push + WhatsApp) cuando remindAt <= ahora. text cifrado.
+model Reminder {
+  id        String   @id @default(cuid())
+  userId    String
+  user      Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text      String
+  remindAt  DateTime
+  sent      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([sent, remindAt])
+  @@map("reminders")
 }
 
 model PushSubscription {

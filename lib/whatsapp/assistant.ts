@@ -29,8 +29,12 @@ import { getBudgets, createOrUpdateBudget, type SerializedBudget } from "@/lib/d
 import { getGoals, createGoal, addFundsToGoal, type SerializedGoal } from "@/lib/db/goals";
 import { getInvestments, type SerializedInvestment } from "@/lib/db/investments";
 import { getTasks, createTask, toggleTask, deleteTask, type SerializedTask } from "@/lib/db/tasks";
+import { createReminder, getPendingReminders, type SerializedReminder } from "@/lib/db/reminders";
 import { getIsTester } from "@/lib/db/profile";
 import { hasFeature } from "@/lib/feature-flags";
+import { ARG_TZ } from "@/lib/timezone";
+import { fromZonedTime, toZonedTime } from "date-fns-tz";
+import { format as formatDateFn } from "date-fns";
 import { getChatHistory, saveChatTurn, getMemory, addMemory, type ChatTurn } from "@/lib/whatsapp/memory";
 
 type Intent = "action" | "query" | "chat";
@@ -67,9 +71,11 @@ interface Action {
   goalName?: string;
   ref?: number;
   fact?: string;
-  title?: string;   // create_task
+  title?: string;   // create_task / create_reminder (el texto)
   dueDate?: string; // create_task (YYYY-MM-DD)
   taskRef?: number; // complete_task / delete_task ([#N] de TUS TAREAS)
+  inMinutes?: number; // create_reminder: dentro de X minutos
+  remindAt?: string;  // create_reminder: fecha/hora exacta ARG "YYYY-MM-DDTHH:mm"
 }
 
 interface AssistantOutput {
@@ -95,6 +101,8 @@ interface FinancialContext {
   year: number;
   isTester: boolean;
   tasks: SerializedTask[];
+  reminders: SerializedReminder[];
+  nowArg: string; // "YYYY-MM-DDTHH:mm" hora Argentina (para recordatorios)
 }
 
 function baseUrl(): string {
@@ -248,6 +256,19 @@ function formatFinancialState(c: FinancialContext): string {
     );
   }
 
+  if (hasFeature("recordatorios", { isTester: c.isTester }) && c.reminders.length) {
+    s.push(
+      `RECORDATORIOS PROGRAMADOS:\n` +
+        c.reminders
+          .slice(0, 10)
+          .map((r) => {
+            const d = toZonedTime(new Date(r.remindAt), ARG_TZ);
+            return `- ${formatDateFn(d, "dd/MM HH:mm")}: ${r.text}`;
+          })
+          .join("\n")
+    );
+  }
+
   return s.join("\n\n");
 }
 
@@ -264,7 +285,7 @@ async function interpret(
   const incomeCats = c.categories.filter((x) => x.type === "INCOME").map((x) => x.name);
 
   const system = `Sos un ASESOR FINANCIERO profesional (Argentina) dentro de "control.io", una app de
-finanzas personales. Hablás claro, cercano y práctico, sin jerga innecesaria. Hoy es ${c.today}.
+finanzas personales. Hablás claro, cercano y práctico, sin jerga innecesaria. Hoy es ${c.today}.${hasFeature("recordatorios", { isTester: c.isTester }) ? ` Ahora en Argentina: ${c.nowArg}.` : ""}
 Moneda por defecto: ARS.
 
 Sabés de finanzas personales y de negocios. Cuando te preguntan o piden análisis, DIAGNOSTICÁS con
@@ -368,6 +389,7 @@ TIPOS DE ACCIÓN (campo "type"):
 ${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, dueDate }   // un PENDIENTE/recordatorio a HACER ("recordame entregar el TP el martes", "tengo que comprar pilas", "anotá llamar al banco"). dueDate "YYYY-MM-DD" opcional, relativo a HOY. Diferente de "remember": esto es algo PENDIENTE, no un dato.
 - "complete_task": { taskRef }   // marcar una tarea como HECHA ("ya entregué el TP", "listo lo de las pilas"). taskRef = [#N] de TUS TAREAS PENDIENTES.
 - "delete_task": { taskRef }   // borrar/cancelar una tarea. taskRef = [#N] de TUS TAREAS PENDIENTES.` : ``}
+${hasFeature("recordatorios", { isTester: c.isTester }) ? `- "create_reminder": { title, inMinutes, remindAt }   // recordatorio CON HORA que te aviso ("haceme acordar en 5 min de sacar la comida", "recordame mañana a las 9 llamar al banco"). title = qué recordar. Para "en X minutos/horas" usá inMinutes (5, 120). Para una hora/fecha puntual usá remindAt "YYYY-MM-DDTHH:mm" en hora Argentina (calculada desde AHORA). Es distinto de create_task: el recordatorio DISPARA un aviso a una hora exacta.` : ``}
 REGLAS:
 - "intent":"action" cuando hay que ejecutar algo (llená "actions"). Podés poner varias acciones.
 - "intent":"query" para preguntas, análisis o consejos: "actions" vacío, respondé en "answer" usando los datos reales (montos con $ y miles), con diagnóstico + recomendación concreta.
@@ -680,6 +702,25 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       return `🗑️ Borré la tarea: ${t.title}`;
     }
 
+    case "create_reminder": {
+      if (!hasFeature("recordatorios", { isTester: c.isTester })) throw new Error("esa función todavía no está disponible");
+      if (!a.title) throw new Error("falta qué recordar");
+      let when: Date | null = null;
+      if (a.inMinutes && a.inMinutes > 0) {
+        when = new Date(Date.now() + a.inMinutes * 60_000);
+      } else if (a.remindAt) {
+        when = fromZonedTime(a.remindAt, ARG_TZ); // hora ARG → instante UTC
+      }
+      if (!when || isNaN(when.getTime())) throw new Error("no entendí para cuándo");
+      if (when.getTime() < Date.now() - 60_000) throw new Error("esa hora ya pasó");
+
+      await createReminder(userId, { text: a.title, remindAt: when });
+      const label = toZonedTime(when, ARG_TZ);
+      const sameDay = formatDateFn(label, "yyyy-MM-dd") === formatDateFn(toZonedTime(new Date(), ARG_TZ), "yyyy-MM-dd");
+      const cuando = sameDay ? `hoy ${formatDateFn(label, "HH:mm")}` : formatDateFn(label, "dd/MM 'a las' HH:mm");
+      return `⏰ Listo, te aviso ${cuando}: ${a.title}`;
+    }
+
     default:
       throw new Error(a.type ? `acción no reconocida (${a.type})` : "no entendí bien qué querías hacer");
   }
@@ -696,7 +737,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage, history, memory, isTester, allTasks] =
+  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage, history, memory, isTester, allTasks, reminders] =
     await Promise.all([
       getAccounts(userId),
       getCategories(userId),
@@ -711,6 +752,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
       getMemory(userId).catch(() => [] as string[]),
       getIsTester(userId).catch(() => false),
       getTasks(userId).catch(() => [] as SerializedTask[]),
+      getPendingReminders(userId).catch(() => [] as SerializedReminder[]),
     ]);
 
   const today = now.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -733,6 +775,8 @@ export async function handleUserMessage(userId: string, message: string, imageUr
     year,
     isTester,
     tasks: allTasks.filter((t) => !t.done),
+    reminders,
+    nowArg: formatDateFn(toZonedTime(now, ARG_TZ), "yyyy-MM-dd'T'HH:mm"),
   };
 
   const result = await interpret(clean, ctx, imageUrl, history);

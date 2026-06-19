@@ -10,12 +10,19 @@
 
 export type Rollout = "off" | "testers" | "all";
 
-export type FeatureFlag = "gastosHormiga" | "finDeMes" | "tareas" | "premium" | "onboardingWa";
+export type FeatureFlag =
+  | "gastosHormiga"
+  | "finDeMes"
+  | "tareas"
+  | "recordatorios"
+  | "premium"
+  | "onboardingWa";
 
 export const FEATURE_FLAGS: Record<FeatureFlag, Rollout> = {
   gastosHormiga: "testers", // detector de gastos hormiga / suscripciones
   finDeMes: "testers",      // proyección "¿llego a fin de mes?"
   tareas: "all",            // tareas / pendientes (app + bot) — para todos
+  recordatorios: "testers", // recordatorios con hora (necesita cron externo por minuto)
   premium: "testers",       // paywall + suscripción MercadoPago
   onboardingWa: "testers",  // hero de onboarding WhatsApp-first
 };
