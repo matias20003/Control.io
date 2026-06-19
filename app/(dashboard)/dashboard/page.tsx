@@ -24,7 +24,8 @@ import { GuidedTour } from "@/components/GuidedTour";
 import { WhatsappPromoModal } from "@/components/WhatsappPromoModal";
 import { getOnboardingState } from "@/lib/db/onboarding";
 import { getProfileWhatsapp, getIsTester } from "@/lib/db/profile";
-import { hasFeature } from "@/lib/feature-flags";
+import { hasFeature, FEATURE_FLAGS } from "@/lib/feature-flags";
+import { WhatsappOnboardingHero } from "./WhatsappOnboardingHero";
 import { getStreakInfo } from "@/lib/db/streak";
 import { nextStreakMilestone } from "@/lib/streak-utils";
 import { StreakCelebration } from "./StreakCelebration";
@@ -213,6 +214,13 @@ export default async function DashboardPage({
         )}
         <StreakCelebration current={streak} />
       </div>
+
+      {/* Onboarding WhatsApp-first: lo más prominente para quien no vinculó.
+          En modo "testers" se muestra siempre (preview); en "all", solo a unlinked. */}
+      {hasFeature("onboardingWa", { isTester }) &&
+        (!whatsappNumber || FEATURE_FLAGS.onboardingWa === "testers") && (
+          <WhatsappOnboardingHero />
+        )}
 
       <UpdateReminderBanner days={daysSinceLastMovement} />
 
