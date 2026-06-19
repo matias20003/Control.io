@@ -1,0 +1,28 @@
+// ─── Feature flags ───────────────────────────────────────────────────────────
+// Permite "deployar" una feature sin que la vean todos todavía:
+//   "off"     → nadie la ve (apagada).
+//   "testers" → solo cuentas con isTester=true (vos, para verificar).
+//   "all"     → todos los usuarios.
+//
+// Flujo: la armo en "testers" → push (solo vos la ves) → la verificás →
+// cambiás acá a "all" → push → la ven todos. Un solo lugar, sin re-deploy
+// riesgoso ni tocar la lógica de la feature.
+
+export type Rollout = "off" | "testers" | "all";
+
+export type FeatureFlag = "gastosHormiga" | "finDeMes" | "tareas" | "premium";
+
+export const FEATURE_FLAGS: Record<FeatureFlag, Rollout> = {
+  gastosHormiga: "testers", // detector de gastos hormiga / suscripciones
+  finDeMes: "testers",      // proyección "¿llego a fin de mes?"
+  tareas: "testers",        // tareas financieras inteligentes
+  premium: "testers",       // paywall + suscripción MercadoPago
+};
+
+/** ¿Este usuario puede ver la feature? */
+export function hasFeature(flag: FeatureFlag, opts: { isTester: boolean }): boolean {
+  const state = FEATURE_FLAGS[flag];
+  if (state === "all") return true;
+  if (state === "testers") return opts.isTester;
+  return false;
+}

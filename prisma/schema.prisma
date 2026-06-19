@@ -89,6 +89,10 @@ model Profile {
   premiumUntil    DateTime?
   mpPreapprovalId String?   // id de la suscripción (preapproval) en MercadoPago
 
+  // Tester: ve las features en desarrollo (flag "testers") antes que el resto,
+  // para verificarlas antes de prenderlas para todos. Ver lib/feature-flags.ts.
+  isTester        Boolean   @default(false)
+
   accounts              Account[]
   categories            Category[]
   transactions          Transaction[]
