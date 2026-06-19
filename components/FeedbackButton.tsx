@@ -80,12 +80,18 @@ export function FeedbackButton({ registeredAt }: { registeredAt?: string }) {
 
   return (
     <>
-      {/* Popup ocasional — chico, descartable, arriba de la barra en mobile */}
+      {/* Popup ocasional — centrado al frente de todo (sobre el menú) */}
       {prompt &&
         typeof document !== "undefined" &&
         createPortal(
-          <div className="fixed bottom-24 right-3 left-3 z-[44] sm:bottom-5 sm:right-5 sm:left-auto sm:w-80 animate-sheet-up">
-            <div className="relative rounded-2xl border border-border bg-surface p-4 shadow-2xl">
+          <div
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+            onClick={snooze}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl animate-sheet-up"
+            >
               <button
                 type="button"
                 onClick={snooze}
@@ -103,7 +109,7 @@ export function FeedbackButton({ registeredAt }: { registeredAt?: string }) {
               <p className="mt-2 text-xs text-muted">
                 Si algo te molestó o se te ocurre una mejora, contanos — nos ayuda un montón. 🙏
               </p>
-              <div className="mt-3 flex justify-end gap-2">
+              <div className="mt-4 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={snooze}
