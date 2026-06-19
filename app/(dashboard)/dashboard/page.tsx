@@ -219,14 +219,13 @@ export default async function DashboardPage({
       {hasFeature("gastosHormiga", { isTester }) && (
         <Link
           href="/gastos-hormiga"
-          className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 transition-colors hover:border-amber-500/50"
+          className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 transition-colors hover:border-amber-500/50"
         >
-          <span className="text-xl shrink-0">🐜</span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-foreground">Detector de gastos hormiga</p>
-            <p className="text-xs text-muted">Descubrí suscripciones y plata que se te escapa todos los meses.</p>
-          </div>
-          <ChevronRight size={16} className="shrink-0 text-amber-500" />
+          <span className="shrink-0">🐜</span>
+          <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+            Gastos hormiga <span className="font-normal text-muted">— descubrí dónde se te va la plata</span>
+          </p>
+          <ChevronRight size={15} className="shrink-0 text-amber-500" />
         </Link>
       )}
 

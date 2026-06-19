@@ -1,108 +1,93 @@
 "use client";
 
-import { PageHeader, StatCard } from "@/components/ui/stat";
+import { PageHeader } from "@/components/ui/stat";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatCurrency } from "@/lib/utils";
-import { Bug, Repeat2, TrendingDown } from "lucide-react";
+import { Bug } from "lucide-react";
 import type { GastosHormiga } from "@/lib/db/gastos-hormiga";
 
 export function GastosHormigaClient({ data }: { data: GastosHormiga }) {
   const { suscripciones, totalSuscripciones, repetidos, totalRepetidos, periodoMeses } = data;
   const nada = suscripciones.length === 0 && repetidos.length === 0;
 
+  // Una sola lista priorizada por impacto MENSUAL: suscripciones tal cual,
+  // gastos hormiga prorrateados al mes. Así se ataca primero lo que más cuesta.
+  const items = [
+    ...suscripciones.map((s) => ({
+      nombre: s.nombre,
+      tag: "Suscripción",
+      mensual: s.montoMensual,
+      detalle: `${s.veces}× en ${periodoMeses}m`,
+      danger: true,
+    })),
+    ...repetidos.map((g) => ({
+      nombre: g.nombre,
+      tag: "Hormiga",
+      mensual: Math.round(g.total / periodoMeses),
+      detalle: `${g.veces}× · ${formatCurrency(g.promedio, "ARS")} c/u`,
+      danger: false,
+    })),
+  ].sort((a, b) => b.mensual - a.mensual);
+
+  const fugaMensual = totalSuscripciones + Math.round(totalRepetidos / periodoMeses);
+
   return (
-    <div className="p-4 md:p-6 max-w-[1100px] mx-auto space-y-5">
-      <PageHeader
-        title="🐜 Gastos hormiga"
-        subtitle={`Dónde se te escapa la plata, según tus últimos ${periodoMeses} meses.`}
-      />
+    <div className="p-4 md:p-6 max-w-[760px] mx-auto space-y-4">
+      <PageHeader title="🐜 Gastos hormiga" subtitle="Dónde se te va la plata sin que te des cuenta." />
 
       {nada ? (
         <EmptyState
           icon={Bug}
           title="Todavía no detecté patrones"
-          description="Cuando tengas más movimientos cargados (sobre todo con descripción), voy a poder encontrar suscripciones y gastos repetidos."
+          description="Cargá más movimientos (con descripción) y voy a poder encontrar suscripciones y gastos repetidos."
         />
       ) : (
         <>
-          {/* Hero: el número que importa */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <StatCard
-              label="En suscripciones (estimado)"
-              value={`${formatCurrency(totalSuscripciones, "ARS")}/mes`}
-              hint={`${suscripciones.length} cargo${suscripciones.length !== 1 ? "s" : ""} recurrente${suscripciones.length !== 1 ? "s" : ""}`}
-              icon={Repeat2}
-              accent="danger"
-            />
-            <StatCard
-              label={`En gastos repetidos (${periodoMeses} meses)`}
-              value={formatCurrency(totalRepetidos, "ARS")}
-              hint={`${repetidos.length} grupo${repetidos.length !== 1 ? "s" : ""} de gasto frecuente`}
-              icon={TrendingDown}
-              accent="warning"
-            />
-          </div>
+          {/* Un solo número que importa */}
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-xs text-muted">Se te escapan, por mes, aprox.</p>
+              <p className="text-3xl font-bold text-danger leading-tight">
+                {formatCurrency(fugaMensual, "ARS")}
+                <span className="text-base font-normal text-muted">/mes</span>
+              </p>
+              <p className="text-xs text-muted mt-1">
+                {formatCurrency(totalSuscripciones, "ARS")} en suscripciones · {formatCurrency(Math.round(totalRepetidos / periodoMeses), "ARS")} en gastos hormiga
+              </p>
+            </CardContent>
+          </Card>
 
-          {/* Suscripciones */}
-          {suscripciones.length > 0 && (
-            <Card>
-              <CardContent className="p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Repeat2 size={16} className="text-danger" />
-                  <p className="text-sm font-semibold text-foreground">Posibles suscripciones</p>
-                </div>
-                <p className="text-xs text-muted mb-4">
-                  Cargos que se repiten todos los meses con un monto parecido. ¿Las usás todas?
-                </p>
-                <div className="divide-y divide-border-subtle">
-                  {suscripciones.map((s, i) => (
-                    <div key={i} className="flex items-center justify-between gap-3 py-2.5">
+          {/* Lista priorizada compacta */}
+          <Card>
+            <CardContent className="p-2">
+              <div className="divide-y divide-border-subtle">
+                {items.map((it, i) => (
+                  <div key={i} className="flex items-center justify-between gap-3 px-2 py-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                          it.danger ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning"
+                        }`}
+                      >
+                        {it.tag}
+                      </span>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{s.nombre}</p>
-                        <p className="text-xs text-muted">{s.veces}× en los últimos {periodoMeses} meses</p>
+                        <p className="text-sm font-medium text-foreground truncate">{it.nombre}</p>
+                        <p className="text-[11px] text-muted">{it.detalle}</p>
                       </div>
-                      <p className="text-sm font-bold font-mono text-danger shrink-0">
-                        {formatCurrency(s.montoMensual, "ARS")}/mes
-                      </p>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Gastos repetidos / hormiga */}
-          {repetidos.length > 0 && (
-            <Card>
-              <CardContent className="p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Bug size={16} className="text-warning" />
-                  <p className="text-sm font-semibold text-foreground">Gastos hormiga</p>
-                </div>
-                <p className="text-xs text-muted mb-4">
-                  Cosas chicas que repetís seguido y, sumadas, se llevan una parte importante.
-                </p>
-                <div className="divide-y divide-border-subtle">
-                  {repetidos.map((g, i) => (
-                    <div key={i} className="flex items-center justify-between gap-3 py-2.5">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{g.nombre}</p>
-                        <p className="text-xs text-muted">{g.veces}× · {formatCurrency(g.promedio, "ARS")} c/u</p>
-                      </div>
-                      <p className="text-sm font-bold font-mono text-warning shrink-0">
-                        {formatCurrency(g.total, "ARS")}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                    <p className="text-sm font-bold font-mono text-foreground shrink-0">
+                      {formatCurrency(it.mensual, "ARS")}<span className="text-[11px] text-muted font-normal">/mes</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
           <p className="text-xs text-muted text-center px-4">
-            Es una estimación a partir de las descripciones de tus movimientos. Revisá cada uno —
-            cancelar lo que no usás puede ahorrarte más de lo que sale control.io. 💡
+            Estimación según tus descripciones. Cancelá lo que no uses — suele ahorrar más de lo que sale la app. 💡
           </p>
         </>
       )}
