@@ -28,7 +28,7 @@ import { getDebts, createDebt, payDebt, type SerializedDebt } from "@/lib/db/deb
 import { getBudgets, createOrUpdateBudget, type SerializedBudget } from "@/lib/db/budgets";
 import { getGoals, createGoal, addFundsToGoal, type SerializedGoal } from "@/lib/db/goals";
 import { getInvestments, type SerializedInvestment } from "@/lib/db/investments";
-import { createTask } from "@/lib/db/tasks";
+import { getTasks, createTask, toggleTask, deleteTask, type SerializedTask } from "@/lib/db/tasks";
 import { getIsTester } from "@/lib/db/profile";
 import { hasFeature } from "@/lib/feature-flags";
 import { getChatHistory, saveChatTurn, getMemory, addMemory, type ChatTurn } from "@/lib/whatsapp/memory";
@@ -69,6 +69,7 @@ interface Action {
   fact?: string;
   title?: string;   // create_task
   dueDate?: string; // create_task (YYYY-MM-DD)
+  taskRef?: number; // complete_task / delete_task ([#N] de TUS TAREAS)
 }
 
 interface AssistantOutput {
@@ -93,6 +94,7 @@ interface FinancialContext {
   month: number;
   year: number;
   isTester: boolean;
+  tasks: SerializedTask[];
 }
 
 function baseUrl(): string {
@@ -231,6 +233,21 @@ function formatFinancialState(c: FinancialContext): string {
     );
   }
 
+  if (hasFeature("tareas", { isTester: c.isTester }) && c.tasks.length) {
+    s.push(
+      `TUS TAREAS PENDIENTES (usá el número [#N] como "taskRef" para completar/borrar):\n` +
+        c.tasks
+          .slice(0, 15)
+          .map((t, i) => {
+            const due = t.dueDate
+              ? ` (vence ${new Date(t.dueDate).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })})`
+              : "";
+            return `[#${i + 1}] ${t.title}${due}`;
+          })
+          .join("\n")
+    );
+  }
+
   return s.join("\n\n");
 }
 
@@ -347,12 +364,15 @@ TIPOS DE ACCIÓN (campo "type"):
 - "add_to_goal": { goalName, amount }
 - "delete_transaction": { ref }                                // ref = número [#N] de la lista
 - "update_transaction": { ref, amount, description, category, account }  // solo los campos a cambiar
-- "remember": { fact }   // guardar un dato DURABLE del usuario en tu memoria
-${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, dueDate }   // pendiente/recordatorio NO financiero ("recordame entregar el TP el martes", "anotá comprar pilas"); dueDate "YYYY-MM-DD" opcional, calculada relativo a HOY` : ``}
+- "remember": { fact }   // guardar un DATO DURABLE del usuario (cómo es su plata/vida: "cobro los días 10", "mi alquiler es 200k"). NO es una tarea.
+${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, dueDate }   // un PENDIENTE/recordatorio a HACER ("recordame entregar el TP el martes", "tengo que comprar pilas", "anotá llamar al banco"). dueDate "YYYY-MM-DD" opcional, relativo a HOY. Diferente de "remember": esto es algo PENDIENTE, no un dato.
+- "complete_task": { taskRef }   // marcar una tarea como HECHA ("ya entregué el TP", "listo lo de las pilas"). taskRef = [#N] de TUS TAREAS PENDIENTES.
+- "delete_task": { taskRef }   // borrar/cancelar una tarea. taskRef = [#N] de TUS TAREAS PENDIENTES.` : ``}
 REGLAS:
 - "intent":"action" cuando hay que ejecutar algo (llená "actions"). Podés poner varias acciones.
 - "intent":"query" para preguntas, análisis o consejos: "actions" vacío, respondé en "answer" usando los datos reales (montos con $ y miles), con diagnóstico + recomendación concreta.
 - "intent":"chat" para saludos/fuera de tema: "actions" vacío, "answer" cordial.
+${hasFeature("tareas", { isTester: c.isTester }) ? `- Si te preguntan por sus pendientes ("qué tengo que hacer", "mis tareas", "qué me falta"), es intent "query": listá TUS TAREAS PENDIENTES en "answer" (cortito, con la fecha si tiene). Si no tiene ninguna, decíselo.` : ``}
 - "remember": usalo cuando el usuario comparta algo DURABLE para tener en cuenta a futuro
   ("acordate que cobro el día 1", "mi meta es comprar un auto", "soy freelance", "no me gusta endeudarme").
   Guardá el dato como una frase corta en "fact". NO guardes movimientos puntuales ni datos triviales.
@@ -644,6 +664,22 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       return `✅ Anotado: ${a.title}${validDue ? ` (para el ${validDue.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })})` : ""}`;
     }
 
+    case "complete_task": {
+      if (!hasFeature("tareas", { isTester: c.isTester })) throw new Error("esa función todavía no está disponible");
+      const t = a.taskRef ? c.tasks[a.taskRef - 1] : undefined;
+      if (!t) throw new Error("no identifiqué la tarea");
+      await toggleTask(userId, t.id);
+      return `✅ Marqué como hecha: ${t.title}`;
+    }
+
+    case "delete_task": {
+      if (!hasFeature("tareas", { isTester: c.isTester })) throw new Error("esa función todavía no está disponible");
+      const t = a.taskRef ? c.tasks[a.taskRef - 1] : undefined;
+      if (!t) throw new Error("no identifiqué la tarea");
+      await deleteTask(userId, t.id);
+      return `🗑️ Borré la tarea: ${t.title}`;
+    }
+
     default:
       throw new Error(a.type ? `acción no reconocida (${a.type})` : "no entendí bien qué querías hacer");
   }
@@ -660,7 +696,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage, history, memory, isTester] =
+  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage, history, memory, isTester, allTasks] =
     await Promise.all([
       getAccounts(userId),
       getCategories(userId),
@@ -674,6 +710,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
       getChatHistory(userId).catch(() => [] as ChatTurn[]),
       getMemory(userId).catch(() => [] as string[]),
       getIsTester(userId).catch(() => false),
+      getTasks(userId).catch(() => [] as SerializedTask[]),
     ]);
 
   const today = now.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -695,6 +732,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
     month,
     year,
     isTester,
+    tasks: allTasks.filter((t) => !t.done),
   };
 
   const result = await interpret(clean, ctx, imageUrl, history);
