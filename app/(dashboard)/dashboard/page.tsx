@@ -237,6 +237,19 @@ export default async function DashboardPage({
         </Link>
       )}
 
+      {hasFeature("tareas", { isTester }) && (
+        <Link
+          href="/tareas"
+          className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 transition-colors hover:border-primary/50"
+        >
+          <span className="shrink-0">✅</span>
+          <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+            Tareas <span className="font-normal text-muted">— tus pendientes del día junto a tu plata</span>
+          </p>
+          <ChevronRight size={15} className="shrink-0 text-primary" />
+        </Link>
+      )}
+
       <OnboardingChecklist state={onboarding} />
       <GuidedTour enabled={welcome === "1"} userName={name} />
       <DashboardQuickAdd accounts={accounts} categories={categories} />

@@ -28,6 +28,8 @@ import { getDebts, createDebt, payDebt, type SerializedDebt } from "@/lib/db/deb
 import { getBudgets, createOrUpdateBudget, type SerializedBudget } from "@/lib/db/budgets";
 import { getGoals, createGoal, addFundsToGoal, type SerializedGoal } from "@/lib/db/goals";
 import { getInvestments, type SerializedInvestment } from "@/lib/db/investments";
+import { createTask } from "@/lib/db/tasks";
+import { getIsTester } from "@/lib/db/profile";
 import { getChatHistory, saveChatTurn, getMemory, addMemory, type ChatTurn } from "@/lib/whatsapp/memory";
 
 type Intent = "action" | "query" | "chat";
@@ -64,6 +66,8 @@ interface Action {
   goalName?: string;
   ref?: number;
   fact?: string;
+  title?: string;   // create_task
+  dueDate?: string; // create_task (YYYY-MM-DD)
 }
 
 interface AssistantOutput {
@@ -87,6 +91,7 @@ interface FinancialContext {
   monthLabel: string;
   month: number;
   year: number;
+  isTester: boolean;
 }
 
 function baseUrl(): string {
@@ -342,7 +347,7 @@ TIPOS DE ACCIÓN (campo "type"):
 - "delete_transaction": { ref }                                // ref = número [#N] de la lista
 - "update_transaction": { ref, amount, description, category, account }  // solo los campos a cambiar
 - "remember": { fact }   // guardar un dato DURABLE del usuario en tu memoria
-
+${c.isTester ? `- "create_task": { title, dueDate }   // pendiente/recordatorio NO financiero ("recordame entregar el TP el martes", "anotá comprar pilas"); dueDate "YYYY-MM-DD" opcional, calculada relativo a HOY` : ``}
 REGLAS:
 - "intent":"action" cuando hay que ejecutar algo (llená "actions"). Podés poner varias acciones.
 - "intent":"query" para preguntas, análisis o consejos: "actions" vacío, respondé en "answer" usando los datos reales (montos con $ y miles), con diagnóstico + recomendación concreta.
@@ -629,6 +634,15 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       return `🧠 Anotado en tu memoria: ${a.fact}`;
     }
 
+    case "create_task": {
+      if (!c.isTester) throw new Error("esa función todavía no está disponible");
+      if (!a.title) throw new Error("falta la tarea");
+      const due = a.dueDate ? new Date(a.dueDate) : null;
+      const validDue = due && !isNaN(due.getTime()) ? due : null;
+      await createTask(userId, { title: a.title, dueDate: validDue });
+      return `✅ Anotado: ${a.title}${validDue ? ` (para el ${validDue.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })})` : ""}`;
+    }
+
     default:
       throw new Error(a.type ? `acción no reconocida (${a.type})` : "no entendí bien qué querías hacer");
   }
@@ -645,7 +659,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage, history, memory] =
+  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage, history, memory, isTester] =
     await Promise.all([
       getAccounts(userId),
       getCategories(userId),
@@ -658,6 +672,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
       getTransactions(userId, { take: 15 }).catch(() => ({ items: [], total: 0, hasMore: false })),
       getChatHistory(userId).catch(() => [] as ChatTurn[]),
       getMemory(userId).catch(() => [] as string[]),
+      getIsTester(userId).catch(() => false),
     ]);
 
   const today = now.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -678,6 +693,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
     monthLabel,
     month,
     year,
+    isTester,
   };
 
   const result = await interpret(clean, ctx, imageUrl, history);

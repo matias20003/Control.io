@@ -106,6 +106,7 @@ model Profile {
   mfaRecoveryCodes      MfaRecoveryCode[]
   gruposCreados         GrupoGasto[]          @relation("GruposCreados")
   gruposMiembro         MiembroGrupo[]        @relation("GruposMiembro")
+  tasks                 Task[]
 
   @@map("profiles")
 }
@@ -344,6 +345,22 @@ model Goal {
   @@index([userId])
   @@index([userId, isCompleted])
   @@map("goals")
+}
+
+// Tareas / pendientes del día a día (experimento: convertir control.io en
+// asistente de vida, no solo de finanzas). title cifrado como el resto.
+model Task {
+  id        String    @id @default(cuid())
+  userId    String
+  user      Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  dueDate   DateTime?
+  done      Boolean   @default(false)
+  doneAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, done, dueDate])
+  @@map("tasks")
 }
 
 model PushSubscription {
