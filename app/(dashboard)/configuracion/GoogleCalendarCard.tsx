@@ -11,13 +11,14 @@ export function GoogleCalendarCard() {
   const params = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [available, setAvailable] = useState(false);
+  const [configured, setConfigured] = useState(false);
   const [connected, setConnected] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     getGoogleStatusAction()
-      .then((s) => { setAvailable(s.available); setConnected(s.connected); setEmail(s.email); })
+      .then((s) => { setAvailable(s.available); setConfigured(s.configured); setConnected(s.connected); setEmail(s.email); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -67,6 +68,10 @@ export function GoogleCalendarCard() {
           <div className="flex items-center gap-2 text-xs text-muted">
             <Loader2 size={14} className="animate-spin" /> Cargando…
           </div>
+        ) : !configured ? (
+          <p className="text-xs text-amber-500">
+            ⚠️ Falta configurar las credenciales en Vercel (GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET) y redeployar.
+          </p>
         ) : connected ? (
           <div className="flex flex-wrap items-center gap-3">
             {email && <span className="text-xs text-muted">{email}</span>}

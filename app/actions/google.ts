@@ -10,9 +10,12 @@ export async function getGoogleStatusAction() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { available: false, connected: false, email: null as string | null };
   const [status, isTester] = await Promise.all([getGoogleStatus(user.id), getIsTester(user.id)]);
-  // available = feature habilitada para este usuario Y credenciales configuradas.
-  const available = hasFeature("google", { isTester }) && googleConfigured();
-  return { available, connected: status.connected, email: status.email };
+  return {
+    available: hasFeature("google", { isTester }), // visible para el tester
+    configured: googleConfigured(),                // credenciales en env
+    connected: status.connected,
+    email: status.email,
+  };
 }
 
 export async function disconnectGoogleAction() {
