@@ -30,7 +30,7 @@ import { getGoals, createGoal, addFundsToGoal, type SerializedGoal } from "@/lib
 import { getInvestments, type SerializedInvestment } from "@/lib/db/investments";
 import { getTasks, createTask, toggleTask, deleteTask, type SerializedTask } from "@/lib/db/tasks";
 import { createReminder, getPendingReminders, type SerializedReminder } from "@/lib/db/reminders";
-import { createCalendarEvent, createGoogleTask, getGoogleStatus } from "@/lib/google";
+import { createCalendarEvent, createGoogleTask, getGoogleStatus, listCalendarEvents, listGoogleTasks } from "@/lib/google";
 import { getIsTester } from "@/lib/db/profile";
 import { hasFeature } from "@/lib/feature-flags";
 import { ARG_TZ } from "@/lib/timezone";
@@ -108,6 +108,8 @@ interface FinancialContext {
   nowArg: string; // "YYYY-MM-DDTHH:mm" hora Argentina (para recordatorios)
   dateRef: string; // tabla de los próximos días con su fecha exacta (ARG)
   googleConnected: boolean;
+  gcalEvents: { summary: string; start: string }[];
+  gtasks: { title: string; due: string | null }[];
 }
 
 function baseUrl(): string {
@@ -274,6 +276,39 @@ function formatFinancialState(c: FinancialContext): string {
     );
   }
 
+  if (c.gcalEvents.length) {
+    s.push(
+      `AGENDA — GOOGLE CALENDAR (próximos 7 días):\n` +
+        c.gcalEvents
+          .slice(0, 20)
+          .map((e) => {
+            // start puede ser dateTime (con hora) o date (todo el día).
+            const hasTime = e.start.includes("T");
+            const d = new Date(e.start);
+            const label = isNaN(d.getTime())
+              ? e.start
+              : hasTime
+                ? formatDateFn(toZonedTime(d, ARG_TZ), "dd/MM HH:mm")
+                : formatDateFn(d, "dd/MM");
+            return `- ${label}: ${e.summary}`;
+          })
+          .join("\n")
+    );
+  }
+
+  if (c.gtasks.length) {
+    s.push(
+      `GOOGLE TASKS (pendientes):\n` +
+        c.gtasks
+          .slice(0, 20)
+          .map((t) => {
+            const due = t.due ? ` (vence ${formatDateFn(new Date(t.due), "dd/MM")})` : "";
+            return `- ${t.title}${due}`;
+          })
+          .join("\n")
+    );
+  }
+
   return s.join("\n\n");
 }
 
@@ -403,7 +438,7 @@ REGLAS:
 - "intent":"chat" para saludos/fuera de tema: "actions" vacío, "answer" cordial.
 ${hasFeature("recordatorios", { isTester: c.isTester }) ? `- ⚠️ CRÍTICO: si el usuario pide que le RECUERDES o le AVISES algo ("haceme acordar", "recordame", "avisame en 5 min", "avisame mañana a las 9"), es SIEMPRE intent "action" con UNA acción create_reminder. PROHIBIDO responder solo con texto como "te recordaré en 2 minutos" o "dale, te aviso" — eso NO programa nada y el recordatorio NO existe. TENÉS que emitir la acción: { "type": "create_reminder", "title": "<qué recordar>", "inMinutes": <N> } para "en N minutos/horas", o "remindAt":"YYYY-MM-DDTHH:mm" para una hora puntual. Ejemplo — usuario: "haceme acordar en 2 min de tomar agua" → {"intent":"action","actions":[{"type":"create_reminder","title":"tomar agua","inMinutes":2}],"answer":""}` : ``}
 ${hasFeature("tareas", { isTester: c.isTester }) ? `- Si el usuario pide ANOTAR un pendiente sin hora ("anotá comprar pilas", "tengo que llamar al banco"), es intent "action" con create_task — NO lo prometas por texto.
-- Si te preguntan por sus pendientes ("qué tengo que hacer", "mis tareas", "qué me falta"), es intent "query": listá TUS TAREAS PENDIENTES en "answer" (cortito, con la fecha si tiene). Si no tiene ninguna, decíselo.` : ``}
+- ORGANIZACIÓN: si te preguntan qué tienen que hacer ("qué tengo que hacer", "mis tareas", "qué me falta", "qué tengo el lunes/mañana/esta semana", "cómo viene mi semana"), es intent "query". Armá la respuesta combinando TODO lo que tengas en el contexto: TUS TAREAS PENDIENTES + RECORDATORIOS PROGRAMADOS + AGENDA (Google Calendar) + GOOGLE TASKS. Si preguntan por un día puntual, filtrá a ESE día (usá la tabla de FECHAS EXACTAS para saber qué fecha es). Respondé ordenado por hora/fecha, cortito. Si no hay nada para ese día, decíselo.` : ``}
 - "remember": usalo cuando el usuario comparta algo DURABLE para tener en cuenta a futuro
   ("acordate que cobro el día 1", "mi meta es comprar un auto", "soy freelance", "no me gusta endeudarme").
   Guardá el dato como una frase corta en "fact". NO guardes movimientos puntuales ni datos triviales.
@@ -797,6 +832,17 @@ export async function handleUserMessage(userId: string, message: string, imageUr
     return `${tag}${wd} ${iso}`;
   }).join(" · ");
 
+  // Si tiene Google conectado, traemos su agenda (eventos + tasks) para poder
+  // responder "¿qué tengo el lunes?" y demás consultas de organización.
+  let gcalEvents: { summary: string; start: string }[] = [];
+  let gtasks: { title: string; due: string | null }[] = [];
+  if (googleConnected && hasFeature("google", { isTester })) {
+    [gcalEvents, gtasks] = await Promise.all([
+      listCalendarEvents(userId, { daysAhead: 7 }).catch(() => []),
+      listGoogleTasks(userId).catch(() => []),
+    ]);
+  }
+
   const ctx: FinancialContext = {
     accounts,
     categories,
@@ -818,6 +864,8 @@ export async function handleUserMessage(userId: string, message: string, imageUr
     nowArg: formatDateFn(toZonedTime(now, ARG_TZ), "yyyy-MM-dd'T'HH:mm"),
     dateRef,
     googleConnected,
+    gcalEvents,
+    gtasks,
   };
 
   const result = await interpret(clean, ctx, imageUrl, history);

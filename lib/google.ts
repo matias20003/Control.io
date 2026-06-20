@@ -85,11 +85,20 @@ export async function getGoogleStatus(userId: string): Promise<{ connected: bool
   return { connected: !!p?.googleRefreshToken, email: p?.googleEmail ?? null };
 }
 
-/** Saca un access token fresco a partir del refresh token guardado. */
+/** Access token: usa el cacheado si sigue vigente; si no, lo refresca y lo guarda. */
 async function getAccessToken(userId: string): Promise<string | null> {
-  const p = await prisma.profile.findUnique({ where: { id: userId }, select: { googleRefreshToken: true } });
+  const p = await prisma.profile.findUnique({
+    where: { id: userId },
+    select: { googleRefreshToken: true, googleAccessToken: true, googleTokenExpiry: true },
+  });
   const refresh = decrypt(p?.googleRefreshToken ?? null);
   if (!refresh) return null;
+
+  // Cache válido (con 60s de margen) → lo reutilizamos.
+  const cached = decrypt(p?.googleAccessToken ?? null);
+  if (cached && p?.googleTokenExpiry && p.googleTokenExpiry.getTime() > Date.now() + 60_000) {
+    return cached;
+  }
 
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -105,7 +114,54 @@ async function getAccessToken(userId: string): Promise<string | null> {
     console.error("[google] refresh falló:", res.status, await res.text().catch(() => ""));
     return null;
   }
-  return ((await res.json()) as { access_token?: string }).access_token ?? null;
+  const data = (await res.json()) as { access_token?: string; expires_in?: number };
+  if (data.access_token) {
+    await prisma.profile
+      .update({
+        where: { id: userId },
+        data: {
+          googleAccessToken: encrypt(data.access_token),
+          googleTokenExpiry: new Date(Date.now() + (data.expires_in ?? 3600) * 1000),
+        },
+      })
+      .catch(() => {});
+  }
+  return data.access_token ?? null;
+}
+
+/** Próximos eventos del calendario (para "¿qué tengo el lunes?"). */
+export async function listCalendarEvents(
+  userId: string,
+  opts: { daysAhead?: number } = {}
+): Promise<{ summary: string; start: string }[]> {
+  const token = await getAccessToken(userId);
+  if (!token) return [];
+  const now = new Date();
+  const max = new Date(now.getTime() + (opts.daysAhead ?? 7) * 86_400_000);
+  const url =
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+    `timeMin=${encodeURIComponent(now.toISOString())}&timeMax=${encodeURIComponent(max.toISOString())}` +
+    `&singleEvents=true&orderBy=startTime&maxResults=25`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { items?: { summary?: string; start?: { dateTime?: string; date?: string } }[] };
+  return (data.items ?? []).map((e) => ({
+    summary: e.summary ?? "(sin título)",
+    start: e.start?.dateTime ?? e.start?.date ?? "",
+  }));
+}
+
+/** Tareas pendientes de Google Tasks. */
+export async function listGoogleTasks(userId: string): Promise<{ title: string; due: string | null }[]> {
+  const token = await getAccessToken(userId);
+  if (!token) return [];
+  const res = await fetch(
+    "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks?showCompleted=false&maxResults=30",
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) return [];
+  const data = (await res.json()) as { items?: { title?: string; due?: string }[] };
+  return (data.items ?? []).map((t) => ({ title: t.title ?? "", due: t.due ?? null })).filter((t) => t.title);
 }
 
 export type GoogleResult = { ok: boolean; error?: string };

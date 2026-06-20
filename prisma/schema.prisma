@@ -98,6 +98,8 @@ model Profile {
   googleRefreshToken String?
   googleEmail        String?
   googleConnectedAt  DateTime?
+  googleAccessToken  String?   // cache del access token (cifrado)
+  googleTokenExpiry  DateTime?
 
   accounts              Account[]
   categories            Category[]
