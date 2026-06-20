@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, Check, ArrowLeft, ListChecks } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -42,15 +42,12 @@ export function CalendarioClient({
   googleEnabled: boolean;
 }) {
   const router = useRouter();
-  const initial =
-    cells.find((c) => c.key === todayArg && c.inMonth)?.key ??
-    cells.find((c) => c.inMonth)?.key ??
-    cells[0]?.key ?? "";
-  const [selected, setSelected] = useState(initial);
-  const [form, setForm] = useState<Form | null>(null);
+  const [dayKey, setDayKey] = useState<string | null>(null);  // día abierto en la card
+  const [form, setForm] = useState<Form | null>(null);        // form de evento dentro de la card
+  const [listOpen, setListOpen] = useState(false);            // modal del gestor de tareas
   const [saving, setSaving] = useState(false);
 
-  const selectedCell = cells.find((c) => c.key === selected);
+  const dayCell = cells.find((c) => c.key === dayKey);
 
   // ── Eventos ──────────────────────────────────────────────
   const openCreate = (day: string) => setForm({ mode: "create", title: "", day, time: "09:00" });
@@ -58,7 +55,7 @@ export function CalendarioClient({
     if (it.kind !== "event" || !it.id) return;
     setForm({ mode: "edit", id: it.id, title: it.label, day, time: it.time || "09:00" });
   };
-  const save = async () => {
+  const saveEvent = async () => {
     if (!form) return;
     setSaving(true);
     const res = form.mode === "create"
@@ -70,7 +67,7 @@ export function CalendarioClient({
     setForm(null);
     router.refresh();
   };
-  const del = async () => {
+  const delEvent = async () => {
     if (!form?.id) return;
     setSaving(true);
     const res = await deleteCalendarEventAction(form.id);
@@ -99,8 +96,7 @@ export function CalendarioClient({
       const res = await createTaskAction(fd);
       if ("error" in res) { toast.error(res.error); return; }
       setTasks((p) => [res.task, ...p]);
-      setTTitle("");
-      setTDue("");
+      setTTitle(""); setTDue("");
       router.refresh();
     });
   };
@@ -135,13 +131,9 @@ export function CalendarioClient({
         </button>
         <div className="min-w-0 flex-1">
           <p className={`text-sm truncate ${t.done ? "text-muted line-through" : "text-foreground"}`}>{t.title}</p>
-          {t.dueDate && (
-            <p className={`text-[11px] ${overdue ? "text-danger" : "text-muted"}`}>{formatDate(t.dueDate)}{overdue ? " · vencida" : ""}</p>
-          )}
+          {t.dueDate && <p className={`text-[11px] ${overdue ? "text-danger" : "text-muted"}`}>{formatDate(t.dueDate)}{overdue ? " · vencida" : ""}</p>}
         </div>
-        <button onClick={() => removeTask(t.id)} className="shrink-0 rounded-lg p-1.5 text-muted hover:text-danger hover:bg-danger/10">
-          <Trash2 size={13} />
-        </button>
+        <button onClick={() => removeTask(t.id)} className="shrink-0 rounded-lg p-1.5 text-muted hover:text-danger hover:bg-danger/10"><Trash2 size={13} /></button>
       </div>
     );
   };
@@ -172,16 +164,15 @@ export function CalendarioClient({
         {DIAS.map((d, i) => <div key={i} className="py-1">{d}</div>)}
       </div>
 
-      {/* Grilla */}
+      {/* Grilla — tocá un día para abrir su card */}
       <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border border-border bg-border">
         {cells.map((c) => {
           const isToday = c.key === todayArg;
-          const isSel = c.key === selected;
           return (
             <button
               key={c.key}
-              onClick={() => setSelected(c.key)}
-              className={`text-left bg-surface p-1 md:p-1.5 min-h-[52px] md:min-h-[96px] transition-colors ${c.inMonth ? "" : "opacity-40"} ${isSel ? "ring-2 ring-inset ring-primary" : "hover:bg-surface-2/50"}`}
+              onClick={() => setDayKey(c.key)}
+              className={`text-left bg-surface p-1 md:p-1.5 min-h-[52px] md:min-h-[96px] transition-colors hover:bg-surface-2/50 ${c.inMonth ? "" : "opacity-40"}`}
             >
               <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-semibold ${isToday ? "bg-primary text-white" : "text-muted"}`}>
                 {c.dayNum}
@@ -205,71 +196,27 @@ export function CalendarioClient({
         })}
       </div>
 
-      {/* Lista del día seleccionado */}
-      {selectedCell && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-foreground capitalize">{prettyDay(selectedCell.key)}</p>
-              {googleConnected && (
-                <Button size="sm" onClick={() => openCreate(selectedCell.key)}><Plus size={15} className="mr-1" /> Evento</Button>
-              )}
-            </div>
-            {selectedCell.items.length === 0 ? (
-              <p className="py-1 text-sm text-muted">Nada agendado este día.</p>
-            ) : (
-              <div className="divide-y divide-border-subtle">
-                {selectedCell.items.map((it, i) => (
-                  <button key={i} disabled={it.kind !== "event"} onClick={() => openEdit(it, selectedCell.key)} className="flex w-full items-center gap-3 py-2.5 text-left enabled:hover:opacity-80 disabled:cursor-default">
-                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${DOT[it.kind]}`} />
-                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">{it.time && <span className="text-muted">{it.time} · </span>}{it.label}</span>
-                    {it.kind === "event" && <Pencil size={14} className="shrink-0 text-muted" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── Tareas ── */}
+      {/* Tareas pendientes (abajo) + botón a la lista completa */}
       <Card>
-        <CardContent className="p-3">
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              value={tTitle}
-              onChange={(e) => setTTitle(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTask(); } }}
-              placeholder="Nueva tarea… (ej: Entregar el TP)"
-              className="flex-1"
-            />
-            <Input type="date" value={tDue} onChange={(e) => setTDue(e.target.value)} className="sm:w-40" />
-            <Button onClick={addTask} disabled={isPending || !tTitle.trim()} className="shrink-0"><Plus size={16} className="mr-1" /> Agregar</Button>
+        <CardContent className="p-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-foreground">Tareas pendientes{pendientes.length ? ` (${pendientes.length})` : ""}</p>
+            <Button size="sm" variant="outline" onClick={() => setListOpen(true)}>
+              <ListChecks size={15} className="mr-1" /> Ver lista de tareas
+            </Button>
           </div>
+          {pendientes.length === 0 ? (
+            <p className="py-1 text-sm text-muted">No tenés tareas pendientes. 🎉</p>
+          ) : (
+            <div className="divide-y divide-border-subtle">{pendientes.map((t) => <TaskRow key={t.id} t={t} />)}</div>
+          )}
         </CardContent>
       </Card>
 
-      {pendientes.length > 0 && (
-        <Card>
-          <CardContent className="p-4">
-            <p className="mb-1 text-xs font-semibold text-muted">Tareas pendientes ({pendientes.length})</p>
-            <div className="divide-y divide-border-subtle">{pendientes.map((t) => <TaskRow key={t.id} t={t} />)}</div>
-          </CardContent>
-        </Card>
-      )}
-      {hechas.length > 0 && (
-        <Card>
-          <CardContent className="p-4">
-            <p className="mb-1 text-xs font-semibold text-muted">Hechas ({hechas.length})</p>
-            <div className="divide-y divide-border-subtle opacity-70">{hechas.map((t) => <TaskRow key={t.id} t={t} />)}</div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Card crear/editar evento */}
-      <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
-        <DialogContent title={form?.mode === "edit" ? "Editar evento" : "Nuevo evento"}>
-          {form && (
+      {/* ── Card del día (ventana emergente) ── */}
+      <Dialog open={!!dayKey} onOpenChange={(o) => { if (!o) { setDayKey(null); setForm(null); } }}>
+        <DialogContent title={form ? (form.mode === "edit" ? "Editar evento" : "Nuevo evento") : (dayKey ? prettyDay(dayKey) : "")}>
+          {form ? (
             <div className="space-y-3">
               <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="¿Qué es? (ej: Turno médico)" autoFocus />
               <div className="flex gap-2">
@@ -277,14 +224,69 @@ export function CalendarioClient({
                 <Input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} className="w-28" />
               </div>
               <div className="flex gap-2 pt-1">
-                {form.mode === "edit" && <Button variant="danger" onClick={del} disabled={saving} aria-label="Borrar"><Trash2 size={15} /></Button>}
-                <Button variant="ghost" className="flex-1" onClick={() => setForm(null)} disabled={saving}>Cancelar</Button>
-                <Button className="flex-1" onClick={save} disabled={saving || !form.title.trim()}>
-                  {saving ? <Loader2 size={15} className="animate-spin" /> : "Guardar"}
-                </Button>
+                {form.mode === "edit" && <Button variant="danger" onClick={delEvent} disabled={saving} aria-label="Borrar"><Trash2 size={15} /></Button>}
+                <Button variant="ghost" className="flex-1" onClick={() => setForm(null)} disabled={saving}><ArrowLeft size={15} className="mr-1" /> Volver</Button>
+                <Button className="flex-1" onClick={saveEvent} disabled={saving || !form.title.trim()}>{saving ? <Loader2 size={15} className="animate-spin" /> : "Guardar"}</Button>
               </div>
             </div>
-          )}
+          ) : dayCell ? (
+            <div className="space-y-3">
+              {dayCell.items.length === 0 ? (
+                <p className="py-1 text-sm text-muted">Nada agendado este día.</p>
+              ) : (
+                <div className="divide-y divide-border-subtle">
+                  {dayCell.items.map((it, i) => (
+                    <button key={i} disabled={it.kind !== "event"} onClick={() => openEdit(it, dayCell.key)} className="flex w-full items-center gap-3 py-2.5 text-left enabled:hover:opacity-80 disabled:cursor-default">
+                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${DOT[it.kind]}`} />
+                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">{it.time && <span className="text-muted">{it.time} · </span>}{it.label}</span>
+                      {it.kind === "event" && <Pencil size={14} className="shrink-0 text-muted" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {googleConnected ? (
+                <Button className="w-full" onClick={() => openCreate(dayCell.key)}><Plus size={16} className="mr-1" /> Agregar evento</Button>
+              ) : (
+                <Link href="/configuracion" className="block text-center text-xs text-primary hover:underline">Conectá Google para agregar eventos</Link>
+              )}
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Modal: gestor de tareas completo ── */}
+      <Dialog open={listOpen} onOpenChange={setListOpen}>
+        <DialogContent title="Tus tareas">
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Input
+                value={tTitle}
+                onChange={(e) => setTTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTask(); } }}
+                placeholder="Nueva tarea…"
+                className="flex-1"
+                autoFocus
+              />
+              <Input type="date" value={tDue} onChange={(e) => setTDue(e.target.value)} className="w-36" />
+            </div>
+            <Button className="w-full" onClick={addTask} disabled={isPending || !tTitle.trim()}><Plus size={16} className="mr-1" /> Agregar tarea</Button>
+
+            <div className="max-h-[50vh] overflow-y-auto">
+              {pendientes.length > 0 && (
+                <div className="mb-2">
+                  <p className="mb-1 text-xs font-semibold text-muted">Pendientes ({pendientes.length})</p>
+                  <div className="divide-y divide-border-subtle">{pendientes.map((t) => <TaskRow key={t.id} t={t} />)}</div>
+                </div>
+              )}
+              {hechas.length > 0 && (
+                <div className="opacity-70">
+                  <p className="mb-1 text-xs font-semibold text-muted">Hechas ({hechas.length})</p>
+                  <div className="divide-y divide-border-subtle">{hechas.map((t) => <TaskRow key={t.id} t={t} />)}</div>
+                </div>
+              )}
+              {tasks.length === 0 && <p className="py-2 text-sm text-muted">Todavía no tenés tareas.</p>}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
