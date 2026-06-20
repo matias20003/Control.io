@@ -133,7 +133,7 @@ async function getAccessToken(userId: string): Promise<string | null> {
 export async function listCalendarEvents(
   userId: string,
   opts: { daysAhead?: number } = {}
-): Promise<{ summary: string; start: string }[]> {
+): Promise<{ id: string; summary: string; start: string }[]> {
   const token = await getAccessToken(userId);
   if (!token) return [];
   const now = new Date();
@@ -144,11 +144,52 @@ export async function listCalendarEvents(
     `&singleEvents=true&orderBy=startTime&maxResults=25`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) return [];
-  const data = (await res.json()) as { items?: { summary?: string; start?: { dateTime?: string; date?: string } }[] };
-  return (data.items ?? []).map((e) => ({
-    summary: e.summary ?? "(sin título)",
-    start: e.start?.dateTime ?? e.start?.date ?? "",
-  }));
+  const data = (await res.json()) as { items?: { id?: string; summary?: string; start?: { dateTime?: string; date?: string } }[] };
+  return (data.items ?? [])
+    .filter((e) => e.id)
+    .map((e) => ({
+      id: e.id!,
+      summary: e.summary ?? "(sin título)",
+      start: e.start?.dateTime ?? e.start?.date ?? "",
+    }));
+}
+
+/** Borra un evento del calendario primario. */
+export async function deleteCalendarEvent(userId: string, eventId: string): Promise<GoogleResult> {
+  const token = await getAccessToken(userId);
+  if (!token) return { ok: false, error: "no pude renovar el acceso a Google" };
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
+    { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    return { ok: false, error: `Google ${res.status}: ${body.slice(0, 180)}` };
+  }
+  return { ok: true };
+}
+
+/** Edita un evento (cambia título y/o reprograma start/end). */
+export async function updateCalendarEvent(
+  userId: string,
+  eventId: string,
+  patch: { summary?: string; start?: Date; end?: Date }
+): Promise<GoogleResult> {
+  const token = await getAccessToken(userId);
+  if (!token) return { ok: false, error: "no pude renovar el acceso a Google" };
+  const body: Record<string, unknown> = {};
+  if (patch.summary) body.summary = patch.summary;
+  if (patch.start) body.start = { dateTime: patch.start.toISOString() };
+  if (patch.end) body.end = { dateTime: patch.end.toISOString() };
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
+    { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body) }
+  );
+  if (!res.ok) {
+    const bodyTxt = await res.text().catch(() => "");
+    return { ok: false, error: `Google ${res.status}: ${bodyTxt.slice(0, 180)}` };
+  }
+  return { ok: true };
 }
 
 /** Tareas pendientes de Google Tasks. */

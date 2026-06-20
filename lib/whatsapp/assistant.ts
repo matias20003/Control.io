@@ -30,7 +30,7 @@ import { getGoals, createGoal, addFundsToGoal, type SerializedGoal } from "@/lib
 import { getInvestments, type SerializedInvestment } from "@/lib/db/investments";
 import { getTasks, createTask, toggleTask, deleteTask, type SerializedTask } from "@/lib/db/tasks";
 import { createReminder, getPendingReminders, type SerializedReminder } from "@/lib/db/reminders";
-import { createCalendarEvent, createGoogleTask, getGoogleStatus, listCalendarEvents, listGoogleTasks } from "@/lib/google";
+import { createCalendarEvent, createGoogleTask, getGoogleStatus, listCalendarEvents, listGoogleTasks, deleteCalendarEvent, updateCalendarEvent } from "@/lib/google";
 import { getIsTester } from "@/lib/db/profile";
 import { hasFeature } from "@/lib/feature-flags";
 import { ARG_TZ } from "@/lib/timezone";
@@ -77,8 +77,9 @@ interface Action {
   taskRef?: number; // complete_task / delete_task ([#N] de TUS TAREAS)
   inMinutes?: number; // create_reminder: dentro de X minutos
   remindAt?: string;  // create_reminder: fecha/hora exacta ARG "YYYY-MM-DDTHH:mm"
-  eventStart?: string; // agendar_evento: inicio ARG "YYYY-MM-DDTHH:mm"
-  durationMin?: number; // agendar_evento: duración en minutos (default 60)
+  eventStart?: string; // agendar_evento / editar_evento: inicio ARG "YYYY-MM-DDTHH:mm"
+  durationMin?: number; // agendar_evento / editar_evento: duración en minutos (default 60)
+  eventRef?: number; // borrar_evento / editar_evento: [#N] de AGENDA
 }
 
 interface AssistantOutput {
@@ -108,7 +109,7 @@ interface FinancialContext {
   nowArg: string; // "YYYY-MM-DDTHH:mm" hora Argentina (para recordatorios)
   dateRef: string; // tabla de los próximos días con su fecha exacta (ARG)
   googleConnected: boolean;
-  gcalEvents: { summary: string; start: string }[];
+  gcalEvents: { id: string; summary: string; start: string }[];
   gtasks: { title: string; due: string | null }[];
 }
 
@@ -278,10 +279,10 @@ function formatFinancialState(c: FinancialContext): string {
 
   if (c.gcalEvents.length) {
     s.push(
-      `AGENDA — GOOGLE CALENDAR (próximos 7 días):\n` +
+      `AGENDA — GOOGLE CALENDAR (próximos 7 días, usá [#N] como "eventRef" para borrar/editar):\n` +
         c.gcalEvents
           .slice(0, 20)
-          .map((e) => {
+          .map((e, i) => {
             // start puede ser dateTime (con hora) o date (todo el día).
             const hasTime = e.start.includes("T");
             const d = new Date(e.start);
@@ -290,7 +291,7 @@ function formatFinancialState(c: FinancialContext): string {
               : hasTime
                 ? formatDateFn(toZonedTime(d, ARG_TZ), "dd/MM HH:mm")
                 : formatDateFn(d, "dd/MM");
-            return `- ${label}: ${e.summary}`;
+            return `[#${i + 1}] ${label}: ${e.summary}`;
           })
           .join("\n")
     );
@@ -431,7 +432,9 @@ ${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, du
 - "complete_task": { taskRef }   // marcar una tarea como HECHA ("ya entregué el TP", "listo lo de las pilas"). taskRef = [#N] de TUS TAREAS PENDIENTES.
 - "delete_task": { taskRef }   // borrar/cancelar una tarea. taskRef = [#N] de TUS TAREAS PENDIENTES.` : ``}
 ${hasFeature("recordatorios", { isTester: c.isTester }) ? `- "create_reminder": { title, inMinutes, remindAt }   // recordatorio CON HORA que te aviso ("haceme acordar en 5 min de sacar la comida", "recordame mañana a las 9 llamar al banco"). title = qué recordar. Para "en X minutos/horas" usá inMinutes (5, 120). Para una hora/fecha puntual usá remindAt "YYYY-MM-DDTHH:mm" en hora Argentina (calculada desde AHORA). Es distinto de create_task: el recordatorio DISPARA un aviso a una hora exacta.` : ``}
-${hasFeature("google", { isTester: c.isTester }) && c.googleConnected ? `- "agendar_evento": { title, eventStart, durationMin }   // crea un EVENTO en Google Calendar ("agendá turno médico el jueves 10hs", "reunión mañana 15hs", "cumple de Ana el 20"). title = qué. eventStart = "YYYY-MM-DDTHH:mm" en hora Argentina (relativo a HOY). durationMin opcional (default 60). Usalo para citas/eventos con fecha y hora; create_task es para to-dos sin hora.` : ``}
+${hasFeature("google", { isTester: c.isTester }) && c.googleConnected ? `- "agendar_evento": { title, eventStart, durationMin }   // crea un EVENTO en Google Calendar ("agendá turno médico el jueves 10hs", "reunión mañana 15hs", "cumple de Ana el 20"). title = qué. eventStart = "YYYY-MM-DDTHH:mm" en hora Argentina (relativo a HOY). durationMin opcional (default 60). Usalo para citas/eventos con fecha y hora; create_task es para to-dos sin hora.
+- "borrar_evento": { eventRef }   // borra un evento del calendario ("borrá la reunión del lunes", "cancelá el turno"). eventRef = [#N] de AGENDA.
+- "editar_evento": { eventRef, title, eventStart, durationMin }   // reprograma o renombra un evento ("movélo a las 16", "cambialo para el martes 11hs"). eventRef = [#N] de AGENDA. Mandá solo lo que cambia (title y/o eventStart).` : ``}
 REGLAS:
 - "intent":"action" cuando hay que ejecutar algo (llená "actions"). Podés poner varias acciones.
 - "intent":"query" para preguntas, análisis o consejos: "actions" vacío, respondé en "answer" usando los datos reales (montos con $ y miles), con diagnóstico + recomendación concreta.
@@ -782,6 +785,35 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       return `📅 Agendado en tu Google Calendar: ${a.title} — ${formatDateFn(toZonedTime(start, ARG_TZ), "dd/MM 'a las' HH:mm")}`;
     }
 
+    case "borrar_evento": {
+      if (!hasFeature("google", { isTester: c.isTester }) || !c.googleConnected) throw new Error("primero conectá tu Google");
+      const ev = a.eventRef ? c.gcalEvents[a.eventRef - 1] : undefined;
+      if (!ev) throw new Error("no identifiqué el evento a borrar");
+      const r = await deleteCalendarEvent(userId, ev.id);
+      if (!r.ok) throw new Error(r.error ?? "no pude borrar el evento");
+      return `🗑️ Borré el evento: ${ev.summary}`;
+    }
+
+    case "editar_evento": {
+      if (!hasFeature("google", { isTester: c.isTester }) || !c.googleConnected) throw new Error("primero conectá tu Google");
+      const ev = a.eventRef ? c.gcalEvents[a.eventRef - 1] : undefined;
+      if (!ev) throw new Error("no identifiqué el evento a editar");
+      const patch: { summary?: string; start?: Date; end?: Date } = {};
+      if (a.title) patch.summary = a.title;
+      if (a.eventStart) {
+        const start = fromZonedTime(a.eventStart, ARG_TZ);
+        if (isNaN(start.getTime())) throw new Error("no entendí la nueva fecha/hora");
+        const dur = a.durationMin && a.durationMin > 0 ? a.durationMin : 60;
+        patch.start = start;
+        patch.end = new Date(start.getTime() + dur * 60_000);
+      }
+      if (!patch.summary && !patch.start) throw new Error("no entendí qué cambiar del evento");
+      const r = await updateCalendarEvent(userId, ev.id, patch);
+      if (!r.ok) throw new Error(r.error ?? "no pude editar el evento");
+      const cuando = patch.start ? ` — ${formatDateFn(toZonedTime(patch.start, ARG_TZ), "dd/MM 'a las' HH:mm")}` : "";
+      return `✏️ Listo, actualicé el evento: ${patch.summary ?? ev.summary}${cuando}`;
+    }
+
     default:
       throw new Error(a.type ? `acción no reconocida (${a.type})` : "no entendí bien qué querías hacer");
   }
@@ -834,7 +866,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
 
   // Si tiene Google conectado, traemos su agenda (eventos + tasks) para poder
   // responder "¿qué tengo el lunes?" y demás consultas de organización.
-  let gcalEvents: { summary: string; start: string }[] = [];
+  let gcalEvents: { id: string; summary: string; start: string }[] = [];
   let gtasks: { title: string; due: string | null }[] = [];
   if (googleConnected && hasFeature("google", { isTester })) {
     [gcalEvents, gtasks] = await Promise.all([
