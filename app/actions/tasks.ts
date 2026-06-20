@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getTasks, createTask, toggleTask, deleteTask } from "@/lib/db/tasks";
+import { getTasks, createTask, toggleTask, deleteTask, updateTask } from "@/lib/db/tasks";
 import { z } from "zod";
 
 const createSchema = z.object({
@@ -37,6 +37,23 @@ export async function createTaskAction(formData: FormData) {
     return { task };
   } catch {
     return { error: "No se pudo crear la tarea" };
+  }
+}
+
+export async function updateTaskAction(id: string, input: { title?: string; dueDate?: string | null }) {
+  const userId = await uid();
+  if (!userId) return { error: "No autorizado" };
+  const data: { title?: string; dueDate?: Date | null } = {};
+  if (input.title !== undefined) {
+    if (!input.title.trim()) return { error: "El título no puede estar vacío" };
+    data.title = input.title.trim();
+  }
+  if (input.dueDate !== undefined) data.dueDate = input.dueDate ? new Date(input.dueDate) : null;
+  try {
+    await updateTask(userId, id, data);
+    return { ok: true };
+  } catch {
+    return { error: "No se pudo editar la tarea" };
   }
 }
 

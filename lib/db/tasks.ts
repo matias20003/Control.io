@@ -44,6 +44,20 @@ export async function createTask(
   return serialize(row);
 }
 
+/** Edita el título y/o la fecha (moverla de día). Verifica ownership. */
+export async function updateTask(
+  userId: string,
+  id: string,
+  data: { title?: string; dueDate?: Date | null }
+): Promise<void> {
+  const t = await prisma.task.findFirst({ where: { id, userId }, select: { id: true } });
+  if (!t) throw new Error("No encontrada");
+  const patch: { title?: string; dueDate?: Date | null } = {};
+  if (data.title !== undefined) patch.title = encrypt(data.title) ?? data.title;
+  if (data.dueDate !== undefined) patch.dueDate = data.dueDate;
+  await prisma.task.update({ where: { id }, data: patch });
+}
+
 /** Marca/desmarca como hecha. Verifica ownership con el where compuesto. */
 export async function toggleTask(userId: string, id: string): Promise<void> {
   const t = await prisma.task.findFirst({ where: { id, userId }, select: { done: true } });

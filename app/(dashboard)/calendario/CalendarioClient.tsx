@@ -12,7 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
 import type { SerializedTask } from "@/lib/db/tasks";
 import { createCalendarEventAction, updateCalendarEventAction, deleteCalendarEventAction } from "@/app/actions/calendar";
-import { createTaskAction, toggleTaskAction, deleteTaskAction } from "@/app/actions/tasks";
+import { createTaskAction, toggleTaskAction, deleteTaskAction, updateTaskAction } from "@/app/actions/tasks";
 
 export type CalItem = { id: string | null; label: string; time: string; kind: "event" | "task" | "reminder" };
 export type Cell = { key: string; dayNum: number; inMonth: boolean; items: CalItem[] };
@@ -118,6 +118,25 @@ export function CalendarioClient({
     });
   };
 
+  // Editar tarea (texto + mover de día).
+  const [taskForm, setTaskForm] = useState<{ id: string; title: string; due: string } | null>(null);
+  const [savingTask, setSavingTask] = useState(false);
+  const openTaskEdit = (t: SerializedTask) =>
+    setTaskForm({ id: t.id, title: t.title, due: t.dueDate ? t.dueDate.slice(0, 10) : "" });
+  const saveTask = async () => {
+    if (!taskForm) return;
+    setSavingTask(true);
+    const res = await updateTaskAction(taskForm.id, { title: taskForm.title, dueDate: taskForm.due || null });
+    setSavingTask(false);
+    if ("error" in res) { toast.error(res.error); return; }
+    setTasks((p) => p.map((t) => (t.id === taskForm.id
+      ? { ...t, title: taskForm.title.trim(), dueDate: taskForm.due ? new Date(taskForm.due).toISOString() : null }
+      : t)));
+    toast.success("Tarea actualizada ✓");
+    setTaskForm(null);
+    router.refresh();
+  };
+
   const TaskRow = ({ t }: { t: SerializedTask }) => {
     const overdue = !t.done && t.dueDate && new Date(t.dueDate) < new Date(new Date().toDateString());
     return (
@@ -129,10 +148,11 @@ export function CalendarioClient({
         >
           {t.done && <Check size={13} />}
         </button>
-        <div className="min-w-0 flex-1">
+        <button onClick={() => openTaskEdit(t)} className="min-w-0 flex-1 text-left hover:opacity-80">
           <p className={`text-sm truncate ${t.done ? "text-muted line-through" : "text-foreground"}`}>{t.title}</p>
           {t.dueDate && <p className={`text-[11px] ${overdue ? "text-danger" : "text-muted"}`}>{formatDate(t.dueDate)}{overdue ? " · vencida" : ""}</p>}
-        </div>
+        </button>
+        <Pencil size={13} className="shrink-0 text-muted" />
         <button onClick={() => removeTask(t.id)} className="shrink-0 rounded-lg p-1.5 text-muted hover:text-danger hover:bg-danger/10"><Trash2 size={13} /></button>
       </div>
     );
@@ -251,6 +271,28 @@ export function CalendarioClient({
               )}
             </div>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Modal: editar tarea (texto + mover de día) ── */}
+      <Dialog open={!!taskForm} onOpenChange={(o) => { if (!o) setTaskForm(null); }}>
+        <DialogContent title="Editar tarea">
+          {taskForm && (
+            <div className="space-y-3">
+              <Input value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} placeholder="Tarea" />
+              <div className="space-y-1">
+                <label className="text-xs text-muted">Fecha (opcional — movela de día)</label>
+                <Input type="date" value={taskForm.due} onChange={(e) => setTaskForm({ ...taskForm, due: e.target.value })} />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button variant="danger" onClick={() => { removeTask(taskForm.id); setTaskForm(null); }} disabled={savingTask} aria-label="Borrar"><Trash2 size={15} /></Button>
+                <Button variant="ghost" className="flex-1" onClick={() => setTaskForm(null)} disabled={savingTask}>Cancelar</Button>
+                <Button className="flex-1" onClick={saveTask} disabled={savingTask || !taskForm.title.trim()}>
+                  {savingTask ? <Loader2 size={15} className="animate-spin" /> : "Guardar"}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
