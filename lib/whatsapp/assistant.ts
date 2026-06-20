@@ -106,6 +106,7 @@ interface FinancialContext {
   tasks: SerializedTask[];
   reminders: SerializedReminder[];
   nowArg: string; // "YYYY-MM-DDTHH:mm" hora Argentina (para recordatorios)
+  dateRef: string; // tabla de los próximos días con su fecha exacta (ARG)
   googleConnected: boolean;
 }
 
@@ -289,7 +290,8 @@ async function interpret(
   const incomeCats = c.categories.filter((x) => x.type === "INCOME").map((x) => x.name);
 
   const system = `Sos un ASESOR FINANCIERO profesional (Argentina) dentro de "control.io", una app de
-finanzas personales. Hablás claro, cercano y práctico, sin jerga innecesaria. Hoy es ${c.today}.${hasFeature("recordatorios", { isTester: c.isTester }) ? ` Ahora en Argentina: ${c.nowArg}.` : ""}
+finanzas personales. Hablás claro, cercano y práctico, sin jerga innecesaria. Hoy es ${c.today}.${hasFeature("recordatorios", { isTester: c.isTester }) || (hasFeature("google", { isTester: c.isTester }) && c.googleConnected) ? `
+FECHAS EXACTAS (Argentina) — usá ESTAS, no calcules a mano: ${c.dateRef}. Ahora son las ${c.nowArg.slice(11)}.` : ""}
 Moneda por defecto: ARS.
 
 Sabés de finanzas personales y de negocios. Cuando te preguntan o piden análisis, DIAGNOSTICÁS con
@@ -785,6 +787,16 @@ export async function handleUserMessage(userId: string, message: string, imageUr
   const today = now.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: ARG_TZ });
   const monthLabel = now.toLocaleDateString("es-AR", { month: "long", year: "numeric", timeZone: ARG_TZ });
 
+  // Tabla de fechas exactas (ARG) para que el modelo no calcule a mano y no se
+  // equivoque de día. en-CA da el formato YYYY-MM-DD.
+  const dateRef = Array.from({ length: 8 }, (_, i) => {
+    const d = new Date(now.getTime() + i * 86_400_000);
+    const wd = d.toLocaleDateString("es-AR", { weekday: "long", timeZone: ARG_TZ });
+    const iso = d.toLocaleDateString("en-CA", { timeZone: ARG_TZ });
+    const tag = i === 0 ? "HOY " : i === 1 ? "MAÑANA " : "";
+    return `${tag}${wd} ${iso}`;
+  }).join(" · ");
+
   const ctx: FinancialContext = {
     accounts,
     categories,
@@ -804,6 +816,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
     tasks: allTasks.filter((t) => !t.done),
     reminders,
     nowArg: formatDateFn(toZonedTime(now, ARG_TZ), "yyyy-MM-dd'T'HH:mm"),
+    dateRef,
     googleConnected,
   };
 
