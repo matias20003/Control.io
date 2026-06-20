@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2, CalendarDays, ArrowLeft } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Pencil, Loader2 } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -37,13 +37,16 @@ export function CalendarioClient({
   googleEnabled: boolean;
 }) {
   const router = useRouter();
-  const [dayKey, setDayKey] = useState<string | null>(null); // día abierto en el modal
+  const initial =
+    cells.find((c) => c.key === todayArg && c.inMonth)?.key ??
+    cells.find((c) => c.inMonth)?.key ??
+    cells[0]?.key ?? "";
+  const [selected, setSelected] = useState(initial);
   const [form, setForm] = useState<Form | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const dayCell = cells.find((c) => c.key === dayKey);
+  const selectedCell = cells.find((c) => c.key === selected);
 
-  const closeAll = () => { setDayKey(null); setForm(null); };
   const openCreate = (day: string) => setForm({ mode: "create", title: "", day, time: "09:00" });
   const openEdit = (it: CalItem, day: string) => {
     if (it.kind !== "event" || !it.id) return;
@@ -59,8 +62,8 @@ export function CalendarioClient({
     setSaving(false);
     if ("error" in res) { toast.error(res.error); return; }
     toast.success(form.mode === "create" ? "Evento creado ✓" : "Evento actualizado ✓");
-    setForm(null);          // volvemos a la vista del día
-    router.refresh();       // recarga los datos → el día muestra lo nuevo
+    setForm(null);
+    router.refresh();
   };
 
   const del = async () => {
@@ -101,15 +104,16 @@ export function CalendarioClient({
         {DIAS.map((d, i) => <div key={i} className="py-1">{d}</div>)}
       </div>
 
-      {/* Grilla — tocá un día para abrir su card */}
+      {/* Grilla */}
       <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border border-border bg-border">
         {cells.map((c) => {
           const isToday = c.key === todayArg;
+          const isSel = c.key === selected;
           return (
             <button
               key={c.key}
-              onClick={() => setDayKey(c.key)}
-              className={`text-left bg-surface p-1 md:p-1.5 min-h-[52px] md:min-h-[96px] transition-colors hover:bg-surface-2/50 ${c.inMonth ? "" : "opacity-40"}`}
+              onClick={() => setSelected(c.key)}
+              className={`text-left bg-surface p-1 md:p-1.5 min-h-[52px] md:min-h-[96px] transition-colors ${c.inMonth ? "" : "opacity-40"} ${isSel ? "ring-2 ring-inset ring-primary" : "hover:bg-surface-2/50"}`}
             >
               <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-semibold ${isToday ? "bg-primary text-white" : "text-muted"}`}>
                 {c.dayNum}
@@ -142,11 +146,44 @@ export function CalendarioClient({
         <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" /> Recordatorios</span>
       </div>
 
-      {/* Card emergente del día */}
-      <Dialog open={!!dayKey} onOpenChange={(o) => { if (!o) closeAll(); }}>
-        <DialogContent title={form ? (form.mode === "edit" ? "Editar evento" : "Nuevo evento") : (dayKey ? prettyDay(dayKey) : "")}>
-          {form ? (
-            /* ── Formulario crear/editar ── */
+      {/* Lista del día seleccionado (abajo del calendario) */}
+      {selectedCell && (
+        <div className="rounded-2xl border border-border bg-surface p-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-foreground capitalize">{prettyDay(selectedCell.key)}</p>
+            {googleConnected && (
+              <Button size="sm" onClick={() => openCreate(selectedCell.key)}>
+                <Plus size={15} className="mr-1" /> Evento
+              </Button>
+            )}
+          </div>
+          {selectedCell.items.length === 0 ? (
+            <p className="py-1 text-sm text-muted">Nada agendado este día.{googleConnected ? " Tocá “Evento” para agregar." : ""}</p>
+          ) : (
+            <div className="divide-y divide-border-subtle">
+              {selectedCell.items.map((it, i) => (
+                <button
+                  key={i}
+                  disabled={it.kind !== "event"}
+                  onClick={() => openEdit(it, selectedCell.key)}
+                  className="flex w-full items-center gap-3 py-2.5 text-left enabled:hover:opacity-80 disabled:cursor-default"
+                >
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${DOT[it.kind]}`} />
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                    {it.time && <span className="text-muted">{it.time} · </span>}{it.label}
+                  </span>
+                  {it.kind === "event" && <Pencil size={14} className="shrink-0 text-muted" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Card de crear/editar evento */}
+      <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
+        <DialogContent title={form?.mode === "edit" ? "Editar evento" : "Nuevo evento"}>
+          {form && (
             <div className="space-y-3">
               <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="¿Qué es? (ej: Turno médico)" autoFocus />
               <div className="flex gap-2">
@@ -157,48 +194,13 @@ export function CalendarioClient({
                 {form.mode === "edit" && (
                   <Button variant="danger" onClick={del} disabled={saving} aria-label="Borrar"><Trash2 size={15} /></Button>
                 )}
-                <Button variant="ghost" className="flex-1" onClick={() => setForm(null)} disabled={saving}>
-                  <ArrowLeft size={15} className="mr-1" /> Volver
-                </Button>
+                <Button variant="ghost" className="flex-1" onClick={() => setForm(null)} disabled={saving}>Cancelar</Button>
                 <Button className="flex-1" onClick={save} disabled={saving || !form.title.trim()}>
                   {saving ? <Loader2 size={15} className="animate-spin" /> : "Guardar"}
                 </Button>
               </div>
             </div>
-          ) : dayCell ? (
-            /* ── Vista del día (items) ── */
-            <div className="space-y-3">
-              {dayCell.items.length === 0 ? (
-                <p className="py-1 text-sm text-muted">Nada agendado este día.</p>
-              ) : (
-                <div className="divide-y divide-border-subtle">
-                  {dayCell.items.map((it, i) => (
-                    <button
-                      key={i}
-                      disabled={it.kind !== "event"}
-                      onClick={() => openEdit(it, dayCell.key)}
-                      className="flex w-full items-center gap-3 py-2.5 text-left enabled:hover:opacity-80 disabled:cursor-default"
-                    >
-                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${DOT[it.kind]}`} />
-                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                        {it.time && <span className="text-muted">{it.time} · </span>}{it.label}
-                      </span>
-                      {it.kind === "event" && <Pencil size={14} className="shrink-0 text-muted" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {googleConnected ? (
-                <Button className="w-full" onClick={() => openCreate(dayCell.key)}>
-                  <Plus size={16} className="mr-1" /> Agregar evento
-                </Button>
-              ) : (
-                <Link href="/configuracion" className="block text-center text-xs text-primary hover:underline">
-                  Conectá Google para agregar eventos
-                </Link>
-              )}
-            </div>
-          ) : null}
+          )}
         </DialogContent>
       </Dialog>
     </div>
