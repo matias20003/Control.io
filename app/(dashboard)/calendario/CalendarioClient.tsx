@@ -265,13 +265,12 @@ export function CalendarioClient({
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTask(); } }}
                 placeholder="Nueva tarea…"
                 className="flex-1"
-                autoFocus
               />
               <Input type="date" value={tDue} onChange={(e) => setTDue(e.target.value)} className="w-36" />
             </div>
             <Button className="w-full" onClick={addTask} disabled={isPending || !tTitle.trim()}><Plus size={16} className="mr-1" /> Agregar tarea</Button>
 
-            <div className="max-h-[50vh] overflow-y-auto">
+            <div>
               {pendientes.length > 0 && (
                 <div className="mb-2">
                   <p className="mb-1 text-xs font-semibold text-muted">Pendientes ({pendientes.length})</p>

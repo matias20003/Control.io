@@ -41,7 +41,7 @@ export function DialogContent({
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay
         className={cn(
-          "fixed inset-0 z-40",
+          "fixed inset-0 z-[60]",
           "bg-background/80 backdrop-blur-[6px]",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
           "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
@@ -50,7 +50,7 @@ export function DialogContent({
       />
       <DialogPrimitive.Content
         className={cn(
-          "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50",
+          "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[70]",
           "w-[calc(100vw-2rem)] max-w-md",
           // Límite de alto al viewport + columna flex: el header queda fijo y el
           // cuerpo scrollea. Sin esto, los formularios largos se salían de la
