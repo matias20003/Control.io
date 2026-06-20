@@ -124,6 +124,7 @@ export function TareasClient({ initialTasks, reminders, events, googleConnected,
             <div className="flex items-center gap-2 mb-3">
               <CalendarDays size={16} className="text-primary" />
               <p className="text-sm font-semibold text-foreground">Próximos eventos</p>
+              <Link href="/calendario" className="ml-auto text-xs font-medium text-primary hover:underline">Ver calendario →</Link>
             </div>
             {!googleConnected ? (
               <Link

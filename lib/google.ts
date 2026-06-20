@@ -132,16 +132,16 @@ async function getAccessToken(userId: string): Promise<string | null> {
 /** Próximos eventos del calendario (para "¿qué tengo el lunes?"). */
 export async function listCalendarEvents(
   userId: string,
-  opts: { daysAhead?: number } = {}
+  opts: { daysAhead?: number; from?: Date; to?: Date } = {}
 ): Promise<{ id: string; summary: string; start: string }[]> {
   const token = await getAccessToken(userId);
   if (!token) return [];
-  const now = new Date();
-  const max = new Date(now.getTime() + (opts.daysAhead ?? 7) * 86_400_000);
+  const now = opts.from ?? new Date();
+  const max = opts.to ?? new Date(now.getTime() + (opts.daysAhead ?? 7) * 86_400_000);
   const url =
     `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
     `timeMin=${encodeURIComponent(now.toISOString())}&timeMax=${encodeURIComponent(max.toISOString())}` +
-    `&singleEvents=true&orderBy=startTime&maxResults=25`;
+    `&singleEvents=true&orderBy=startTime&maxResults=250`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) return [];
   const data = (await res.json()) as { items?: { id?: string; summary?: string; start?: { dateTime?: string; date?: string } }[] };
