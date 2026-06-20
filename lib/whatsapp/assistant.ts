@@ -394,7 +394,9 @@ REGLAS:
 - "intent":"action" cuando hay que ejecutar algo (llená "actions"). Podés poner varias acciones.
 - "intent":"query" para preguntas, análisis o consejos: "actions" vacío, respondé en "answer" usando los datos reales (montos con $ y miles), con diagnóstico + recomendación concreta.
 - "intent":"chat" para saludos/fuera de tema: "actions" vacío, "answer" cordial.
-${hasFeature("tareas", { isTester: c.isTester }) ? `- Si te preguntan por sus pendientes ("qué tengo que hacer", "mis tareas", "qué me falta"), es intent "query": listá TUS TAREAS PENDIENTES en "answer" (cortito, con la fecha si tiene). Si no tiene ninguna, decíselo.` : ``}
+${hasFeature("recordatorios", { isTester: c.isTester }) ? `- ⚠️ CRÍTICO: si el usuario pide que le RECUERDES o le AVISES algo ("haceme acordar", "recordame", "avisame en 5 min", "avisame mañana a las 9"), es SIEMPRE intent "action" con UNA acción create_reminder. PROHIBIDO responder solo con texto como "te recordaré en 2 minutos" o "dale, te aviso" — eso NO programa nada y el recordatorio NO existe. TENÉS que emitir la acción: { "type": "create_reminder", "title": "<qué recordar>", "inMinutes": <N> } para "en N minutos/horas", o "remindAt":"YYYY-MM-DDTHH:mm" para una hora puntual. Ejemplo — usuario: "haceme acordar en 2 min de tomar agua" → {"intent":"action","actions":[{"type":"create_reminder","title":"tomar agua","inMinutes":2}],"answer":""}` : ``}
+${hasFeature("tareas", { isTester: c.isTester }) ? `- Si el usuario pide ANOTAR un pendiente sin hora ("anotá comprar pilas", "tengo que llamar al banco"), es intent "action" con create_task — NO lo prometas por texto.
+- Si te preguntan por sus pendientes ("qué tengo que hacer", "mis tareas", "qué me falta"), es intent "query": listá TUS TAREAS PENDIENTES en "answer" (cortito, con la fecha si tiene). Si no tiene ninguna, decíselo.` : ``}
 - "remember": usalo cuando el usuario comparta algo DURABLE para tener en cuenta a futuro
   ("acordate que cobro el día 1", "mi meta es comprar un auto", "soy freelance", "no me gusta endeudarme").
   Guardá el dato como una frase corta en "fact". NO guardes movimientos puntuales ni datos triviales.
