@@ -22,7 +22,7 @@ const rightItems: NavItem[] = [
 ];
 
 const moreItems: NavItem[] = [
-  { href: "/tareas",       icon: CalendarCheck, label: "Organización", match: ["/tareas", "/calendario"] },
+  { href: "/calendario",   icon: CalendarCheck, label: "Organización", match: ["/tareas", "/calendario"] },
   { href: "/grupos",       icon: Users,      label: "Grupos" },
   { href: "/deudas",       icon: HandCoins,  label: "Deudas" },
   { href: "/cuotas",       icon: CreditCard, label: "Cuotas" },

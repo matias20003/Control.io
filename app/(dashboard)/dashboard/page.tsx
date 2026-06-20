@@ -239,7 +239,7 @@ export default async function DashboardPage({
 
       {hasFeature("tareas", { isTester }) && (
         <Link
-          href="/tareas"
+          href="/calendario"
           className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 transition-colors hover:border-primary/50"
         >
           <span className="shrink-0">🗓️</span>
