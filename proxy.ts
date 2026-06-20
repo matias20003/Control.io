@@ -2,7 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // /login/verify cae bajo el prefijo /login.
 // /setup-2fa NO es pública — requiere sesión activa (la página la valida).
-const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/auth", "/presentacion", "/grupos/unirse", "/api/whatsapp", "/privacidad", "/terminos"];
+// /api/cron y /api/qstash se autentican con CRON_SECRET (Bearer), no con sesión:
+// hay que dejarlos pasar el proxy o los redirige a /login y nunca corren.
+const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/auth", "/presentacion", "/grupos/unirse", "/api/whatsapp", "/api/cron", "/api/qstash", "/privacidad", "/terminos"];
 // Rutas públicas con match exacto (para no abrir todo el árbol con startsWith("/")).
 const PUBLIC_EXACT = ["/"];
 
