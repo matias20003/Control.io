@@ -429,7 +429,7 @@ TIPOS DE ACCIÓN (campo "type"):
 - "update_transaction": { ref, amount, description, category, account }  // solo los campos a cambiar
 - "remember": { fact }   // guardar un DATO DURABLE del usuario (cómo es su plata/vida: "cobro los días 10", "mi alquiler es 200k"). NO es una tarea.
 ${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, dueDate }   // un PENDIENTE/recordatorio a HACER ("recordame entregar el TP el martes", "tengo que comprar pilas", "anotá llamar al banco"). dueDate "YYYY-MM-DD" opcional, relativo a HOY. Diferente de "remember": esto es algo PENDIENTE, no un dato.
-- "complete_task": { taskRef }   // marcar una tarea como HECHA ("ya entregué el TP", "listo lo de las pilas"). taskRef = [#N] de TUS TAREAS PENDIENTES.
+- "complete_task": { taskRef, title }   // marcar una tarea como HECHA ("marcá comprar pan como hecha", "ya entregué el TP", "listo lo de las pilas"). Pasá taskRef = [#N] de TUS TAREAS PENDIENTES, Y TAMBIÉN title = el texto de la tarea (ej: "comprar pan"). Siempre mandá title.
 - "delete_task": { taskRef }   // borrar/cancelar una tarea. taskRef = [#N] de TUS TAREAS PENDIENTES.` : ``}
 ${hasFeature("recordatorios", { isTester: c.isTester }) ? `- "create_reminder": { title, inMinutes, remindAt }   // recordatorio CON HORA que te aviso ("haceme acordar en 5 min de sacar la comida", "recordame mañana a las 9 llamar al banco"). title = qué recordar. Para "en X minutos/horas" usá inMinutes (5, 120). Para una hora/fecha puntual usá remindAt "YYYY-MM-DDTHH:mm" en hora Argentina (calculada desde AHORA). Es distinto de create_task: el recordatorio DISPARA un aviso a una hora exacta.` : ``}
 ${hasFeature("google", { isTester: c.isTester }) && c.googleConnected ? `- "agendar_evento": { title, eventStart, durationMin }   // crea un EVENTO en Google Calendar ("agendá turno médico el jueves 10hs", "reunión mañana 15hs", "cumple de Ana el 20"). title = qué. eventStart = "YYYY-MM-DDTHH:mm" en hora Argentina (relativo a HOY). durationMin opcional (default 60). Usalo para citas/eventos con fecha y hora; create_task es para to-dos sin hora.
@@ -740,15 +740,23 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
 
     case "complete_task": {
       if (!hasFeature("tareas", { isTester: c.isTester })) throw new Error("esa función todavía no está disponible");
-      const t = a.taskRef ? c.tasks[a.taskRef - 1] : undefined;
-      if (!t) throw new Error("no identifiqué la tarea");
-      await toggleTask(userId, t.id);
-      // Si está en Google Tasks (mismo título), la marcamos hecha también allá.
-      if (hasFeature("google", { isTester: c.isTester }) && c.googleConnected) {
-        const g = c.gtasks.find((x) => norm(x.title) === norm(t.title));
-        if (g) await completeGoogleTask(userId, g.id).catch(() => {});
+      // Buscar la tarea interna por número [#N] o por título (lo que venga).
+      let t = a.taskRef ? c.tasks[a.taskRef - 1] : undefined;
+      if (!t && a.title) {
+        const q = norm(a.title);
+        t = c.tasks.find((x) => norm(x.title) === q) ?? c.tasks.find((x) => norm(x.title).includes(q));
       }
-      return `✅ Marqué como hecha: ${t.title}`;
+      // Buscar la misma tarea en Google Tasks (por el título de la interna o el pedido).
+      const matchTitle = t?.title ?? a.title ?? "";
+      let g: { id: string; title: string } | undefined;
+      if (hasFeature("google", { isTester: c.isTester }) && c.googleConnected && matchTitle) {
+        const q = norm(matchTitle);
+        g = c.gtasks.find((x) => norm(x.title) === q) ?? c.gtasks.find((x) => norm(x.title).includes(q));
+      }
+      if (!t && !g) throw new Error("no identifiqué la tarea");
+      if (t) await toggleTask(userId, t.id);
+      if (g) await completeGoogleTask(userId, g.id).catch(() => {});
+      return `✅ Marqué como hecha: ${t?.title ?? g?.title ?? matchTitle}`;
     }
 
     case "delete_task": {
