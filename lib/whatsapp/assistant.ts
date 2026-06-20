@@ -30,6 +30,7 @@ import { getGoals, createGoal, addFundsToGoal, type SerializedGoal } from "@/lib
 import { getInvestments, type SerializedInvestment } from "@/lib/db/investments";
 import { getTasks, createTask, toggleTask, deleteTask, type SerializedTask } from "@/lib/db/tasks";
 import { createReminder, getPendingReminders, type SerializedReminder } from "@/lib/db/reminders";
+import { createCalendarEvent, createGoogleTask, getGoogleStatus } from "@/lib/google";
 import { getIsTester } from "@/lib/db/profile";
 import { hasFeature } from "@/lib/feature-flags";
 import { ARG_TZ } from "@/lib/timezone";
@@ -76,6 +77,8 @@ interface Action {
   taskRef?: number; // complete_task / delete_task ([#N] de TUS TAREAS)
   inMinutes?: number; // create_reminder: dentro de X minutos
   remindAt?: string;  // create_reminder: fecha/hora exacta ARG "YYYY-MM-DDTHH:mm"
+  eventStart?: string; // agendar_evento: inicio ARG "YYYY-MM-DDTHH:mm"
+  durationMin?: number; // agendar_evento: duración en minutos (default 60)
 }
 
 interface AssistantOutput {
@@ -103,6 +106,7 @@ interface FinancialContext {
   tasks: SerializedTask[];
   reminders: SerializedReminder[];
   nowArg: string; // "YYYY-MM-DDTHH:mm" hora Argentina (para recordatorios)
+  googleConnected: boolean;
 }
 
 function baseUrl(): string {
@@ -390,6 +394,7 @@ ${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, du
 - "complete_task": { taskRef }   // marcar una tarea como HECHA ("ya entregué el TP", "listo lo de las pilas"). taskRef = [#N] de TUS TAREAS PENDIENTES.
 - "delete_task": { taskRef }   // borrar/cancelar una tarea. taskRef = [#N] de TUS TAREAS PENDIENTES.` : ``}
 ${hasFeature("recordatorios", { isTester: c.isTester }) ? `- "create_reminder": { title, inMinutes, remindAt }   // recordatorio CON HORA que te aviso ("haceme acordar en 5 min de sacar la comida", "recordame mañana a las 9 llamar al banco"). title = qué recordar. Para "en X minutos/horas" usá inMinutes (5, 120). Para una hora/fecha puntual usá remindAt "YYYY-MM-DDTHH:mm" en hora Argentina (calculada desde AHORA). Es distinto de create_task: el recordatorio DISPARA un aviso a una hora exacta.` : ``}
+${hasFeature("google", { isTester: c.isTester }) && c.googleConnected ? `- "agendar_evento": { title, eventStart, durationMin }   // crea un EVENTO en Google Calendar ("agendá turno médico el jueves 10hs", "reunión mañana 15hs", "cumple de Ana el 20"). title = qué. eventStart = "YYYY-MM-DDTHH:mm" en hora Argentina (relativo a HOY). durationMin opcional (default 60). Usalo para citas/eventos con fecha y hora; create_task es para to-dos sin hora.` : ``}
 REGLAS:
 - "intent":"action" cuando hay que ejecutar algo (llená "actions"). Podés poner varias acciones.
 - "intent":"query" para preguntas, análisis o consejos: "actions" vacío, respondé en "answer" usando los datos reales (montos con $ y miles), con diagnóstico + recomendación concreta.
@@ -685,7 +690,12 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       const due = a.dueDate ? new Date(a.dueDate) : null;
       const validDue = due && !isNaN(due.getTime()) ? due : null;
       await createTask(userId, { title: a.title, dueDate: validDue });
-      return `✅ Anotado: ${a.title}${validDue ? ` (para el ${validDue.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })})` : ""}`;
+      // Si tiene Google conectado, también la cargamos en Google Tasks.
+      let enGoogle = false;
+      if (hasFeature("google", { isTester: c.isTester }) && c.googleConnected) {
+        enGoogle = await createGoogleTask(userId, { title: a.title, due: validDue }).catch(() => false);
+      }
+      return `✅ Anotado: ${a.title}${validDue ? ` (para el ${validDue.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })})` : ""}${enGoogle ? " · también en tu Google Tasks 📋" : ""}`;
     }
 
     case "complete_task": {
@@ -723,6 +733,18 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       return `⏰ Listo, te aviso ${cuando}: ${a.title}`;
     }
 
+    case "agendar_evento": {
+      if (!hasFeature("google", { isTester: c.isTester })) throw new Error("esa función todavía no está disponible");
+      if (!c.googleConnected) throw new Error("primero conectá tu Google en Configuración → Google Calendar y Tareas");
+      if (!a.title || !a.eventStart) throw new Error("falta el evento o la hora");
+      const start = fromZonedTime(a.eventStart, ARG_TZ);
+      if (isNaN(start.getTime())) throw new Error("no entendí la fecha/hora del evento");
+      const dur = a.durationMin && a.durationMin > 0 ? a.durationMin : 60;
+      const ok = await createCalendarEvent(userId, { summary: a.title, start, end: new Date(start.getTime() + dur * 60_000) });
+      if (!ok) throw new Error("no pude crear el evento en tu Google Calendar");
+      return `📅 Agendado en tu Google Calendar: ${a.title} — ${formatDateFn(toZonedTime(start, ARG_TZ), "dd/MM 'a las' HH:mm")}`;
+    }
+
     default:
       throw new Error(a.type ? `acción no reconocida (${a.type})` : "no entendí bien qué querías hacer");
   }
@@ -739,7 +761,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage, history, memory, isTester, allTasks, reminders] =
+  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage, history, memory, isTester, allTasks, reminders, googleConnected] =
     await Promise.all([
       getAccounts(userId),
       getCategories(userId),
@@ -755,6 +777,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
       getIsTester(userId).catch(() => false),
       getTasks(userId).catch(() => [] as SerializedTask[]),
       getPendingReminders(userId).catch(() => [] as SerializedReminder[]),
+      getGoogleStatus(userId).then((s) => s.connected).catch(() => false),
     ]);
 
   const today = now.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -779,6 +802,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
     tasks: allTasks.filter((t) => !t.done),
     reminders,
     nowArg: formatDateFn(toZonedTime(now, ARG_TZ), "yyyy-MM-dd'T'HH:mm"),
+    googleConnected,
   };
 
   const result = await interpret(clean, ctx, imageUrl, history);
