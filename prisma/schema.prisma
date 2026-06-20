@@ -93,6 +93,12 @@ model Profile {
   // para verificarlas antes de prenderlas para todos. Ver lib/feature-flags.ts.
   isTester        Boolean   @default(false)
 
+  // Google (Calendar + Tasks). refresh token cifrado; se usa para sacar access
+  // tokens frescos. Null = no conectó su Google.
+  googleRefreshToken String?
+  googleEmail        String?
+  googleConnectedAt  DateTime?
+
   accounts              Account[]
   categories            Category[]
   transactions          Transaction[]

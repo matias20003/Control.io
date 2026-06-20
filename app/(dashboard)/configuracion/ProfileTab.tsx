@@ -15,6 +15,7 @@ import { TwoFactorCard } from "./TwoFactorCard";
 import { WhatsappCard } from "./WhatsappCard";
 import { RecordatorioWhatsappCard } from "./RecordatorioWhatsappCard";
 import { VencimientosCard } from "./VencimientosCard";
+import { GoogleCalendarCard } from "./GoogleCalendarCard";
 import { AppearanceCard } from "./AppearanceCard";
 
 const DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
@@ -176,6 +177,7 @@ export function ProfileTab({
     { cat: "Cuenta", title: "Cambiar contraseña", kw: "contrasena password clave acceso", node: passwordCard },
     { cat: "Asistente de WhatsApp", title: "Asistente de WhatsApp", kw: "whatsapp bot asistente numero mensajes audios chat", node: <WhatsappCard initialNumber={whatsappNumber} /> },
     { cat: "Asistente de WhatsApp", title: "Recordatorio diario", kw: "recordatorio diario aviso whatsapp gastos noche registrar 20 ocho", node: <RecordatorioWhatsappCard hasWhatsapp={!!whatsappNumber} /> },
+    { cat: "Asistente de WhatsApp", title: "Google Calendar y Tareas", kw: "google calendar tareas agenda eventos sincronizar integracion", node: <GoogleCalendarCard /> },
     { cat: "Seguridad", title: "Verificación en dos pasos", kw: "seguridad 2fa dos factores autenticacion codigos mfa autenticador", node: <TwoFactorCard mfaEnabled={mfaEnabled} recoveryCodesRemaining={recoveryCodesRemaining} /> },
     { cat: "Notificaciones", title: "Notificaciones", kw: "notificaciones push alertas avisos recordatorios", node: <NotificacionesCard /> },
     { cat: "Notificaciones", title: "Recordatorio de vencimientos", kw: "vencimientos cuotas tarjeta deudas pagar fecha agenda recordatorio vence", node: <VencimientosCard /> },

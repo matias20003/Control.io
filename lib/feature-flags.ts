@@ -15,6 +15,7 @@ export type FeatureFlag =
   | "finDeMes"
   | "tareas"
   | "recordatorios"
+  | "google"
   | "premium"
   | "onboardingWa";
 
@@ -23,6 +24,7 @@ export const FEATURE_FLAGS: Record<FeatureFlag, Rollout> = {
   finDeMes: "testers",      // proyección "¿llego a fin de mes?"
   tareas: "all",            // tareas / pendientes (app + bot) — para todos
   recordatorios: "all",     // recordatorios con hora (disparo vía QStash) — para todos
+  google: "testers",        // vincular Google Calendar + Tasks (OAuth)
   premium: "testers",       // paywall + suscripción MercadoPago
   onboardingWa: "testers",  // hero de onboarding WhatsApp-first
 };
