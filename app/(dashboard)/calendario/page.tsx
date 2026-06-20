@@ -85,6 +85,7 @@ export default async function CalendarioPage({ searchParams }: { searchParams: P
   return (
     <CalendarioClient
       cells={cells}
+      initialTasks={tasks}
       monthLabel={`${MESES[mon - 1]} ${year}`}
       todayArg={todayArg}
       prevMonth={prevMonth}
