@@ -242,9 +242,9 @@ export default async function DashboardPage({
           href="/tareas"
           className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 transition-colors hover:border-primary/50"
         >
-          <span className="shrink-0">✅</span>
+          <span className="shrink-0">🗓️</span>
           <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-            Tareas <span className="font-normal text-muted">— tus pendientes del día junto a tu plata</span>
+            Organización <span className="font-normal text-muted">— calendario, tareas y recordatorios</span>
           </p>
           <ChevronRight size={15} className="shrink-0 text-primary" />
         </Link>

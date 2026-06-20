@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
-import { Plus, Check, Trash2, CalendarClock, ListChecks } from "lucide-react";
+import { Plus, Check, Trash2, CalendarClock, ListChecks, CalendarDays, Bell, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/ui/stat";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,9 +11,37 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatDate } from "@/lib/utils";
 import type { SerializedTask } from "@/lib/db/tasks";
+import type { SerializedReminder } from "@/lib/db/reminders";
 import { createTaskAction, toggleTaskAction, deleteTaskAction } from "@/app/actions/tasks";
 
-export function TareasClient({ initialTasks }: { initialTasks: SerializedTask[] }) {
+const ARG_TZ = "America/Argentina/Buenos_Aires";
+
+function fmtEvent(start: string): string {
+  if (!start) return "";
+  if (!start.includes("T")) {
+    const [, m, d] = start.split("-");
+    return `${d}/${m} · todo el día`;
+  }
+  return new Date(start).toLocaleString("es-AR", {
+    weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: ARG_TZ,
+  });
+}
+
+function fmtReminder(iso: string): string {
+  return new Date(iso).toLocaleString("es-AR", {
+    weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: ARG_TZ,
+  });
+}
+
+type Props = {
+  initialTasks: SerializedTask[];
+  reminders: SerializedReminder[];
+  events: { id: string; summary: string; start: string }[];
+  googleConnected: boolean;
+  googleEnabled: boolean;
+};
+
+export function TareasClient({ initialTasks, reminders, events, googleConnected, googleEnabled }: Props) {
   const [tasks, setTasks] = useState(initialTasks);
   const [title, setTitle] = useState("");
   const [due, setDue] = useState("");
@@ -42,7 +71,7 @@ export function TareasClient({ initialTasks }: { initialTasks: SerializedTask[] 
       const res = await toggleTaskAction(id);
       if ("error" in res) {
         toast.error(res.error);
-        setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t))); // revertir
+        setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
       }
     });
   };
@@ -86,8 +115,79 @@ export function TareasClient({ initialTasks }: { initialTasks: SerializedTask[] 
 
   return (
     <div className="p-4 md:p-6 max-w-[760px] mx-auto space-y-4">
-      <PageHeader title="✅ Tareas" subtitle="Tus pendientes del día a día, en el mismo lugar que tu plata." />
+      <PageHeader title="🗓️ Organización" subtitle="Tu calendario, tareas y recordatorios — todo en un solo lugar." />
 
+      {/* ── Calendario (Google) ────────────────────────────── */}
+      {googleEnabled && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <CalendarDays size={16} className="text-primary" />
+              <p className="text-sm font-semibold text-foreground">Próximos eventos</p>
+            </div>
+            {!googleConnected ? (
+              <Link
+                href="/configuracion"
+                className="flex items-center gap-2 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5 text-sm transition-colors hover:border-primary/50"
+              >
+                <span className="flex-1 text-muted">Conectá tu Google Calendar para ver tus eventos acá.</span>
+                <ChevronRight size={15} className="shrink-0 text-primary" />
+              </Link>
+            ) : events.length === 0 ? (
+              <p className="text-xs text-muted">No tenés eventos en los próximos 14 días.</p>
+            ) : (
+              <div className="divide-y divide-border-subtle">
+                {events.map((e) => (
+                  <div key={e.id} className="flex items-center gap-3 py-2.5">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                      <CalendarDays size={15} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground truncate">{e.summary}</p>
+                      <p className="text-[11px] text-muted capitalize">{fmtEvent(e.start)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {googleConnected && (
+              <a
+                href="https://calendar.google.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-block text-xs text-primary hover:underline"
+              >
+                Abrir Google Calendar →
+              </a>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Recordatorios ──────────────────────────────────── */}
+      {reminders.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Bell size={16} className="text-amber-500" />
+              <p className="text-sm font-semibold text-foreground">Recordatorios</p>
+            </div>
+            <div className="divide-y divide-border-subtle">
+              {reminders.map((r) => (
+                <div key={r.id} className="flex items-center gap-3 py-2.5">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-amber-500/10 text-amber-500">⏰</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground truncate">{r.text}</p>
+                    <p className="text-[11px] text-muted capitalize">{fmtReminder(r.remindAt)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Tareas ─────────────────────────────────────────── */}
       <Card>
         <CardContent className="p-3">
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -95,7 +195,7 @@ export function TareasClient({ initialTasks }: { initialTasks: SerializedTask[] 
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
-              placeholder="Ej: Entregar el TP de Análisis…"
+              placeholder="Nueva tarea… (ej: Entregar el TP)"
               className="flex-1"
             />
             <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="sm:w-40" />
@@ -113,7 +213,7 @@ export function TareasClient({ initialTasks }: { initialTasks: SerializedTask[] 
           {pendientes.length > 0 && (
             <Card>
               <CardContent className="p-4">
-                <p className="text-xs font-semibold text-muted mb-1">Pendientes ({pendientes.length})</p>
+                <p className="text-xs font-semibold text-muted mb-1">Tareas pendientes ({pendientes.length})</p>
                 <div className="divide-y divide-border-subtle">
                   {pendientes.map((t) => <Row key={t.id} t={t} />)}
                 </div>

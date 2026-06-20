@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ArrowUpDown, Wallet, Target, HandCoins,
-  CreditCard, BarChart3, MessageCircle, CircleDollarSign, Users,
+  CreditCard, BarChart3, MessageCircle, CircleDollarSign, Users, CalendarCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
@@ -14,6 +14,7 @@ import { ThemeToggle } from "@/components/layout/ThemeToggle";
 // mobile, Configuración está en "Más" y el logout dentro de Configuración.
 const navItems = [
   { href: "/dashboard",     icon: LayoutDashboard, label: "Inicio" },
+  { href: "/tareas",        icon: CalendarCheck,   label: "Organización" },
   { href: "/movimientos",   icon: ArrowUpDown,     label: "Movimientos" },
   { href: "/cuentas",       icon: Wallet,          label: "Cuentas" },
   { href: "/presupuestos",  icon: Target,          label: "Planificá", match: ["/presupuestos", "/metas", "/recurrentes"] },
