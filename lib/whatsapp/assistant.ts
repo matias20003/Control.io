@@ -780,8 +780,10 @@ export async function handleUserMessage(userId: string, message: string, imageUr
       getGoogleStatus(userId).then((s) => s.connected).catch(() => false),
     ]);
 
-  const today = now.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const monthLabel = now.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
+  // timeZone ARG explícito: sin esto el server (UTC) cree que es el día siguiente
+  // entre las 21 y 24hs ARG, y el bot calcula mal "hoy"/"mañana".
+  const today = now.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: ARG_TZ });
+  const monthLabel = now.toLocaleDateString("es-AR", { month: "long", year: "numeric", timeZone: ARG_TZ });
 
   const ctx: FinancialContext = {
     accounts,
