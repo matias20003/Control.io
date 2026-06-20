@@ -108,13 +108,15 @@ async function getAccessToken(userId: string): Promise<string | null> {
   return ((await res.json()) as { access_token?: string }).access_token ?? null;
 }
 
-/** Crea un evento en el calendario primario. Devuelve true si se creó. */
+export type GoogleResult = { ok: boolean; error?: string };
+
+/** Crea un evento en el calendario primario. */
 export async function createCalendarEvent(
   userId: string,
   ev: { summary: string; start: Date; end?: Date }
-): Promise<boolean> {
+): Promise<GoogleResult> {
   const token = await getAccessToken(userId);
-  if (!token) return false;
+  if (!token) return { ok: false, error: "no pude renovar el acceso (revisá GOOGLE_CLIENT_SECRET o reconectá Google)" };
   const end = ev.end ?? new Date(ev.start.getTime() + 60 * 60_000); // 1h por defecto
   const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
     method: "POST",
@@ -125,22 +127,30 @@ export async function createCalendarEvent(
       end: { dateTime: end.toISOString() },
     }),
   });
-  if (!res.ok) console.error("[google] crear evento falló:", res.status, await res.text().catch(() => ""));
-  return res.ok;
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error("[google] crear evento falló:", res.status, body);
+    return { ok: false, error: `Google ${res.status}: ${body.slice(0, 180)}` };
+  }
+  return { ok: true };
 }
 
 /** Crea una tarea en Google Tasks (lista por defecto). */
 export async function createGoogleTask(
   userId: string,
   t: { title: string; due?: Date | null }
-): Promise<boolean> {
+): Promise<GoogleResult> {
   const token = await getAccessToken(userId);
-  if (!token) return false;
+  if (!token) return { ok: false, error: "no pude renovar el acceso a Google" };
   const res = await fetch("https://tasks.googleapis.com/tasks/v1/lists/@default/tasks", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ title: t.title, ...(t.due ? { due: t.due.toISOString() } : {}) }),
   });
-  if (!res.ok) console.error("[google] crear task falló:", res.status, await res.text().catch(() => ""));
-  return res.ok;
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error("[google] crear task falló:", res.status, body);
+    return { ok: false, error: `Google ${res.status}: ${body.slice(0, 180)}` };
+  }
+  return { ok: true };
 }

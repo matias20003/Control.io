@@ -693,7 +693,7 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       // Si tiene Google conectado, también la cargamos en Google Tasks.
       let enGoogle = false;
       if (hasFeature("google", { isTester: c.isTester }) && c.googleConnected) {
-        enGoogle = await createGoogleTask(userId, { title: a.title, due: validDue }).catch(() => false);
+        enGoogle = (await createGoogleTask(userId, { title: a.title, due: validDue }).catch(() => ({ ok: false }))).ok;
       }
       return `✅ Anotado: ${a.title}${validDue ? ` (para el ${validDue.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })})` : ""}${enGoogle ? " · también en tu Google Tasks 📋" : ""}`;
     }
@@ -740,8 +740,8 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       const start = fromZonedTime(a.eventStart, ARG_TZ);
       if (isNaN(start.getTime())) throw new Error("no entendí la fecha/hora del evento");
       const dur = a.durationMin && a.durationMin > 0 ? a.durationMin : 60;
-      const ok = await createCalendarEvent(userId, { summary: a.title, start, end: new Date(start.getTime() + dur * 60_000) });
-      if (!ok) throw new Error("no pude crear el evento en tu Google Calendar");
+      const r = await createCalendarEvent(userId, { summary: a.title, start, end: new Date(start.getTime() + dur * 60_000) });
+      if (!r.ok) throw new Error(r.error ?? "no pude crear el evento en tu Google Calendar");
       return `📅 Agendado en tu Google Calendar: ${a.title} — ${formatDateFn(toZonedTime(start, ARG_TZ), "dd/MM 'a las' HH:mm")}`;
     }
 
