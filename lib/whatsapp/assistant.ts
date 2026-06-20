@@ -740,23 +740,30 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
 
     case "complete_task": {
       if (!hasFeature("tareas", { isTester: c.isTester })) throw new Error("esa función todavía no está disponible");
-      // Buscar la tarea interna por número [#N] o por título (lo que venga).
-      let t = a.taskRef ? c.tasks[a.taskRef - 1] : undefined;
-      if (!t && a.title) {
-        const q = norm(a.title);
-        t = c.tasks.find((x) => norm(x.title) === q) ?? c.tasks.find((x) => norm(x.title).includes(q));
-      }
-      // Buscar la misma tarea en Google Tasks (por el título de la interna o el pedido).
-      const matchTitle = t?.title ?? a.title ?? "";
-      let g: { id: string; title: string } | undefined;
-      if (hasFeature("google", { isTester: c.isTester }) && c.googleConnected && matchTitle) {
-        const q = norm(matchTitle);
-        g = c.gtasks.find((x) => norm(x.title) === q) ?? c.gtasks.find((x) => norm(x.title).includes(q));
-      }
-      if (!t && !g) throw new Error("no identifiqué la tarea");
-      if (t) await toggleTask(userId, t.id);
-      if (g) await completeGoogleTask(userId, g.id).catch(() => {});
-      return `✅ Marqué como hecha: ${t?.title ?? g?.title ?? matchTitle}`;
+      // Título a buscar: lo que pidió el usuario o el de la tarea referida por [#N].
+      const titleQ = norm(a.title ?? (a.taskRef ? c.tasks[a.taskRef - 1]?.title ?? "" : ""));
+      // Prefiere coincidencia EXACTA; si no hay, usa "contiene". Completa TODAS
+      // las que coincidan (así se limpian duplicados de las pruebas).
+      const matchAll = <T extends { title: string }>(arr: T[]): T[] => {
+        if (!titleQ) return [];
+        const exact = arr.filter((x) => norm(x.title) === titleQ);
+        return exact.length ? exact : arr.filter((x) => norm(x.title).includes(titleQ));
+      };
+
+      let internas = matchAll(c.tasks);
+      if (!internas.length && a.taskRef && c.tasks[a.taskRef - 1]) internas = [c.tasks[a.taskRef - 1]];
+
+      const gMatches =
+        hasFeature("google", { isTester: c.isTester }) && c.googleConnected ? matchAll(c.gtasks) : [];
+
+      if (!internas.length && !gMatches.length) throw new Error("no identifiqué la tarea");
+
+      for (const x of internas) await toggleTask(userId, x.id);
+      for (const g of gMatches) await completeGoogleTask(userId, g.id).catch(() => {});
+
+      const total = internas.length + gMatches.length;
+      const nombre = internas[0]?.title ?? gMatches[0]?.title ?? a.title;
+      return `✅ Marqué como hecha: ${nombre}${total > 1 ? ` (${total} en total)` : ""}`;
     }
 
     case "delete_task": {
