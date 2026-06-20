@@ -30,7 +30,7 @@ import { getGoals, createGoal, addFundsToGoal, type SerializedGoal } from "@/lib
 import { getInvestments, type SerializedInvestment } from "@/lib/db/investments";
 import { getTasks, createTask, toggleTask, deleteTask, type SerializedTask } from "@/lib/db/tasks";
 import { createReminder, getPendingReminders, type SerializedReminder } from "@/lib/db/reminders";
-import { createCalendarEvent, createGoogleTask, getGoogleStatus, listCalendarEvents, listGoogleTasks, deleteCalendarEvent, updateCalendarEvent } from "@/lib/google";
+import { createCalendarEvent, createGoogleTask, getGoogleStatus, listCalendarEvents, listGoogleTasks, deleteCalendarEvent, updateCalendarEvent, completeGoogleTask } from "@/lib/google";
 import { getIsTester } from "@/lib/db/profile";
 import { hasFeature } from "@/lib/feature-flags";
 import { ARG_TZ } from "@/lib/timezone";
@@ -110,7 +110,7 @@ interface FinancialContext {
   dateRef: string; // tabla de los próximos días con su fecha exacta (ARG)
   googleConnected: boolean;
   gcalEvents: { id: string; summary: string; start: string }[];
-  gtasks: { title: string; due: string | null }[];
+  gtasks: { id: string; title: string; due: string | null }[];
 }
 
 function baseUrl(): string {
@@ -743,6 +743,11 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       const t = a.taskRef ? c.tasks[a.taskRef - 1] : undefined;
       if (!t) throw new Error("no identifiqué la tarea");
       await toggleTask(userId, t.id);
+      // Si está en Google Tasks (mismo título), la marcamos hecha también allá.
+      if (hasFeature("google", { isTester: c.isTester }) && c.googleConnected) {
+        const g = c.gtasks.find((x) => norm(x.title) === norm(t.title));
+        if (g) await completeGoogleTask(userId, g.id).catch(() => {});
+      }
       return `✅ Marqué como hecha: ${t.title}`;
     }
 
@@ -867,7 +872,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
   // Si tiene Google conectado, traemos su agenda (eventos + tasks) para poder
   // responder "¿qué tengo el lunes?" y demás consultas de organización.
   let gcalEvents: { id: string; summary: string; start: string }[] = [];
-  let gtasks: { title: string; due: string | null }[] = [];
+  let gtasks: { id: string; title: string; due: string | null }[] = [];
   if (googleConnected && hasFeature("google", { isTester })) {
     [gcalEvents, gtasks] = await Promise.all([
       listCalendarEvents(userId, { daysAhead: 7 }).catch(() => []),

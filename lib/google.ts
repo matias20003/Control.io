@@ -193,7 +193,7 @@ export async function updateCalendarEvent(
 }
 
 /** Tareas pendientes de Google Tasks. */
-export async function listGoogleTasks(userId: string): Promise<{ title: string; due: string | null }[]> {
+export async function listGoogleTasks(userId: string): Promise<{ id: string; title: string; due: string | null }[]> {
   const token = await getAccessToken(userId);
   if (!token) return [];
   const res = await fetch(
@@ -201,8 +201,29 @@ export async function listGoogleTasks(userId: string): Promise<{ title: string; 
     { headers: { Authorization: `Bearer ${token}` } }
   );
   if (!res.ok) return [];
-  const data = (await res.json()) as { items?: { title?: string; due?: string }[] };
-  return (data.items ?? []).map((t) => ({ title: t.title ?? "", due: t.due ?? null })).filter((t) => t.title);
+  const data = (await res.json()) as { items?: { id?: string; title?: string; due?: string }[] };
+  return (data.items ?? [])
+    .filter((t) => t.id && t.title)
+    .map((t) => ({ id: t.id!, title: t.title ?? "", due: t.due ?? null }));
+}
+
+/** Marca una tarea de Google Tasks como completada. */
+export async function completeGoogleTask(userId: string, taskId: string): Promise<GoogleResult> {
+  const token = await getAccessToken(userId);
+  if (!token) return { ok: false, error: "no pude renovar el acceso a Google" };
+  const res = await fetch(
+    `https://tasks.googleapis.com/tasks/v1/lists/@default/tasks/${encodeURIComponent(taskId)}`,
+    {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "completed" }),
+    }
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    return { ok: false, error: `Google ${res.status}: ${body.slice(0, 180)}` };
+  }
+  return { ok: true };
 }
 
 export type GoogleResult = { ok: boolean; error?: string };
