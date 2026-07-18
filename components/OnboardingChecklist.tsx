@@ -66,7 +66,7 @@ export function OnboardingChecklist({ state }: Props) {
       tour: "onb-notifications",
       done: state.hasPushSubscription,
       title: "Activá las notificaciones",
-      body: "Te avisamos de presupuestos, recurrentes y vencimientos.",
+      body: "Te avisamos de presupuestos, gastos fijos y vencimientos.",
       icon: Bell,
       cta: { label: "Activar", href: "/configuracion" },
     },

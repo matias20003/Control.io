@@ -32,10 +32,10 @@ export function AgendaClient({ events }: Props) {
         <CalendarClock size={48} className="text-muted mb-4 opacity-40" />
         <h2 className="text-lg font-bold text-foreground mb-1">Sin eventos próximos</h2>
         <p className="text-sm text-muted max-w-xs">
-          Cuando tengas cuotas, deudas o recurrentes programados aparecerán acá.
+          Cuando tengas cuotas, deudas o gastos fijos programados aparecerán acá.
         </p>
         <div className="flex flex-wrap justify-center gap-2 mt-5">
-          <Link href="/recurrentes"><Button size="sm" variant="secondary"><Repeat2 size={14} className="mr-1.5" />Recurrente</Button></Link>
+          <Link href="/recurrentes"><Button size="sm" variant="secondary"><Repeat2 size={14} className="mr-1.5" />Gasto fijo</Button></Link>
           <Link href="/cuotas"><Button size="sm" variant="secondary"><CreditCard size={14} className="mr-1.5" />Cuota</Button></Link>
           <Link href="/deudas"><Button size="sm" variant="secondary"><HandCoins size={14} className="mr-1.5" />Deuda</Button></Link>
         </div>

@@ -10,7 +10,7 @@ const GROUPS: { label: string; href: string }[][] = [
   [
     { label: "Presupuestos", href: "/presupuestos" },
     { label: "Metas", href: "/metas" },
-    { label: "Recurrentes", href: "/recurrentes" },
+    { label: "Gastos fijos", href: "/recurrentes" },
   ],
   [
     { label: "Reporte", href: "/reporte" },

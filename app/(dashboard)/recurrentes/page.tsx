@@ -6,7 +6,7 @@ import { getCategories } from "@/lib/db/categories";
 import { getAccounts } from "@/lib/db/accounts";
 import { RecurrentesClient } from "./RecurrentesClient";
 
-export const metadata: Metadata = { title: "Recurrentes" };
+export const metadata: Metadata = { title: "Gastos fijos" };
 
 export default async function RecurrentesPage() {
   const supabase = await createClient();

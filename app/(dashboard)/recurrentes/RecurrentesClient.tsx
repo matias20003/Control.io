@@ -88,7 +88,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
       else if (result.success && result.recurrente) {
         setItems((prev) => [result.recurrente!, ...prev]);
         setIsCreateOpen(false);
-        toast.success("Recurrente creado");
+        toast.success("Gasto fijo creado");
       }
     });
   };
@@ -108,7 +108,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
           prev.map((r) => (r.id === editingItem.id ? result.recurrente! : r))
         );
         setEditingItem(null);
-        toast.success("Recurrente actualizado");
+        toast.success("Gasto fijo actualizado");
       }
     });
   };
@@ -270,7 +270,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
               ))}
             </Select>
             <p className="text-[11px] text-muted leading-snug">
-              Si elegís una cuenta, cuando se ejecute el recurrente se va a descontar/sumar al saldo automáticamente.
+              Si elegís una cuenta, cuando se ejecute el gasto fijo se va a descontar/sumar al saldo automáticamente.
             </p>
           </div>
 
@@ -313,7 +313,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
       <SectionTabs />
       {/* Header */}
       <PageHeader
-        title="Recurrentes"
+        title="Gastos fijos"
         subtitle="Subscripciones, alquileres y pagos periódicos automatizados."
         actions={
           <Button size="sm" onClick={() => setIsCreateOpen(true)}>
@@ -328,7 +328,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard label="Gasto mensual estimado" value={formatCurrency(monthlyExpense, "ARS")} icon={TrendingDown} accent="danger" />
           <StatCard label="Ingreso mensual estimado" value={formatCurrency(monthlyIncome, "ARS")} icon={TrendingUp} accent="success" />
-          <StatCard label="Recurrentes activos" value={active.length} hint={inactive.length > 0 ? `${inactive.length} pausado${inactive.length !== 1 ? "s" : ""}` : undefined} icon={RefreshCw} accent="primary" />
+          <StatCard label="Gastos fijos activos" value={active.length} hint={inactive.length > 0 ? `${inactive.length} pausado${inactive.length !== 1 ? "s" : ""}` : undefined} icon={RefreshCw} accent="primary" />
         </div>
       )}
 
@@ -336,12 +336,12 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
       {items.length === 0 && (
         <EmptyState
           icon={RefreshCw}
-          title="Sin gastos recurrentes"
+          title="Sin gastos fijos"
           description="Registrá subscripciones, alquileres y pagos periódicos."
           action={
             <Button onClick={() => setIsCreateOpen(true)}>
               <Plus size={16} className="mr-1.5" />
-              Nuevo recurrente
+              Nuevo gasto fijo
             </Button>
           }
         />
@@ -386,7 +386,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
 
       {/* Create dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent title="Nuevo recurrente">
+        <DialogContent title="Nuevo gasto fijo">
           <RecurringForm
             txType={createType}
             onTypeChange={setCreateType}
@@ -399,7 +399,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
 
       {/* Edit dialog */}
       <Dialog open={!!editingItem} onOpenChange={(o) => { if (!o) setEditingItem(null); }}>
-        <DialogContent title="Editar recurrente">
+        <DialogContent title="Editar gasto fijo">
           {editingItem && (
             <RecurringForm
               key={editingItem.id}

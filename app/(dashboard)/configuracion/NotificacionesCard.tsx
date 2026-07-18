@@ -112,7 +112,7 @@ export function NotificacionesCard() {
         </div>
 
         <p className="text-xs text-muted">
-          Recibí alertas de presupuesto, movimientos recurrentes y vencimientos directamente en tu dispositivo.
+          Recibí alertas de presupuesto, gastos fijos y vencimientos directamente en tu dispositivo.
         </p>
 
         {permStatus === "unsupported" && (

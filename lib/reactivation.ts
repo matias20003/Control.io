@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getResend, FROM } from "@/lib/email/client";
 import { buildReactivationHtml } from "@/lib/email/reactivation";
 import { sendPushToUser } from "@/lib/push/send";
+import { gmailConfigured, sendViaGmail } from "@/lib/email/smtp";
 
 type Candidate = { id: string; email: string; name: string | null; movs: number };
 
@@ -36,26 +37,46 @@ export async function sendReactivationNudges(): Promise<{ sent: number; errors: 
   const appUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://controlio.site";
   const candidates = await getReactivationCandidates();
 
+  // Canal de email: preferimos Gmail SMTP (control.io.oficial@gmail.com) si está
+  // configurado, porque NO depende de verificar el dominio en Resend. Si no,
+  // caemos a Resend (requiere dominio verificado).
+  const useGmail = gmailConfigured();
+  if (!useGmail && !process.env.RESEND_API_KEY) {
+    return {
+      sent: 0,
+      errors: candidates.length,
+      total: candidates.length,
+      lastError: "No hay canal de email configurado: seteá GMAIL_USER + GMAIL_APP_PASSWORD (recomendado) o verificá el dominio en Resend.",
+    };
+  }
+
   let sent = 0;
   let errors = 0;
   let lastError: string | undefined;
 
   for (const p of candidates) {
     const name = p.name || p.email.split("@")[0];
+    const subject = p.dormant
+      ? "Te extrañamos en control.io 👀"
+      : "¿Arrancamos? Cargá tu primer movimiento en control.io 💸";
+    const html = buildReactivationHtml({ name, appUrl, dormant: p.dormant });
     try {
-      // El SDK de Resend NO tira excepción ante errores de API: devuelve
-      // { data, error }. Hay que chequear el error a mano, sino marcaríamos
-      // como enviados emails que en realidad Resend rechazó (dominio sin
-      // verificar, etc.).
-      const { error: sendError } = await getResend().emails.send({
-        from: FROM,
-        to: p.email,
-        subject: p.dormant
-          ? "Te extrañamos en control.io 👀"
-          : "¿Arrancamos? Cargá tu primer movimiento en control.io 💸",
-        html: buildReactivationHtml({ name, appUrl, dormant: p.dormant }),
-      });
-      if (sendError) throw new Error(sendError.message || "Resend rechazó el envío");
+      if (useGmail) {
+        // Gmail SMTP tira excepción ante error → el catch lo cuenta.
+        await sendViaGmail({ to: p.email, subject, html });
+      } else {
+        // El SDK de Resend NO tira excepción ante errores de API: devuelve
+        // { data, error }. Hay que chequear el error a mano, sino marcaríamos
+        // como enviados emails que en realidad Resend rechazó (dominio sin
+        // verificar, etc.).
+        const { error: sendError } = await getResend().emails.send({
+          from: FROM,
+          to: p.email,
+          subject,
+          html,
+        });
+        if (sendError) throw new Error(sendError.message || "Resend rechazó el envío");
+      }
 
       sendPushToUser(p.id, {
         title: p.dormant ? "¡Te extrañamos! 👋" : "¿Arrancamos? 👋",

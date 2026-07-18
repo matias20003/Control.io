@@ -3,8 +3,9 @@
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
-import { MessageCircle, Mail, Clock } from "lucide-react";
+import { MessageCircle, Mail, Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
 import type { AdminAnalytics as Data } from "@/lib/db/admin-stats";
+import type { ResendDomainStatus } from "@/lib/email/domain-status";
 import { ReactivationButton } from "./ReactivationButton";
 
 function shortDate(iso: string) {
@@ -22,8 +23,22 @@ function rel(iso: string | null): string {
   return `hace ${d}d`;
 }
 
-export function AdminAnalytics({ data }: { data: Data }) {
+export function AdminAnalytics({ data, domainStatus, gmailReady }: { data: Data; domainStatus?: ResendDomainStatus; gmailReady?: boolean }) {
   const maxFunnel = data.funnel[0]?.value || 1;
+
+  // Estado de envío de emails (reactivación depende de esto).
+  // Gmail SMTP tiene prioridad: si está configurado, los emails salen por ahí
+  // sin depender de verificar el dominio en Resend.
+  const emailOk = gmailReady || (domainStatus?.state === "found" && domainStatus.verified);
+  const emailWarn: string | null =
+    gmailReady ? null
+    : !domainStatus ? null
+    : domainStatus.state === "no-key" ? "No hay canal de email: seteá GMAIL_USER + GMAIL_APP_PASSWORD en Vercel (recomendado) o verificá el dominio en Resend."
+    : domainStatus.state === "not-found" ? `Sin Gmail configurado y el dominio ${domainStatus.domain} no está en Resend. Seteá GMAIL_USER + GMAIL_APP_PASSWORD en Vercel, o verificá el dominio.`
+    : domainStatus.state === "found" && !domainStatus.verified ? `Sin Gmail configurado y el dominio ${domainStatus.domain} en Resend está SIN verificar. Seteá GMAIL_USER + GMAIL_APP_PASSWORD en Vercel, o verificá el dominio.`
+    : domainStatus.state === "error" ? `No se pudo verificar el estado en Resend: ${domainStatus.message}`
+    : null;
+  const emailChannel = gmailReady ? "Gmail (control.io.oficial)" : "dominio verificado en Resend";
 
   return (
     <div className="space-y-10">
@@ -141,6 +156,22 @@ export function AdminAnalytics({ data }: { data: Data }) {
         <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
           Reactivación de inactivos
         </h2>
+        {emailWarn ? (
+          <div className="rounded-xl border border-danger/40 bg-danger/10 p-3 flex items-start gap-2">
+            <AlertTriangle size={15} className="text-danger shrink-0 mt-0.5" />
+            <p className="text-xs text-danger leading-relaxed">
+              <strong>Los emails de reactivación NO se están enviando.</strong> {emailWarn} Hasta que esto se
+              resuelva, &ldquo;Enviar ahora&rdquo; y el cron diario fallan sin mandar nada.
+            </p>
+          </div>
+        ) : emailOk ? (
+          <div className="rounded-xl border border-success/40 bg-success/10 p-3 flex items-start gap-2">
+            <CheckCircle2 size={15} className="text-success shrink-0 mt-0.5" />
+            <p className="text-xs text-success leading-relaxed">
+              Envío de emails operativo vía <strong>{emailChannel}</strong>. &ldquo;Enviar ahora&rdquo; reactiva a los pendientes.
+            </p>
+          </div>
+        ) : null}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Pendientes */}
           <div className="rounded-xl border border-warning/30 bg-warning/5 p-4 space-y-2">

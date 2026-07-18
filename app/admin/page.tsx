@@ -3,8 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { LogoFull } from "@/components/layout/Logo";
 import { MigrateButton } from "./MigrateButton";
+import { FixDoubleEncryptButton } from "./FixDoubleEncryptButton";
 import { getAdminAnalytics } from "@/lib/db/admin-stats";
 import { AdminAnalytics } from "./AdminAnalytics";
+import { getResendDomainStatus } from "@/lib/email/domain-status";
 
 export const dynamic = "force-dynamic";
 
@@ -207,7 +209,11 @@ export default async function AdminPage() {
     redirect("/dashboard");
   }
 
-  const [s, analytics] = await Promise.all([getStats(), getAdminAnalytics()]);
+  const [s, analytics, domainStatus] = await Promise.all([
+    getStats(),
+    getAdminAnalytics(),
+    getResendDomainStatus(),
+  ]);
   const feedback = await prisma.feedback
     .findMany({ orderBy: { createdAt: "desc" }, take: 50 })
     .catch(() => []);
@@ -241,7 +247,7 @@ export default async function AdminPage() {
         </div>
 
         {/* Analítica avanzada: evolución, embudo, conectados, reactivación */}
-        <AdminAnalytics data={analytics} />
+        <AdminAnalytics data={analytics} domainStatus={domainStatus} gmailReady={!!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)} />
 
         {/* Feedback de testers — lo primero del beta */}
         <section className="space-y-3">
@@ -386,7 +392,7 @@ export default async function AdminPage() {
             <Tile label="Metas"                value={s.entities.goals.toLocaleString("es-AR")} />
             <Tile label="Inversiones"          value={s.entities.investments.toLocaleString("es-AR")} />
             <Tile label="Deudas"               value={s.entities.debts.toLocaleString("es-AR")} />
-            <Tile label="Recurrentes activos"  value={s.entities.recurring.toLocaleString("es-AR")} />
+            <Tile label="Gastos fijos activos"  value={s.entities.recurring.toLocaleString("es-AR")} />
           </div>
         </section>
 
@@ -404,6 +410,16 @@ export default async function AdminPage() {
               </p>
             </div>
             <MigrateButton />
+          </div>
+          <div className="rounded-xl border border-border bg-surface p-5 flex items-start justify-between gap-6">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-foreground">Reparar gastos fijos doble-encriptados</p>
+              <p className="text-xs text-muted max-w-md">
+                Corrige los movimientos generados por el cron de gastos fijos que quedaron
+                doble-encriptados y mostraban «enc:…» en la lista. Seguro ejecutar múltiples veces.
+              </p>
+            </div>
+            <FixDoubleEncryptButton />
           </div>
         </section>
 

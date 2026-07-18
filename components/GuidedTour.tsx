@@ -69,7 +69,7 @@ export function GuidedTour({ enabled, userName }: { enabled: boolean; userName?:
     {
       selector: '[data-tour="onb-notifications"]',
       title: "Paso 5 · Activá los avisos",
-      body: "Te avisamos de vencimientos, presupuestos y recurrentes para que no se te pase nada.",
+      body: "Te avisamos de vencimientos, presupuestos y gastos fijos para que no se te pase nada.",
     },
     {
       title: "¡Eso es todo! 🎉",
