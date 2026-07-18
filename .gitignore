@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# MCP local config (puede contener tokens). El ejemplo vive en .claude/example.mcp.json
+.mcp.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

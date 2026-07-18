@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ArrowUpDown, Wallet,
-  MoreHorizontal, X, BarChart2, CreditCard, Target, HandCoins, Settings, CircleDollarSign, Users, CalendarCheck,
+  MoreHorizontal, X, BarChart2, CreditCard, Target, HandCoins, Settings, CircleDollarSign, Users, CalendarCheck, Newspaper,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +23,7 @@ const rightItems: NavItem[] = [
 
 const moreItems: NavItem[] = [
   { href: "/calendario",   icon: CalendarCheck, label: "Organización", match: ["/tareas", "/calendario"] },
+  { href: "/newsletter",   icon: Newspaper,  label: "Newsletter" },
   { href: "/grupos",       icon: Users,      label: "Grupos" },
   { href: "/deudas",       icon: HandCoins,  label: "Deudas" },
   { href: "/cuotas",       icon: CreditCard, label: "Cuotas" },

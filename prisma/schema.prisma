@@ -116,6 +116,8 @@ model Profile {
   gruposMiembro         MiembroGrupo[]        @relation("GruposMiembro")
   tasks                 Task[]
   reminders             Reminder[]
+  newsletterConfig      NewsletterConfig?
+  newsletterEditions    NewsletterEdition[]
 
   @@map("profiles")
 }
@@ -594,4 +596,37 @@ model UserActiveDay {
 
   @@id([userId, day])
   @@map("user_active_days")
+}
+
+// ─────────────────────────────────────────────
+// NEWSLETTER (noticias personalizadas diarias)
+// ─────────────────────────────────────────────
+
+model NewsletterConfig {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topics    String[] // temas de interés del usuario
+  language  String   @default("es")
+  country   String   @default("ar")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("newsletter_configs")
+}
+
+model NewsletterEdition {
+  id        String   @id @default(cuid())
+  userId    String
+  user      Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime // día de la edición (medianoche local)
+  summary   String   // análisis general del día (texto plano)
+  articles  Json     // [{ title, source, url, topic, summary, publishedAt }]
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("newsletter_editions")
 }
