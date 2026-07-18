@@ -26,7 +26,7 @@ const navItems = [
   { href: "/cotizaciones",  icon: CircleDollarSign, label: "Cotizaciones" },
 ];
 
-export function Sidebar() {
+export function Sidebar({ newsletterUnread = false }: { newsletterUnread?: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -60,6 +60,12 @@ export function Sidebar() {
                 className="shrink-0"
               />
               <span className="truncate">{item.label}</span>
+              {item.href === "/newsletter" && newsletterUnread && !isActive && (
+                <span
+                  className="ml-auto w-2 h-2 rounded-full bg-primary shrink-0"
+                  title="Tu newsletter de hoy está listo"
+                />
+              )}
               {isActive && (
                 <span className="ml-auto w-1 h-1 rounded-full bg-primary shrink-0" />
               )}

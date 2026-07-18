@@ -2,12 +2,11 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { differenceInDays, isAfter, isBefore } from "date-fns";
 import { sendPushToUser } from "@/lib/push/send";
-import { encrypt } from "@/lib/crypto";
+import { encrypt, decrypt } from "@/lib/crypto";
 import { startOfTodayArg } from "@/lib/timezone";
 import { snapshotConversion } from "@/lib/exchange";
 import { sendReactivationNudges } from "@/lib/reactivation";
 import { sendDueReminders } from "@/lib/db/due-reminders";
-import { generateAllEditions } from "@/lib/services/newsletter";
 
 // Vercel Cron: diariamente a las 11:00 UTC (08:00 ARG).
 // Consolida recurrentes + reactivación (límite de 2 crons en Vercel Hobby).
@@ -112,6 +111,11 @@ export async function GET(req: NextRequest) {
       const amountNum = parseFloat(String(r.amount));
       const { amountARS, exchangeRate } = await snapshotConversion(amountNum, r.currency);
 
+      // r.description ya viene encriptado desde la tabla de recurrentes.
+      // Lo desencriptamos para reutilizar el mismo nombre que puso el usuario
+      // (evita el doble-encriptado que dejaba "enc:..." visible en la lista).
+      const plainDescription = decrypt(r.description) ?? r.description;
+
       // Tx + actualización de saldo + lastExecuted, todo atómico.
       const ops: any[] = [
         prisma.transaction.create({
@@ -122,7 +126,7 @@ export async function GET(req: NextRequest) {
             currency: r.currency,
             amountARS,
             exchangeRate,
-            description: encrypt(r.description),
+            description: encrypt(plainDescription),
             date: today,
             categoryId: safeCategoryId,
             accountId: safeAccountId,
@@ -148,7 +152,7 @@ export async function GET(req: NextRequest) {
       // Enviar push notification
       await sendPushToUser(r.userId, {
         title: "Movimiento recurrente registrado",
-        body: `${r.type === "INCOME" ? "💚" : "🔴"} ${r.description} — ${new Intl.NumberFormat("es-AR", { style: "currency", currency: r.currency, minimumFractionDigits: 0 }).format(parseFloat(String(r.amount)))}`,
+        body: `${r.type === "INCOME" ? "💚" : "🔴"} ${plainDescription} — ${new Intl.NumberFormat("es-AR", { style: "currency", currency: r.currency, minimumFractionDigits: 0 }).format(parseFloat(String(r.amount)))}`,
         url: "/movimientos",
       }).catch(() => {});
 
@@ -164,14 +168,8 @@ export async function GET(req: NextRequest) {
   // Recordatorios de vencimientos (cuotas + deudas que vencen hoy/mañana).
   const dues = await sendDueReminders().catch(() => ({ users: 0 }));
 
-  // Newsletter diario de noticias (consolidado acá por el límite de 2 crons
-  // en Vercel Hobby). Best-effort: nunca frena al resto del cron.
-  const newsletter = await generateAllEditions().catch(() => ({
-    total: 0,
-    generated: 0,
-    aiUsed: 0,
-    errors: 0,
-  }));
+  // El newsletter ya NO se genera acá: pasó a un cron horario propio
+  // (/api/cron/newsletter) para respetar el `sendHour` configurable por usuario.
 
-  return Response.json({ ok: true, executed, skipped, total: recurrentes.length, reactivation, dues, newsletter });
+  return Response.json({ ok: true, executed, skipped, total: recurrentes.length, reactivation, dues });
 }

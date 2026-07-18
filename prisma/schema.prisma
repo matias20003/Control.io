@@ -606,12 +606,14 @@ model NewsletterConfig {
   id        String   @id @default(cuid())
   userId    String   @unique
   user      Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  topics    String[] // temas de interés del usuario
-  language  String   @default("es")
-  country   String   @default("ar")
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  topics         String[] // temas de interés del usuario
+  priorityTopics String[] // subconjunto de topics que la IA pondera primero
+  language       String   @default("es")
+  country        String   @default("ar")
+  isActive       Boolean  @default(true)
+  sendHour       Int      @default(8) // hora ARG (0–23) de la generación automática diaria
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("newsletter_configs")
 }

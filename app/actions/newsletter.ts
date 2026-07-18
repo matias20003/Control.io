@@ -12,16 +12,20 @@ import { generateEditionForUser } from "@/lib/services/newsletter";
 
 const configSchema = z.object({
   topics: z.array(z.string().min(1).max(80)).max(12),
+  priorityTopics: z.array(z.string().min(1).max(80)).max(12).optional(),
   language: z.string().min(2).max(5).optional(),
   country: z.string().min(2).max(5).optional(),
   isActive: z.boolean().optional(),
+  sendHour: z.number().int().min(0).max(23).optional(),
 });
 
 export async function saveNewsletterConfigAction(input: {
   topics: string[];
+  priorityTopics?: string[];
   language?: string;
   country?: string;
   isActive?: boolean;
+  sendHour?: number;
 }) {
   const supabase = await createClient();
   const {
@@ -73,6 +77,7 @@ export async function generateNewsletterNowAction() {
   try {
     const result = await generateEditionForUser(user.id, {
       topics: config.topics,
+      priorityTopics: config.priorityTopics,
       language: config.language,
       country: config.country,
     });

@@ -1,10 +1,13 @@
 import { NextRequest } from "next/server";
-import { generateAllEditions } from "@/lib/services/newsletter";
+import { generateEditionsForHour } from "@/lib/services/newsletter";
+import { nowArgParts } from "@/lib/timezone";
 
-// Endpoint de generación del newsletter para todos los usuarios activos.
-// NO está registrado como cron en vercel.json (Vercel Hobby permite solo 2):
-// el disparo diario se consolida dentro de /api/cron/recurring. Este endpoint
-// queda para dispararlo manualmente o desde un scheduler externo.
+// Generación horaria del newsletter. NO está en vercel.json (Vercel Hobby
+// permite solo 2 crons y ya están usados): se dispara con un pinger externo
+// gratuito (ej. cron-job.org) apuntando acá CADA HORA con el header
+//   Authorization: Bearer <CRON_SECRET>
+// En cada corrida genera SOLO para los usuarios cuyo `sendHour` (hora ARG)
+// coincide con la hora actual, y les avisa por push + WhatsApp.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -22,6 +25,14 @@ export async function GET(req: NextRequest) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await generateAllEditions();
-  return Response.json({ ok: true, ...result });
+  // Permite forzar una hora puntual con ?hour=8 (útil para pruebas manuales).
+  const hourParam = req.nextUrl.searchParams.get("hour");
+  const parsed = hourParam != null ? parseInt(hourParam, 10) : NaN;
+  const hour =
+    Number.isInteger(parsed) && parsed >= 0 && parsed <= 23
+      ? parsed
+      : nowArgParts().hour;
+
+  const result = await generateEditionsForHour(hour);
+  return Response.json({ ok: true, hour, ...result });
 }

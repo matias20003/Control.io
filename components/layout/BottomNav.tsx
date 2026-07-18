@@ -32,7 +32,7 @@ const moreItems: NavItem[] = [
   { href: "/configuracion",icon: Settings,   label: "Configuración" },
 ];
 
-export function BottomNav() {
+export function BottomNav({ newsletterUnread = false }: { newsletterUnread?: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   // Portalizamos el nav directo a document.body. Si algún ancestor del
@@ -110,7 +110,12 @@ export function BottomNav() {
                           : "border-border bg-surface-2/40 text-muted hover:text-foreground hover:bg-surface-2"
                       )}
                     >
-                      <item.icon size={24} strokeWidth={isActive ? 2.2 : 1.7} />
+                      <div className="relative">
+                        <item.icon size={24} strokeWidth={isActive ? 2.2 : 1.7} />
+                        {item.href === "/newsletter" && newsletterUnread && (
+                          <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-surface" />
+                        )}
+                      </div>
                       <span className="text-sm font-medium text-center leading-tight">
                         {item.label}
                       </span>
@@ -220,7 +225,12 @@ export function BottomNav() {
               isMoreActive || open ? "text-primary" : "text-muted"
             )}
           >
-            <MoreHorizontal size={20} strokeWidth={isMoreActive || open ? 2.2 : 1.7} />
+            <div className="relative">
+              <MoreHorizontal size={20} strokeWidth={isMoreActive || open ? 2.2 : 1.7} />
+              {newsletterUnread && !open && (
+                <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-surface" />
+              )}
+            </div>
             <span className="text-xs font-medium">Más</span>
           </button>
 

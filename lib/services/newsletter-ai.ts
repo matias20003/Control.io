@@ -11,6 +11,7 @@ export type AnalyzedArticle = {
   publishedAt: string | null;
   summary: string; // resumen de 1 línea
   highlight: boolean; // si es una de las sobresalientes del día
+  priority: boolean; // el tema es prioritario para el usuario
 };
 
 export type NewsletterAnalysis = {
@@ -42,12 +43,14 @@ function stripJson(text: string): string {
   return t;
 }
 
-/** Fallback sin IA: agrupa por tema, ordena por fecha, destaca lo más nuevo. */
+/** Fallback sin IA: prioridad primero, luego por fecha; destaca lo más nuevo. */
 function heuristicAnalysis(
   topics: string[],
   articles: RawArticle[]
 ): NewsletterAnalysis {
   const sorted = [...articles].sort((a, b) => {
+    // Los temas prioritarios van primero.
+    if (a.priority !== b.priority) return a.priority ? -1 : 1;
     const ta = a.publishedAt ? Date.parse(a.publishedAt) : 0;
     const tb = b.publishedAt ? Date.parse(b.publishedAt) : 0;
     return tb - ta;
@@ -61,6 +64,7 @@ function heuristicAnalysis(
     publishedAt: a.publishedAt,
     summary: a.snippet || "",
     highlight: i < Math.min(5, sorted.length),
+    priority: a.priority,
   }));
 
   const summary =
@@ -73,7 +77,8 @@ function heuristicAnalysis(
 
 export async function analyzeNews(
   topics: string[],
-  articles: RawArticle[]
+  articles: RawArticle[],
+  priorityTopics: string[] = []
 ): Promise<NewsletterAnalysis> {
   const apiKey = process.env.OPENROUTER_API_KEY;
 
@@ -87,14 +92,20 @@ export async function analyzeNews(
     title: a.title,
     source: a.source,
     topic: a.topic,
+    priority: a.priority,
     snippet: a.snippet,
     publishedAt: a.publishedAt,
   }));
 
-  const system = `Sos el editor de un newsletter diario de noticias personalizado. El usuario sigue estos temas: ${topics.join(", ")}.
+  const priorityLine =
+    priorityTopics.length > 0
+      ? `\nEl usuario marcó como PRIORITARIOS estos temas: ${priorityTopics.join(", ")}. Las noticias con "priority": true pertenecen a esos temas: dales preferencia clara al elegir lo sobresaliente del día y mencionálas primero en el análisis general.`
+      : "";
+
+  const system = `Sos el editor de un newsletter diario de noticias personalizado. El usuario sigue estos temas: ${topics.join(", ")}.${priorityLine}
 Recibís una lista de noticias del día (con id). Tu tarea:
-1. Escribí un "summary" general del día en español rioplatense neutro: 2 a 4 frases que capten lo más importante para alguien interesado en esos temas. Claro, sin sensacionalismo.
-2. Para cada noticia relevante devolvé su id, un "summary" de UNA sola línea (qué pasó, para qué sirve), y "highlight": true si es de lo más sobresaliente del día (máximo 6 en true).
+1. Escribí un "summary" general del día en español rioplatense neutro: 2 a 4 frases que capten lo más importante para alguien interesado en esos temas, empezando por lo prioritario. Claro, sin sensacionalismo.
+2. Para cada noticia relevante devolvé su id, un "summary" de UNA sola línea (qué pasó, para qué sirve), y "highlight": true si es de lo más sobresaliente del día (máximo 6 en true). Priorizá las noticias de temas prioritarios para los highlight.
 3. Descartá ruido, duplicados o noticias irrelevantes: no las incluyas.
 Respondé SOLO con JSON válido, sin texto extra, con esta forma exacta:
 {"summary":"...","items":[{"id":0,"summary":"...","highlight":true}]}`;
@@ -150,12 +161,14 @@ Respondé SOLO con JSON válido, sin texto extra, con esta forma exacta:
           publishedAt: a.publishedAt,
           summary: it.summary?.trim() || a.snippet || "",
           highlight: !!it.highlight,
+          priority: a.priority,
         });
       }
 
-      // orden: destacadas primero, luego por fecha
+      // orden: destacadas primero, dentro de cada grupo las prioritarias, luego por fecha
       analyzed.sort((a, b) => {
         if (a.highlight !== b.highlight) return a.highlight ? -1 : 1;
+        if (a.priority !== b.priority) return a.priority ? -1 : 1;
         const ta = a.publishedAt ? Date.parse(a.publishedAt) : 0;
         const tb = b.publishedAt ? Date.parse(b.publishedAt) : 0;
         return tb - ta;

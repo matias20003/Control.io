@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   Newspaper,
@@ -12,16 +12,20 @@ import {
   Settings2,
   Star,
   ChevronDown,
+  Clock,
+  Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty-state";
-import { formatDate } from "@/lib/utils";
+import { formatDateLong } from "@/lib/utils";
 import {
   saveNewsletterConfigAction,
   generateNewsletterNowAction,
+  markNewsletterReadAction,
 } from "@/app/actions/newsletter";
 import type { SerializedConfig, SerializedEdition } from "@/lib/db/newsletter";
 import type { AnalyzedArticle } from "@/lib/services/newsletter-ai";
@@ -31,11 +35,30 @@ interface Props {
   initialEditions: SerializedEdition[];
 }
 
+function timeAgo(iso: string | null): string {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (isNaN(t)) return "";
+  const mins = Math.floor((Date.now() - t) / 60000);
+  if (mins < 1) return "recién";
+  if (mins < 60) return `hace ${mins} min`;
+  const h = Math.floor(mins / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  return `hace ${d} d`;
+}
+
 export function NewsletterClient({ initialConfig, initialEditions }: Props) {
   const [config, setConfig] = useState<SerializedConfig>(initialConfig);
   const [editions, setEditions] = useState<SerializedEdition[]>(initialEditions);
+
+  // Borrador editable (se compara con `config` para saber si hay cambios).
   const [topics, setTopics] = useState<string[]>(initialConfig.topics);
+  const [priority, setPriority] = useState<string[]>(initialConfig.priorityTopics);
+  const [isActive, setIsActive] = useState<boolean>(initialConfig.isActive);
+  const [sendHour, setSendHour] = useState<number>(initialConfig.sendHour);
   const [topicInput, setTopicInput] = useState("");
+
   const [showConfig, setShowConfig] = useState(initialConfig.topics.length === 0);
   const [isSaving, startSave] = useTransition();
   const [isGenerating, startGenerate] = useTransition();
@@ -44,9 +67,23 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
   const today = editions[0] ?? null;
   const history = editions.slice(1);
 
+  // Marcar la edición de hoy como leída al entrar (apaga el badge del menú).
+  const markedRef = useRef(false);
+  useEffect(() => {
+    if (markedRef.current) return;
+    if (today && !today.isRead) {
+      markedRef.current = true;
+      markNewsletterReadAction(today.id).catch(() => {});
+    }
+  }, [today]);
+
   const dirty = useMemo(
-    () => JSON.stringify(topics) !== JSON.stringify(config.topics),
-    [topics, config.topics]
+    () =>
+      JSON.stringify(topics) !== JSON.stringify(config.topics) ||
+      JSON.stringify(priority) !== JSON.stringify(config.priorityTopics) ||
+      isActive !== config.isActive ||
+      sendHour !== config.sendHour,
+    [topics, priority, isActive, sendHour, config]
   );
 
   const addTopic = () => {
@@ -64,21 +101,34 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
     setTopicInput("");
   };
 
-  const removeTopic = (t: string) =>
+  const removeTopic = (t: string) => {
     setTopics((prev) => prev.filter((x) => x !== t));
+    setPriority((prev) => prev.filter((x) => x !== t));
+  };
+
+  const togglePriority = (t: string) =>
+    setPriority((prev) =>
+      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
+    );
 
   const saveConfig = () => {
     startSave(async () => {
       const res = await saveNewsletterConfigAction({
         topics,
+        priorityTopics: priority,
         language: config.language,
         country: config.country,
-        isActive: config.isActive,
+        isActive,
+        sendHour,
       });
       if (res.error) toast.error(res.error);
       else if (res.success && res.config) {
         setConfig(res.config);
-        toast.success("Temas guardados");
+        setTopics(res.config.topics);
+        setPriority(res.config.priorityTopics);
+        setIsActive(res.config.isActive);
+        setSendHour(res.config.sendHour);
+        toast.success("Preferencias guardadas");
       }
     });
   };
@@ -90,16 +140,17 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
       return;
     }
     if (dirty) {
-      toast.error("Guardá los temas antes de generar");
+      toast.error("Guardá tus cambios antes de generar");
       return;
     }
     startGenerate(async () => {
       const res = await generateNewsletterNowAction();
       if (res.error) toast.error(res.error);
       else if (res.success && res.edition) {
+        markedRef.current = true; // ya la estamos viendo
         setEditions((prev) => {
           const rest = prev.filter((e) => e.id !== res.edition!.id);
-          return [res.edition!, ...rest];
+          return [{ ...res.edition!, isRead: true }, ...rest];
         });
         toast.success(
           res.usedAI
@@ -113,49 +164,51 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
   return (
     <div className="max-w-3xl mx-auto pb-24 px-4 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between pt-2">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-primary/15">
+      <div className="flex items-start justify-between gap-3 pt-2">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2.5 rounded-xl bg-primary/15 shrink-0">
             <Newspaper size={22} className="text-primary" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-foreground">Newsletter</h1>
-            <p className="text-xs text-muted">
-              Tus noticias del día, filtradas por tus temas.
+            <p className="text-xs text-muted leading-snug">
+              Tu edición diaria de noticias, filtrada por tus temas.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="secondary"
             size="icon"
             onClick={() => setShowConfig((v) => !v)}
-            title="Configurar temas"
+            title="Configurar temas y horario"
           >
             <Settings2 size={18} />
           </Button>
           <Button onClick={generateNow} disabled={isGenerating}>
-            <RefreshCw
-              size={16}
-              className={isGenerating ? "animate-spin" : ""}
-            />
-            {isGenerating ? "Generando…" : "Generar ahora"}
+            <RefreshCw size={16} className={isGenerating ? "animate-spin" : ""} />
+            <span className="hidden sm:inline">
+              {isGenerating ? "Generando…" : "Generar ahora"}
+            </span>
           </Button>
         </div>
       </div>
 
-      {/* Config de temas */}
+      {/* Config de temas + preferencias */}
       {showConfig && (
         <Card>
-          <CardContent className="pt-5 space-y-4">
+          <CardContent className="pt-5 space-y-5">
+            {/* Temas */}
             <div>
               <p className="text-sm font-semibold text-foreground mb-1">
                 Temas que te interesan
               </p>
-              <p className="text-xs text-muted mb-3">
-                Ej: “inteligencia artificial”, “dólar Argentina”, “Boca Juniors”,
-                “energías renovables”. Cada día armamos tu edición con lo
-                sobresaliente de estos temas.
+              <p className="text-xs text-muted mb-3 leading-relaxed">
+                Ej: “inteligencia artificial”, “dólar Argentina”, “Boca Juniors”.
+                Tocá la{" "}
+                <Star size={11} className="inline -mt-0.5 text-warning" /> de un
+                tema para marcarlo <span className="text-warning">prioritario</span>:
+                la IA lo pondera primero al elegir lo sobresaliente del día.
               </p>
               <div className="flex gap-2">
                 <Input
@@ -175,40 +228,93 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
               </div>
               {topics.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-3">
-                  {topics.map((t) => (
-                    <span
-                      key={t}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 pl-3 pr-1.5 py-1 text-sm text-foreground"
-                    >
-                      {t}
-                      <button
-                        onClick={() => removeTopic(t)}
-                        className="rounded-full p-0.5 hover:bg-surface-3 text-muted hover:text-foreground"
-                        aria-label={`Quitar ${t}`}
+                  {topics.map((t) => {
+                    const isPrio = priority.includes(t);
+                    return (
+                      <span
+                        key={t}
+                        className={`inline-flex items-center gap-1 rounded-full pl-1 pr-1.5 py-1 text-sm border transition-colors ${
+                          isPrio
+                            ? "bg-warning/10 border-warning/30 text-foreground"
+                            : "bg-surface-2 border-transparent text-foreground"
+                        }`}
                       >
-                        <X size={14} />
-                      </button>
-                    </span>
-                  ))}
+                        <button
+                          onClick={() => togglePriority(t)}
+                          className="rounded-full p-1 hover:bg-surface-3 transition-colors"
+                          aria-label={
+                            isPrio ? `Quitar prioridad a ${t}` : `Priorizar ${t}`
+                          }
+                          title={isPrio ? "Prioritario" : "Marcar prioritario"}
+                        >
+                          <Star
+                            size={13}
+                            className={
+                              isPrio
+                                ? "text-warning fill-warning"
+                                : "text-muted"
+                            }
+                          />
+                        </button>
+                        <span className="px-0.5">{t}</span>
+                        <button
+                          onClick={() => removeTopic(t)}
+                          className="rounded-full p-0.5 hover:bg-surface-3 text-muted hover:text-foreground transition-colors"
+                          aria-label={`Quitar ${t}`}
+                        >
+                          <X size={14} />
+                        </button>
+                      </span>
+                    );
+                  })}
                 </div>
               )}
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-              <input
-                type="checkbox"
-                checked={config.isActive}
-                onChange={(e) =>
-                  setConfig((c) => ({ ...c, isActive: e.target.checked }))
-                }
-                className="h-4 w-4 accent-primary"
-              />
-              Generar mi edición automáticamente todos los días
-            </label>
+            {/* Automático + horario */}
+            <div className="rounded-xl border border-border bg-surface-2/40 p-3.5 space-y-3">
+              <label className="flex items-start gap-2.5 text-sm text-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                  className="h-4 w-4 mt-0.5 accent-primary shrink-0"
+                />
+                <span className="leading-snug">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <Bell size={13} className="text-primary" />
+                    Generar mi edición automáticamente todos los días
+                  </span>
+                  <span className="text-xs text-muted">
+                    Te avisamos por notificación (y WhatsApp si lo tenés vinculado)
+                    cuando esté lista.
+                  </span>
+                </span>
+              </label>
+
+              {isActive && (
+                <div className="flex items-center gap-2.5 pl-6">
+                  <Clock size={14} className="text-muted shrink-0" />
+                  <span className="text-sm text-foreground">A las</span>
+                  <Select
+                    value={String(sendHour)}
+                    onChange={(e) => setSendHour(Number(e.target.value))}
+                    className="h-9 w-28"
+                  >
+                    {Array.from({ length: 24 }, (_, h) => (
+                      <option key={h} value={h}>
+                        {String(h).padStart(2, "0")}:00
+                      </option>
+                    ))}
+                  </Select>
+                  <span className="text-xs text-muted">(hora Argentina)</span>
+                </div>
+              )}
+            </div>
 
             <div className="flex justify-end">
-              <Button onClick={saveConfig} disabled={isSaving}>
-                {isSaving ? "Guardando…" : "Guardar temas"}
+              <Button onClick={saveConfig} disabled={isSaving || !dirty}>
+                {isSaving ? "Guardando…" : "Guardar preferencias"}
               </Button>
             </div>
           </CardContent>
@@ -217,10 +323,7 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
 
       {/* Edición de hoy */}
       {today ? (
-        <EditionView
-          edition={today}
-          isToday
-        />
+        <EditionView edition={today} isToday />
       ) : (
         <EmptyState
           icon={Sparkles}
@@ -232,7 +335,9 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
           }
           action={
             <Button
-              onClick={topics.length === 0 ? () => setShowConfig(true) : generateNow}
+              onClick={
+                topics.length === 0 ? () => setShowConfig(true) : generateNow
+              }
               disabled={isGenerating}
             >
               {topics.length === 0 ? "Configurar temas" : "Generar ahora"}
@@ -253,15 +358,15 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
                 className="w-full flex items-center justify-between p-4 text-left"
                 onClick={() => setExpanded((x) => (x === ed.id ? null : ed.id))}
               >
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-semibold text-foreground capitalize">
-                    {formatDate(ed.date)}
+                    {formatDateLong(ed.date)}
                   </p>
                   <p className="text-xs text-muted line-clamp-1">{ed.summary}</p>
                 </div>
                 <ChevronDown
                   size={18}
-                  className={`text-muted transition-transform ${
+                  className={`text-muted shrink-0 ml-3 transition-transform ${
                     expanded === ed.id ? "rotate-180" : ""
                   }`}
                 />
@@ -288,15 +393,21 @@ function EditionView({
 }) {
   const highlights = edition.articles.filter((a) => a.highlight);
   const rest = edition.articles.filter((a) => !a.highlight);
+  const [lead, ...moreHighlights] = highlights;
 
   return (
     <div className="space-y-4">
       {isToday && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-semibold text-foreground capitalize">
-            {formatDate(edition.date)}
+            {formatDateLong(edition.date)}
           </span>
           <Badge variant="success">Hoy</Badge>
+          {edition.articles.length > 0 && (
+            <span className="text-xs text-muted">
+              · {edition.articles.length} noticias
+            </span>
+          )}
         </div>
       )}
 
@@ -309,7 +420,7 @@ function EditionView({
               Análisis del día
             </span>
           </div>
-          <p className="text-sm text-foreground leading-relaxed">
+          <p className="text-[15px] text-foreground leading-relaxed">
             {edition.summary}
           </p>
         </CardContent>
@@ -321,17 +432,20 @@ function EditionView({
         </p>
       )}
 
+      {/* Lo sobresaliente */}
       {highlights.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <p className="text-xs font-semibold text-muted uppercase tracking-[0.08em] px-1 flex items-center gap-1.5">
             <Star size={12} className="text-warning" /> Lo sobresaliente
           </p>
-          {highlights.map((a, i) => (
-            <ArticleCard key={i} article={a} highlight />
+          {lead && <ArticleCard article={lead} size="lead" />}
+          {moreHighlights.map((a, i) => (
+            <ArticleCard key={i} article={a} size="highlight" />
           ))}
         </div>
       )}
 
+      {/* Más noticias */}
       {rest.length > 0 && (
         <div className="space-y-2">
           {highlights.length > 0 && (
@@ -340,7 +454,7 @@ function EditionView({
             </p>
           )}
           {rest.map((a, i) => (
-            <ArticleCard key={i} article={a} />
+            <ArticleCard key={i} article={a} size="compact" />
           ))}
         </div>
       )}
@@ -350,38 +464,59 @@ function EditionView({
 
 function ArticleCard({
   article,
-  highlight = false,
+  size = "compact",
 }: {
   article: AnalyzedArticle;
-  highlight?: boolean;
+  size?: "lead" | "highlight" | "compact";
 }) {
+  const isLead = size === "lead";
+  const isHighlight = size === "highlight" || isLead;
+  const ago = timeAgo(article.publishedAt);
+
   return (
     <a
       href={article.url}
       target="_blank"
       rel="noopener noreferrer"
-      className={`block rounded-xl border p-4 transition-colors hover:border-primary/40 ${
-        highlight
+      className={`group block rounded-xl border transition-colors hover:border-primary/40 ${
+        isHighlight
           ? "border-primary/25 bg-primary/[0.04]"
           : "border-border bg-surface"
-      }`}
+      } ${isLead ? "p-5" : "p-4"}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground leading-snug">
+          {article.priority && (
+            <span className="inline-flex items-center gap-1 mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
+              <Star size={10} className="fill-warning" /> Prioritario
+            </span>
+          )}
+          <p
+            className={`font-semibold text-foreground leading-snug group-hover:text-primary transition-colors ${
+              isLead ? "text-lg" : "text-sm"
+            }`}
+          >
             {article.title}
           </p>
           {article.summary && (
-            <p className="text-xs text-muted mt-1 leading-relaxed line-clamp-2">
+            <p
+              className={`text-muted mt-1 leading-relaxed ${
+                isLead ? "text-sm line-clamp-3" : "text-xs line-clamp-2"
+              }`}
+            >
               {article.summary}
             </p>
           )}
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
             <Badge variant="secondary">{article.source}</Badge>
             <span className="text-[11px] text-muted">· {article.topic}</span>
+            {ago && <span className="text-[11px] text-muted">· {ago}</span>}
           </div>
         </div>
-        <ExternalLink size={15} className="text-muted shrink-0 mt-0.5" />
+        <ExternalLink
+          size={15}
+          className="text-muted group-hover:text-primary shrink-0 mt-0.5 transition-colors"
+        />
       </div>
     </a>
   );

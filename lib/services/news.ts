@@ -8,6 +8,7 @@ export type RawArticle = {
   topic: string;
   publishedAt: string | null; // ISO
   snippet: string;
+  priority: boolean; // el tema fue marcado como prioritario por el usuario
 };
 
 function decodeEntities(str: string): string {
@@ -43,11 +44,17 @@ function pick(block: string, tag: keyof typeof TAG_RE): string {
  */
 export async function fetchNewsForTopic(
   topic: string,
-  opts: { language?: string; country?: string; limit?: number } = {}
+  opts: {
+    language?: string;
+    country?: string;
+    limit?: number;
+    priority?: boolean;
+  } = {}
 ): Promise<RawArticle[]> {
   const lang = (opts.language ?? "es").toLowerCase();
   const country = (opts.country ?? "ar").toUpperCase();
   const limit = opts.limit ?? 8;
+  const priority = opts.priority ?? false;
 
   // Google News usa hl=es-419 para español LATAM.
   const hl = lang === "es" ? "es-419" : lang;
@@ -100,6 +107,7 @@ export async function fetchNewsForTopic(
         topic,
         publishedAt,
         snippet,
+        priority,
       });
     }
 
@@ -111,19 +119,34 @@ export async function fetchNewsForTopic(
 
 /**
  * Trae noticias para varios temas y las devuelve deduplicadas por título.
+ * Los temas prioritarios (`priorityTopics`) traen más noticias por tema y
+ * quedan marcados con `priority: true` para que la IA los pondere primero.
  */
 export async function fetchNewsForTopics(
   topics: string[],
-  opts: { language?: string; country?: string; perTopic?: number } = {}
+  opts: {
+    language?: string;
+    country?: string;
+    perTopic?: number;
+    priorityTopics?: string[];
+    perPriorityTopic?: number;
+  } = {}
 ): Promise<RawArticle[]> {
+  const prioritySet = new Set(
+    (opts.priorityTopics ?? []).map((t) => t.toLowerCase())
+  );
   const results = await Promise.all(
-    topics.map((t) =>
-      fetchNewsForTopic(t, {
+    topics.map((t) => {
+      const isPriority = prioritySet.has(t.toLowerCase());
+      return fetchNewsForTopic(t, {
         language: opts.language,
         country: opts.country,
-        limit: opts.perTopic ?? 8,
-      })
-    )
+        limit: isPriority
+          ? opts.perPriorityTopic ?? 12
+          : opts.perTopic ?? 8,
+        priority: isPriority,
+      });
+    })
   );
 
   const seen = new Set<string>();

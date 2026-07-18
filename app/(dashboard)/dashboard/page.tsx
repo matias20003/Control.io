@@ -12,9 +12,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, percentageOf } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, PiggyBank, ChevronRight, ArrowUpRight, ArrowDownRight,
-  AlertTriangle, CheckCircle2, Info, Target, CalendarClock, Wallet,
+  AlertTriangle, CheckCircle2, Info, Target, CalendarClock, Wallet, Newspaper,
 } from "lucide-react";
 import { getAgenda } from "@/lib/db/agenda";
+import { getLatestEdition, hasUnreadTodayEdition } from "@/lib/db/newsletter";
+import { startOfTodayArg } from "@/lib/timezone";
 import { DashboardQuickAdd } from "./DashboardQuickAdd";
 import { CategoryChart } from "./CategoryChart";
 import { IncomeExpenseChart, BalanceSparkline, NetWorthChart } from "./DashboardCharts";
@@ -65,7 +67,7 @@ export default async function DashboardPage({
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo, netWorth, lastMovementAt, agenda, isTester] =
+  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo, netWorth, lastMovementAt, agenda, isTester, latestEdition, newsletterUnread] =
     await Promise.all([
       getMonthSummary(user.id, month, year),
       getAccounts(user.id),
@@ -81,7 +83,18 @@ export default async function DashboardPage({
       getLastMovementDate(user.id).catch(() => null),
       getAgenda(user.id, 30).catch(() => []),
       getIsTester(user.id).catch(() => false),
+      getLatestEdition(user.id).catch(() => null),
+      hasUnreadTodayEdition(user.id).catch(() => false),
     ]);
+
+  // Banner del newsletter: solo si la edición sin leer es la de HOY.
+  const todayArgMs = startOfTodayArg().getTime();
+  const showNewsletterBanner =
+    newsletterUnread &&
+    latestEdition != null &&
+    new Date(latestEdition.date).getTime() === todayArgMs;
+  const newsletterHighlights =
+    latestEdition?.articles.filter((a) => a.highlight).length ?? 0;
 
   const daysSinceLastMovement = lastMovementAt
     ? Math.floor((Date.now() - new Date(lastMovementAt).getTime()) / 86_400_000)
@@ -247,6 +260,33 @@ export default async function DashboardPage({
             Organización <span className="font-normal text-muted">— calendario, tareas y recordatorios</span>
           </p>
           <ChevronRight size={15} className="shrink-0 text-primary" />
+        </Link>
+      )}
+
+      {/* Newsletter del día listo para leer */}
+      {showNewsletterBanner && latestEdition && (
+        <Link
+          href="/newsletter"
+          className="block rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 to-transparent px-4 py-3 transition-colors hover:border-primary/50"
+        >
+          <div className="flex items-center gap-3">
+            <span className="w-9 h-9 rounded-xl bg-primary/15 text-primary flex items-center justify-center shrink-0">
+              <Newspaper size={18} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground leading-tight flex items-center gap-2">
+                Tu newsletter de hoy está listo
+                <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+              </p>
+              <p className="text-xs text-muted truncate mt-0.5">
+                {newsletterHighlights > 0
+                  ? `${newsletterHighlights} noticias destacadas · `
+                  : ""}
+                {latestEdition.summary}
+              </p>
+            </div>
+            <ChevronRight size={16} className="shrink-0 text-primary" />
+          </div>
         </Link>
       )}
 

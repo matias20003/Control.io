@@ -8,6 +8,7 @@ import { FeedbackButton } from "@/components/FeedbackButton";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getOrCreateProfile } from "@/lib/db/profile";
+import { hasUnreadTodayEdition } from "@/lib/db/newsletter";
 
 export default async function DashboardLayout({
   children,
@@ -32,10 +33,11 @@ export default async function DashboardLayout({
   await getOrCreateProfile(user.id, user.email!, user.user_metadata?.name);
 
   const name = user.user_metadata?.name || user.email?.split("@")[0] || "Usuario";
+  const newsletterUnread = await hasUnreadTodayEdition(user.id).catch(() => false);
 
   return (
     <div className="ambient-mesh min-h-dvh bg-background">
-      <Sidebar />
+      <Sidebar newsletterUnread={newsletterUnread} />
       <Header name={name} email={user.email ?? ""} />
       <Calculator />
       <main className="md:ml-60 pb-20 md:pb-0 min-h-dvh">
@@ -43,7 +45,7 @@ export default async function DashboardLayout({
         <InstallBanner />
         {children}
       </main>
-      <BottomNav />
+      <BottomNav newsletterUnread={newsletterUnread} />
       <FeedbackButton registeredAt={user.created_at} />
     </div>
   );
