@@ -93,8 +93,9 @@ export default async function DashboardPage({
     newsletterUnread &&
     latestEdition != null &&
     new Date(latestEdition.date).getTime() === todayArgMs;
-  const newsletterHighlights =
-    latestEdition?.articles.filter((a) => a.highlight).length ?? 0;
+  const newsletterTopics = latestEdition
+    ? new Set(latestEdition.articles.map((a) => a.topic)).size
+    : 0;
 
   const daysSinceLastMovement = lastMovementAt
     ? Math.floor((Date.now() - new Date(lastMovementAt).getTime()) / 86_400_000)
@@ -279,8 +280,8 @@ export default async function DashboardPage({
                 <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
               </p>
               <p className="text-xs text-muted truncate mt-0.5">
-                {newsletterHighlights > 0
-                  ? `${newsletterHighlights} noticias destacadas · `
+                {newsletterTopics > 0
+                  ? `${newsletterTopics} ${newsletterTopics === 1 ? "tema" : "temas"} · `
                   : ""}
                 {latestEdition.summary}
               </p>
