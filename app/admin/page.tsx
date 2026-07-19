@@ -7,6 +7,8 @@ import { FixDoubleEncryptButton } from "./FixDoubleEncryptButton";
 import { getAdminAnalytics } from "@/lib/db/admin-stats";
 import { AdminAnalytics } from "./AdminAnalytics";
 import { getResendDomainStatus } from "@/lib/email/domain-status";
+import { getReactivationFollowup } from "@/lib/db/reactivation-followup";
+import { ReactivationFollowup } from "./ReactivationFollowup";
 
 export const dynamic = "force-dynamic";
 
@@ -209,10 +211,11 @@ export default async function AdminPage() {
     redirect("/dashboard");
   }
 
-  const [s, analytics, domainStatus] = await Promise.all([
+  const [s, analytics, domainStatus, followup] = await Promise.all([
     getStats(),
     getAdminAnalytics(),
     getResendDomainStatus(),
+    getReactivationFollowup(),
   ]);
   const feedback = await prisma.feedback
     .findMany({ orderBy: { createdAt: "desc" }, take: 50 })
@@ -248,6 +251,9 @@ export default async function AdminPage() {
 
         {/* Analítica avanzada: evolución, embudo, conectados, reactivación */}
         <AdminAnalytics data={analytics} domainStatus={domainStatus} gmailReady={!!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)} />
+
+        {/* Seguimiento de la campaña de reactivación */}
+        <ReactivationFollowup data={followup} />
 
         {/* Feedback de testers — lo primero del beta */}
         <section className="space-y-3">
