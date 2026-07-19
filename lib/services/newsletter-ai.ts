@@ -40,10 +40,13 @@ const MODELS = (
   .map((m) => m.trim())
   .filter(Boolean);
 
-// Timeout por llamada a un modelo (los free lentos rondan 15-20s).
-const MODEL_TIMEOUT_MS = 35000;
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Presupuesto TOTAL de la IA. NO podemos esperar a todos los modelos free
+// lentos (rondan 15-40s c/u); si nadie respondió dentro del presupuesto,
+// devolvemos el ranking heurístico sin colgar la función. El presupuesto es
+// parametrizable: "Generar ahora" es sincrónico (página maxDuration=60) → corto;
+// el cron diario corre en background (maxDuration=300) → puede ser generoso.
+const DEFAULT_AI_DEADLINE_MS = 45000;
+const MAX_PER_MODEL_MS = 40000;
 
 function stripJson(text: string): string {
   let t = text.trim();
@@ -164,7 +167,8 @@ function buildFromAiItems(
 export async function analyzeNews(
   topics: string[],
   articles: RawArticle[],
-  priorityTopics: string[] = []
+  priorityTopics: string[] = [],
+  deadlineMs: number = DEFAULT_AI_DEADLINE_MS
 ): Promise<NewsletterAnalysis> {
   const apiKey = process.env.OPENROUTER_API_KEY;
 
@@ -198,33 +202,39 @@ Respondé SOLO con JSON válido, sin texto extra, con esta forma exacta:
 
   const user = `Noticias de hoy:\n${JSON.stringify(input)}`;
 
-  // Damos 2 pasadas por toda la cadena: si en la 1ª todos dan 429 (rate limit
-  // transitorio), esperamos un toque y reintentamos una vez más.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    for (const model of MODELS) {
-      const parsed = await callModel(apiKey, model, system, user);
-      if (!parsed?.items) continue;
+  // Probamos los modelos en orden, acotados a un presupuesto total de tiempo.
+  const start = Date.now();
+  for (const model of MODELS) {
+    const remaining = deadlineMs - (Date.now() - start);
+    if (remaining < 5000) break; // sin margen para otra llamada útil
 
-      const analyzed = buildFromAiItems(
-        topics,
-        priorityTopics,
-        articles,
-        parsed.items
-      );
-      if (analyzed.length === 0) continue;
+    const parsed = await callModel(
+      apiKey,
+      model,
+      system,
+      user,
+      Math.min(MAX_PER_MODEL_MS, remaining)
+    );
+    if (!parsed?.items) continue;
 
-      return {
-        summary:
-          parsed.summary?.trim() ||
-          heuristicAnalysis(topics, articles, priorityTopics).summary,
-        articles: analyzed,
-        usedAI: true,
-      };
-    }
-    if (attempt === 0) await sleep(1500); // respiro antes del reintento
+    const analyzed = buildFromAiItems(
+      topics,
+      priorityTopics,
+      articles,
+      parsed.items
+    );
+    if (analyzed.length === 0) continue;
+
+    return {
+      summary:
+        parsed.summary?.trim() ||
+        heuristicAnalysis(topics, articles, priorityTopics).summary,
+      articles: analyzed,
+      usedAI: true,
+    };
   }
 
-  // Ningún modelo respondió bien → ranking heurístico.
+  // Ningún modelo respondió dentro del presupuesto → ranking heurístico.
   return heuristicAnalysis(topics, articles, priorityTopics);
 }
 
@@ -238,10 +248,11 @@ async function callModel(
   apiKey: string,
   model: string,
   system: string,
-  user: string
+  user: string,
+  timeoutMs: number
 ): Promise<AiParsed | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(OPENROUTER_URL, {
       method: "POST",

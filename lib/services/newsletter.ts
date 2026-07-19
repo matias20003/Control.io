@@ -18,6 +18,8 @@ export type GenerateOptions = {
   priorityTopics?: string[];
   language?: string;
   country?: string;
+  /** Presupuesto de la IA (ms). El cron (background) da más; "Generar ahora" menos. */
+  aiDeadlineMs?: number;
 };
 
 /** Genera y persiste la edición del día para un usuario. */
@@ -41,7 +43,7 @@ export async function generateEditionForUser(
     perPriorityTopic: 12,
   });
 
-  const analysis = await analyzeNews(topics, raw, priorityTopics);
+  const analysis = await analyzeNews(topics, raw, priorityTopics, opts.aiDeadlineMs);
   const edition = await saveEdition(userId, analysis.summary, analysis.articles);
 
   return {
@@ -152,6 +154,9 @@ export async function generateEditionsForHour(hour: number): Promise<{
         priorityTopics: cfg.priorityTopics,
         language: cfg.language,
         country: cfg.country,
+        // El cron corre en background (maxDuration=300): le damos margen para
+        // esperar a los modelos free lentos y usar IA de verdad.
+        aiDeadlineMs: 120000,
       });
       generated++;
       if (result.usedAI) aiUsed++;
