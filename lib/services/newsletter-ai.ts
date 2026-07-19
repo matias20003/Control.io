@@ -28,14 +28,22 @@ const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const PER_TOPIC = 3;
 
 // Cadena de modelos gratuitos: se prueban en orden hasta que uno responda.
-// Los ":free" se rate-limitean (429) seguido, por eso hay varios de respaldo.
+// Los ":free" se rate-limitean (429) muy seguido y OpenRouter va sacando
+// disponibilidad, por eso hay varios de respaldo. Orden: primero los rápidos
+// (no-reasoning) que suelen dar mejor calidad, y de respaldo los lentos pero
+// más constantes (gpt-oss / nemotron responden aunque tarden ~15-20s).
 const MODELS = (
   process.env.OPENROUTER_MODEL ??
-  "openai/gpt-oss-20b:free,meta-llama/llama-3.3-70b-instruct:free,qwen/qwen3-next-80b-a3b-instruct:free"
+  "meta-llama/llama-3.3-70b-instruct:free,qwen/qwen3-next-80b-a3b-instruct:free,openai/gpt-oss-20b:free,nvidia/nemotron-nano-9b-v2:free"
 )
   .split(",")
   .map((m) => m.trim())
   .filter(Boolean);
+
+// Timeout por llamada a un modelo (los free lentos rondan 15-20s).
+const MODEL_TIMEOUT_MS = 35000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function stripJson(text: string): string {
   let t = text.trim();
@@ -190,40 +198,12 @@ Respondé SOLO con JSON válido, sin texto extra, con esta forma exacta:
 
   const user = `Noticias de hoy:\n${JSON.stringify(input)}`;
 
-  // Probamos cada modelo free en orden hasta que uno devuelva JSON parseable.
-  for (const model of MODELS) {
-    try {
-      const res = await fetch(OPENROUTER_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer":
-            process.env.NEXT_PUBLIC_SITE_URL ?? "https://control.io",
-          "X-Title": "control.io newsletter",
-        },
-        body: JSON.stringify({
-          model,
-          temperature: 0.3,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ],
-        }),
-      });
-
-      // 429 (rate limit) / 404 (modelo caído) → probamos el siguiente.
-      if (!res.ok) continue;
-
-      const data = await res.json();
-      const content: string | undefined = data?.choices?.[0]?.message?.content;
-      if (!content) continue;
-
-      const parsed = JSON.parse(stripJson(content)) as {
-        summary?: string;
-        items?: { id: number; summary?: string; rank?: number }[];
-      };
-      if (!parsed.items || !Array.isArray(parsed.items)) continue;
+  // Damos 2 pasadas por toda la cadena: si en la 1ª todos dan 429 (rate limit
+  // transitorio), esperamos un toque y reintentamos una vez más.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    for (const model of MODELS) {
+      const parsed = await callModel(apiKey, model, system, user);
+      if (!parsed?.items) continue;
 
       const analyzed = buildFromAiItems(
         topics,
@@ -240,12 +220,63 @@ Respondé SOLO con JSON válido, sin texto extra, con esta forma exacta:
         articles: analyzed,
         usedAI: true,
       };
-    } catch {
-      // JSON inválido o error de red → probamos el siguiente modelo.
-      continue;
     }
+    if (attempt === 0) await sleep(1500); // respiro antes del reintento
   }
 
   // Ningún modelo respondió bien → ranking heurístico.
   return heuristicAnalysis(topics, articles, priorityTopics);
+}
+
+type AiParsed = {
+  summary?: string;
+  items?: { id: number; summary?: string; rank?: number }[];
+};
+
+/** Una llamada a un modelo. Devuelve el JSON parseado o null si falla. */
+async function callModel(
+  apiKey: string,
+  model: string,
+  system: string,
+  user: string
+): Promise<AiParsed | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
+  try {
+    const res = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "https://control.io",
+        "X-Title": "control.io newsletter",
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.3,
+        max_tokens: 2500,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+    });
+
+    // 429 (rate limit) / 404 (modelo caído) → probamos el siguiente.
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const content: string | undefined = data?.choices?.[0]?.message?.content;
+    if (!content) return null;
+
+    const parsed = JSON.parse(stripJson(content)) as AiParsed;
+    if (!parsed.items || !Array.isArray(parsed.items)) return null;
+    return parsed;
+  } catch {
+    // JSON inválido, timeout (abort) o error de red → siguiente modelo.
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }

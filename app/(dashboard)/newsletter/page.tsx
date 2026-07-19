@@ -6,6 +6,10 @@ import { NewsletterClient } from "./NewsletterClient";
 
 export const metadata: Metadata = { title: "Newsletter" };
 
+// "Generar ahora" puede esperar a un modelo free lento (hasta ~20s). Damos
+// margen para que la server action no corte antes de tiempo.
+export const maxDuration = 60;
+
 export default async function NewsletterPage() {
   const supabase = await createClient();
   const {
