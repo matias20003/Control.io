@@ -32,6 +32,7 @@ import { getStreakInfo } from "@/lib/db/streak";
 import { nextStreakMilestone } from "@/lib/streak-utils";
 import { StreakCelebration } from "./StreakCelebration";
 import { UpdateReminderBanner } from "./UpdateReminderBanner";
+import { InviteCard } from "./InviteCard";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -432,6 +433,9 @@ export default async function DashboardPage({
           </Card>
         )}
       </div>
+
+      {/* Invitá a un amigo — loop de crecimiento WhatsApp-native */}
+      <InviteCard userId={user.id} />
 
       {/* ── THREE CARDS ROW ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

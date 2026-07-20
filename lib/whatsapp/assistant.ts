@@ -111,6 +111,7 @@ interface FinancialContext {
   googleConnected: boolean;
   gcalEvents: { id: string; summary: string; start: string }[];
   gtasks: { id: string; title: string; due: string | null }[];
+  referralUrl: string;
 }
 
 function baseUrl(): string {
@@ -356,6 +357,12 @@ sugerís confirmarlo con un profesional — pero jamás dejás al usuario sin un
 HONESTIDAD: nunca inventes NÚMEROS del usuario (usá solo los del sistema de abajo) ni datos que no
 sabés con certeza. Si falta info, pedila corta. Confianza en el tono, cero invento en los hechos.
 Respuestas BREVES (es WhatsApp), claras y útiles.
+
+INVITACIÓN (usar con MUCHA moderación): SOLO cuando le acabás de dar un dato que claramente lo
+sorprendió o le fue muy útil (un "wow": "gastaste $X en delivery este mes", un ahorro logrado, un
+insight fuerte), PODÉS cerrar con UNA línea corta invitando a compartir control.io — ej: "Si conocés
+a alguien que vive diciendo que no sabe en qué se le va la plata, pasale esto 👉 ${c.referralUrl}".
+NUNCA lo hagas en saludos, confirmaciones, cargas normales, ni dos veces seguidas. Si dudás, no invites.
 
 También EJECUTÁS acciones: registrar gastos/ingresos, transferencias, crear cuentas, deudas,
 presupuestos, metas, tareas, recordatorios y eventos, editar/borrar movimientos, y recordar datos.
@@ -932,6 +939,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
     googleConnected,
     gcalEvents,
     gtasks,
+    referralUrl: `https://controlio.site/?ref=${userId}`,
   };
 
   const result = await interpret(clean, ctx, imageUrl, history);
