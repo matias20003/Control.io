@@ -77,7 +77,7 @@ export async function getAgenda(userId: string, days = 30): Promise<AgendaEvent[
     events.push({
       id: `credit-${inst.id}`,
       type: "credit",
-      title: inst.creditPurchase.description,
+      title: decrypt(inst.creditPurchase.description) ?? inst.creditPurchase.description,
       subtitle: `Cuota ${inst.installmentNumber}/${inst.creditPurchase.totalInstallments}`,
       amount: toNum(inst.amount),
       currency: inst.creditPurchase.currency,
@@ -117,7 +117,7 @@ export async function getAgenda(userId: string, days = 30): Promise<AgendaEvent[
     events.push({
       id: `recurring-${r.id}`,
       type: "recurring",
-      title: r.description,
+      title: decrypt(r.description) ?? r.description,
       subtitle: `${r.category?.name ?? "Sin categoría"} · ${r.frequency}`,
       amount: toNum(r.amount),
       currency: r.currency,
