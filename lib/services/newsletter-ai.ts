@@ -14,6 +14,7 @@ export type AnalyzedArticle = {
   rank: number; // 1..3 dentro de su tema (1 = la más relevante)
   highlight: boolean; // la #1 de su tema (compat / énfasis visual)
   priority: boolean; // el tema es prioritario para el usuario
+  reputable: boolean; // la fuente es un medio reconocido/confiable
 };
 
 export type NewsletterAnalysis = {
@@ -89,7 +90,12 @@ function heuristicAnalysis(
   for (const topic of ordered) {
     const forTopic = articles
       .filter((a) => a.topic === topic)
-      .sort(byDateDesc)
+      // Sin IA no podemos juzgar veracidad, pero sí preferir fuentes
+      // reconocidas: van primero, luego por fecha.
+      .sort((a, b) => {
+        if (a.reputable !== b.reputable) return a.reputable ? -1 : 1;
+        return byDateDesc(a, b);
+      })
       .slice(0, PER_TOPIC);
 
     forTopic.forEach((a, i) => {
@@ -103,6 +109,7 @@ function heuristicAnalysis(
         rank: i + 1,
         highlight: i === 0,
         priority: a.priority,
+        reputable: a.reputable,
       });
     });
   }
@@ -156,6 +163,7 @@ function buildFromAiItems(
         rank: i + 1,
         highlight: i === 0,
         priority: a.priority,
+        reputable: a.reputable,
       });
     });
   }
@@ -180,6 +188,7 @@ export async function analyzeNews(
     id: i,
     title: a.title,
     source: a.source,
+    reputable: a.reputable, // fuente reconocida (señal de confianza)
     topic: a.topic,
     priority: a.priority,
     snippet: a.snippet,
@@ -191,10 +200,18 @@ export async function analyzeNews(
       ? `\nEl usuario marcó como PRIORITARIOS estos temas: ${priorityTopics.join(", ")}. Mencionálos primero en el análisis general.`
       : "";
 
-  const system = `Sos el editor de un newsletter diario de noticias personalizado. El usuario sigue estos temas: ${topics.join(", ")}.${priorityLine}
-Recibís una lista de noticias del día (cada una con id y su "topic"). Tu tarea:
-1. Escribí un "summary" general del día en español rioplatense neutro: 2 a 4 frases con lo más importante para alguien interesado en esos temas, empezando por lo prioritario. Claro, sin sensacionalismo.
-2. Para CADA tema, elegí las 3 noticias MÁS RELEVANTES de ese tema y rankéalas: "rank" 1 = la más relevante, 2 y 3 las siguientes. Descartá el resto (NO las incluyas). Descartá también ruido, duplicados o noticias que NO tratan realmente del tema (aunque mencionen la palabra).
+  const system = `Sos el editor RIGUROSO de un newsletter diario de noticias personalizado. El usuario sigue estos temas: ${topics.join(", ")}.${priorityLine}
+Recibís una lista de noticias del día (cada una con id, "source", "reputable" y "topic").
+
+FILTRO DE CREDIBILIDAD (lo más importante — hoy circula mucha desinformación):
+- Priorizá noticias de FUENTES RECONOCIDAS Y CONFIABLES. Las que tienen "reputable": true son de medios establecidos; dales preferencia.
+- DESCARTÁ (no las incluyas nunca): clickbait, títulos sensacionalistas o alarmistas, rumores o "se dice" sin confirmar, teorías conspirativas, contenido promocional/publicitario disfrazado de noticia, y todo lo que provenga de fuentes dudosas o desconocidas cuando el hecho no esté respaldado.
+- Preferí hechos CORROBORADOS: si el mismo hecho aparece en varias fuentes de la lista, es más confiable; elegí esa versión.
+- Ante la duda sobre la veracidad de una noticia, DESCARTALA. Mejor menos noticias pero confiables.
+
+Tu tarea:
+1. Escribí un "summary" general del día en español rioplatense neutro: 2 a 4 frases con lo más importante y verificado, empezando por lo prioritario. Claro, sin sensacionalismo.
+2. Para CADA tema, elegí hasta 3 noticias creíbles y relevantes, rankeadas: "rank" 1 = la más relevante. Si de un tema hay menos de 3 confiables, devolvé menos (NO rellenes con dudosas). Descartá el resto, los duplicados y lo que no trate realmente del tema.
 3. Para cada noticia elegida devolvé su id, un "summary" de UNA sola línea (qué pasó, por qué importa) y su "rank".
 Respondé SOLO con JSON válido, sin texto extra, con esta forma exacta:
 {"summary":"...","items":[{"id":0,"summary":"...","rank":1}]}`;

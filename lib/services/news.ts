@@ -9,7 +9,40 @@ export type RawArticle = {
   publishedAt: string | null; // ISO
   snippet: string;
   priority: boolean; // el tema fue marcado como prioritario por el usuario
+  reputable: boolean; // la fuente es un medio reconocido/confiable
 };
+
+// Medios reconocidos (AR + internacionales + tech serios). Es una señal de
+// confianza, no una verdad absoluta: una fuente desconocida NO es
+// necesariamente falsa, pero una reconocida rara vez publica algo inventado.
+// Se matchea por substring, sin acentos ni mayúsculas.
+const REPUTABLE_SOURCES = [
+  // Argentina
+  "clarin", "la nacion", "infobae", "pagina", "ambito", "el cronista",
+  "perfil", "todo noticias", "tn.com", "la voz", "los andes", "iprofesional",
+  "telam", "chequeado", "el destape", "cenital", "letra p", "bae negocios",
+  // Internacional (ES / global)
+  "reuters", "associated press", "ap news", "afp", "bbc", "el pais",
+  "el mundo", "the new york times", "nytimes", "the guardian", "washington post",
+  "bloomberg", "financial times", "the economist", "cnn", "deutsche welle",
+  " dw", "france 24", "euronews", "abc.es", "el confidencial", "el universal",
+  "la vanguardia", "20minutos", "reforma", "milenio",
+  // Tech / negocios serios
+  "wired", "the verge", "techcrunch", "ars technica", "mit technology",
+  "xataka", "wall street journal", "wsj", "forbes", "cnbc", "engadget",
+];
+
+function normalizeSource(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, ""); // saca acentos
+}
+
+function isReputableSource(source: string): boolean {
+  const s = normalizeSource(source);
+  return REPUTABLE_SOURCES.some((r) => s.includes(r));
+}
 
 function decodeEntities(str: string): string {
   return str
@@ -100,14 +133,16 @@ export async function fetchNewsForTopic(
 
       const snippet = decodeEntities(pick(block, "description")).slice(0, 300);
 
+      const finalSource = source || "Google News";
       articles.push({
         title,
         url: link,
-        source: source || "Google News",
+        source: finalSource,
         topic,
         publishedAt,
         snippet,
         priority,
+        reputable: isReputableSource(finalSource),
       });
     }
 

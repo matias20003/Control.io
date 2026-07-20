@@ -20,6 +20,8 @@ import {
   ChevronDown,
   Clock,
   Bell,
+  BadgeCheck,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -504,6 +506,18 @@ function EditionView({
       {groups.map((g, i) => (
         <TopicSection key={g.topic} group={g} index={i} />
       ))}
+
+      {groups.length > 0 && (
+        <p className="flex items-start gap-1.5 border-t border-border pt-4 text-[11px] leading-relaxed text-muted">
+          <ShieldCheck size={13} className="mt-px shrink-0 text-success/70" />
+          <span>
+            Priorizamos <span className="text-foreground/70">fuentes reconocidas</span>{" "}
+            (<BadgeCheck size={11} className="inline -mt-0.5 text-success/80" />) y
+            filtramos clickbait y noticias sin confirmar. Aun así, verificá siempre
+            antes de compartir.
+          </span>
+        </p>
+      )}
     </article>
   );
 }
@@ -583,8 +597,15 @@ function Story({
         </p>
       )}
 
-      <div className="mt-2.5 flex items-center gap-2 text-[12px] text-muted">
+      <div className="mt-2.5 flex items-center gap-1.5 text-[12px] text-muted">
         <span className="font-medium text-foreground/70">{article.source}</span>
+        {article.reputable && (
+          <BadgeCheck
+            size={13}
+            className="text-success/80 shrink-0"
+            aria-label="Fuente reconocida"
+          />
+        )}
         {ago && (
           <>
             <span className="text-border">·</span>
