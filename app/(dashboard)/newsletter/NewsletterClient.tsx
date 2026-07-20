@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type CSSProperties,
+} from "react";
 import { toast } from "sonner";
 import {
-  Newspaper,
   Plus,
   X,
   Sparkles,
@@ -17,7 +23,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -163,36 +168,38 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
 
   return (
     <div className="max-w-3xl mx-auto pb-24 px-4 space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 pt-2">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2.5 rounded-xl bg-primary/15 shrink-0">
-            <Newspaper size={22} className="text-primary" />
-          </div>
+      {/* Nameplate editorial */}
+      <header className="pt-2">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-xl font-bold text-foreground">Newsletter</h1>
-            <p className="text-xs text-muted leading-snug">
-              Tu edición diaria de noticias, filtrada por tus temas.
+            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-muted">
+              Control.io
             </p>
+            <h1 className="font-news font-medium text-foreground text-[32px] md:text-[38px] leading-none mt-1.5">
+              Newsletter
+            </h1>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={() => setShowConfig((v) => !v)}
+              title="Configurar temas y horario"
+            >
+              <Settings2 size={18} />
+            </Button>
+            <Button onClick={generateNow} disabled={isGenerating}>
+              <RefreshCw size={16} className={isGenerating ? "animate-spin" : ""} />
+              <span className="hidden sm:inline">
+                {isGenerating ? "Generando…" : "Generar ahora"}
+              </span>
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            variant="secondary"
-            size="icon"
-            onClick={() => setShowConfig((v) => !v)}
-            title="Configurar temas y horario"
-          >
-            <Settings2 size={18} />
-          </Button>
-          <Button onClick={generateNow} disabled={isGenerating}>
-            <RefreshCw size={16} className={isGenerating ? "animate-spin" : ""} />
-            <span className="hidden sm:inline">
-              {isGenerating ? "Generando…" : "Generar ahora"}
-            </span>
-          </Button>
-        </div>
-      </div>
+        <p className="text-xs text-muted mt-2.5">
+          Tu edición diaria de noticias, filtrada por tus temas.
+        </p>
+      </header>
 
       {/* Config de temas + preferencias */}
       {showConfig && (
@@ -405,6 +412,16 @@ function groupByTopic(articles: AnalyzedArticle[]): TopicGroup[] {
   }));
 }
 
+/** "sábado 19 de julio de 2026" (se muestra en mayúsculas por CSS). */
+function dateline(date: string): string {
+  return new Intl.DateTimeFormat("es-AR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(date));
+}
+
 function EditionView({
   edition,
   isToday = false,
@@ -415,157 +432,134 @@ function EditionView({
   const groups = groupByTopic(edition.articles);
 
   return (
-    <div className="space-y-4">
-      {isToday && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-semibold text-foreground capitalize">
-            {formatDateLong(edition.date)}
-          </span>
-          <Badge variant="success">Hoy</Badge>
-          {groups.length > 0 && (
-            <span className="text-xs text-muted">
-              · {groups.length} {groups.length === 1 ? "tema" : "temas"}
+    <article className="space-y-9">
+      {/* Cabecera editorial: dateline + lede */}
+      <header className="animate-news-in">
+        <div className="flex items-baseline justify-between gap-3 border-b border-border pb-2.5">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">
+            {dateline(edition.date)}
+          </p>
+          {isToday && (
+            <span className="text-[11px] uppercase tracking-[0.18em] text-primary shrink-0">
+              edición del día
             </span>
           )}
         </div>
-      )}
 
-      {/* Análisis del día */}
-      <Card variant="glass">
-        <CardContent className="pt-5">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles size={15} className="text-primary" />
-            <span className="text-xs font-semibold text-muted uppercase tracking-wide">
-              Análisis del día
-            </span>
+        {edition.summary && (
+          <div className="mt-5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted mb-2.5">
+              El resumen del día
+            </p>
+            <p className="font-news text-[20px] md:text-[23px] leading-[1.55] text-foreground">
+              {edition.summary}
+            </p>
           </div>
-          <p className="text-[15px] text-foreground leading-relaxed">
-            {edition.summary}
-          </p>
-        </CardContent>
-      </Card>
+        )}
+      </header>
 
       {groups.length === 0 && (
-        <p className="text-sm text-muted px-1">
+        <p className="text-sm text-muted">
           No se encontraron noticias para esta edición.
         </p>
       )}
 
-      {/* Un canal por tema, con su Top 3 */}
-      {groups.map((g) => (
-        <TopicChannel key={g.topic} group={g} />
+      {/* Una sección editorial por tema */}
+      {groups.map((g, i) => (
+        <TopicSection key={g.topic} group={g} index={i} />
       ))}
-    </div>
+    </article>
   );
 }
 
-function TopicChannel({ group }: { group: TopicGroup }) {
+function TopicSection({ group, index }: { group: TopicGroup; index: number }) {
   const { topic, priority, items } = group;
-  const accent = priority ? "warning" : "primary";
+  const [lead, ...rest] = items;
 
   return (
     <section
-      className={`relative rounded-2xl border bg-surface overflow-hidden ${
-        priority ? "border-warning/30" : "border-border"
-      }`}
+      className="animate-news-in"
+      style={{ "--news-delay": `${0.06 * (index + 1)}s` } as CSSProperties}
     >
-      {/* Filo superior de color: firma visual del canal */}
-      <span
-        className={`absolute inset-x-0 top-0 h-[3px] ${
-          priority
-            ? "bg-gradient-to-r from-warning/70 via-warning/30 to-transparent"
-            : "bg-gradient-to-r from-primary/70 via-primary/30 to-transparent"
-        }`}
-      />
-
-      {/* Encabezado del canal */}
-      <header className="flex items-center justify-between gap-3 px-4 pt-4 pb-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span
-            className={`w-1 h-5 rounded-full shrink-0 ${
-              priority ? "bg-warning" : "bg-primary"
-            }`}
-          />
-          <h3 className="text-sm font-bold uppercase tracking-[0.06em] text-foreground truncate">
-            {topic}
-          </h3>
-          {priority && (
-            <Star size={13} className="text-warning fill-warning shrink-0" />
-          )}
-        </div>
-        <span
-          className={`text-[10px] font-semibold uppercase tracking-wider shrink-0 ${
-            priority ? "text-warning" : "text-primary"
-          }`}
-        >
-          Top {items.length}
+      {/* Encabezado de sección: tema · regla · prioridad · conteo */}
+      <div className="flex items-center gap-3 mb-4">
+        <h3 className="text-[13px] font-bold uppercase tracking-[0.14em] text-foreground shrink-0">
+          {topic}
+        </h3>
+        {priority && (
+          <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-warning shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-warning" />
+            prioritario
+          </span>
+        )}
+        <span className="flex-1 h-px bg-border" />
+        <span className="font-mono text-[11px] text-muted shrink-0">
+          {items.length} {items.length === 1 ? "nota" : "notas"}
         </span>
-      </header>
-
-      <div className="divide-y divide-border">
-        {items.map((a, i) => (
-          <ArticleRow key={i} article={a} rank={i + 1} accent={accent} />
-        ))}
       </div>
+
+      {lead && <Story article={lead} lead />}
+
+      {rest.length > 0 && (
+        <div className="mt-1 border-t border-border divide-y divide-border">
+          {rest.map((a, i) => (
+            <Story key={i} article={a} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
 
-function ArticleRow({
+function Story({
   article,
-  rank,
-  accent,
+  lead = false,
 }: {
   article: AnalyzedArticle;
-  rank: number;
-  accent: "primary" | "warning";
+  lead?: boolean;
 }) {
   const ago = timeAgo(article.publishedAt);
-  const isTop = rank === 1;
 
   return (
     <a
       href={article.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex gap-3.5 px-4 py-3.5 transition-colors hover:bg-surface-2/50"
+      className={`group block ${lead ? "pb-5" : "py-4"}`}
     >
-      {/* Número editorial fantasma */}
-      <span
-        className={`font-bold tabular-nums leading-none shrink-0 w-8 pt-0.5 ${
-          isTop
-            ? accent === "warning"
-              ? "text-warning/80 text-2xl"
-              : "text-primary/80 text-2xl"
-            : "text-muted/30 text-xl"
+      <h4
+        className={`font-news font-medium text-foreground transition-colors group-hover:text-primary ${
+          lead
+            ? "text-[24px] md:text-[28px] leading-[1.18]"
+            : "text-[18px] md:text-[19px] leading-[1.28]"
         }`}
       >
-        {String(rank).padStart(2, "0")}
-      </span>
+        {article.title}
+      </h4>
 
-      <div className="min-w-0 flex-1">
+      {article.summary && (
         <p
-          className={`font-semibold text-foreground leading-snug group-hover:text-primary transition-colors ${
-            isTop ? "text-[15px]" : "text-sm"
+          className={`mt-2 text-muted leading-relaxed ${
+            lead ? "text-[15px]" : "text-sm line-clamp-2"
           }`}
         >
-          {article.title}
+          {article.summary}
         </p>
-        {article.summary && (
-          <p className="text-xs text-muted mt-1 leading-relaxed line-clamp-2">
-            {article.summary}
-          </p>
-        )}
-        <div className="flex items-center gap-2 mt-2 flex-wrap">
-          <Badge variant="secondary">{article.source}</Badge>
-          {ago && <span className="text-[11px] text-muted">· {ago}</span>}
-        </div>
-      </div>
+      )}
 
-      <ExternalLink
-        size={15}
-        className="text-muted group-hover:text-primary shrink-0 mt-0.5 transition-colors"
-      />
+      <div className="mt-2.5 flex items-center gap-2 text-[12px] text-muted">
+        <span className="font-medium text-foreground/70">{article.source}</span>
+        {ago && (
+          <>
+            <span className="text-border">·</span>
+            <span>{ago}</span>
+          </>
+        )}
+        <ExternalLink
+          size={13}
+          className="ml-0.5 text-primary opacity-0 -translate-x-1 transition-all group-hover:opacity-100 group-hover:translate-x-0"
+        />
+      </div>
     </a>
   );
 }

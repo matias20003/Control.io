@@ -112,6 +112,7 @@ html.light {
   /* ── Tipografía ── */
   --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-jetbrains), 'JetBrains Mono', 'Fira Code', monospace;
+  --font-news: var(--font-newsreader), Georgia, 'Times New Roman', serif;
 
   /* Escala tipográfica explícita */
   --text-xs:   0.75rem;    /* 12px */
@@ -346,6 +347,20 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .animate-sheet-up,
   .animate-sheet-backdrop { animation: none; }
+}
+
+/* ── Entrada editorial del newsletter: fade + subida sutil, con stagger ── */
+@keyframes news-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+.animate-news-in {
+  opacity: 0;
+  animation: news-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: var(--news-delay, 0s);
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-news-in { animation: none; opacity: 1; }
 }
 
 /* ── App splash (lanzamiento PWA): la "c" se dibuja sola ── */
