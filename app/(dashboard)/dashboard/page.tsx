@@ -25,7 +25,7 @@ import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 import { GuidedTour } from "@/components/GuidedTour";
 import { WhatsappPromoModal } from "@/components/WhatsappPromoModal";
 import { getOnboardingState } from "@/lib/db/onboarding";
-import { getProfileWhatsapp, getIsTester } from "@/lib/db/profile";
+import { getProfileWhatsapp, getIsTester, getOrCreateWhatsappLinkCode } from "@/lib/db/profile";
 import { hasFeature, FEATURE_FLAGS } from "@/lib/feature-flags";
 import { WhatsappOnboardingHero } from "./WhatsappOnboardingHero";
 import { getStreakInfo } from "@/lib/db/streak";
@@ -87,6 +87,9 @@ export default async function DashboardPage({
       getLatestEdition(user.id).catch(() => null),
       hasUnreadTodayEdition(user.id).catch(() => false),
     ]);
+
+  // Código para vincular WhatsApp en 1 toque (solo se genera si aún no vinculó).
+  const whatsappLinkCode = whatsappNumber ? "" : await getOrCreateWhatsappLinkCode(user.id).catch(() => "");
 
   // Banner del newsletter: solo si la edición sin leer es la de HOY.
   const todayArgMs = startOfTodayArg().getTime();
@@ -234,7 +237,7 @@ export default async function DashboardPage({
           En modo "testers" se muestra siempre (preview); en "all", solo a unlinked. */}
       {hasFeature("onboardingWa", { isTester }) &&
         (!whatsappNumber || FEATURE_FLAGS.onboardingWa === "testers") && (
-          <WhatsappOnboardingHero />
+          <WhatsappOnboardingHero linkCode={whatsappLinkCode || ""} />
         )}
 
       <UpdateReminderBanner days={daysSinceLastMovement} />

@@ -66,6 +66,9 @@ model Profile {
   email          String   @unique
   name           String?
   whatsappNumber String?  @unique
+  // Código secreto para vincular WhatsApp en 1 toque: el usuario abre WhatsApp
+  // con "Vincular <code>" pre-armado y el bot captura su número real (cero tipeo).
+  whatsappLinkCode String? @unique
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

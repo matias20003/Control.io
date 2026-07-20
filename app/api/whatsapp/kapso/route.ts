@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendText, markReadAndType, fetchMediaAsDataUrl, verifySignature } from "@/lib/whatsapp/kapso";
 import { findProfileByPhone } from "@/lib/whatsapp/users";
+import { linkWhatsappByCode } from "@/lib/db/profile";
 import { handleUserMessage } from "@/lib/whatsapp/assistant";
 
 export const runtime = "nodejs";
@@ -87,6 +88,23 @@ export async function POST(req: NextRequest) {
 
     const profile = await findProfileByPhone(from);
     if (!profile) {
+      // Vinculación en 1 toque: si el mensaje es "Vincular <code>", lo linkeamos
+      // capturando su número real (cero tipeo, imposible equivocarse de dígito).
+      const linkMatch = (getText(message) ?? "").match(/vincular[:\s-]+([a-z0-9]{6,16})/i);
+      if (linkMatch) {
+        const linked = await linkWhatsappByCode(linkMatch[1].toLowerCase(), from);
+        if (linked) {
+          await sendText(
+            from,
+            `¡Listo${linked.name ? `, ${linked.name.split(" ")[0]}` : ""}! 🎉 Tu WhatsApp quedó vinculado a control.io.\n\n` +
+            `Ahora probá cargar tu primer gasto: escribime *"gasté 3000 en el súper"*, mandame un *audio* o la *foto de un ticket*. Yo lo registro solo 👍`
+          );
+          return Response.json({ ok: true, linked: true });
+        }
+        await sendText(from, "Ese código de vinculación no es válido o venció 🤔 Entrá a controlio.site y tocá *Vincular WhatsApp* de nuevo para obtener uno fresco.");
+        return Response.json({ ok: true, linked: false, badCode: true });
+      }
+
       // Registramos el número entrante (best-effort) para diagnosticar si un
       // número YA vinculado falla el matcheo, vs un tester que no vinculó.
       try {
@@ -97,7 +115,7 @@ export async function POST(req: NextRequest) {
       }
       await sendText(
         from,
-        "👋 Tu número todavía no está vinculado a ninguna cuenta.\n\nIniciá sesión en controlio.site, andá a *Configuración → Perfil* y agregá este número de WhatsApp para empezar a registrar tus gastos por acá."
+        "👋 Tu número todavía no está vinculado a ninguna cuenta.\n\nEntrá a controlio.site, tocá *Vincular WhatsApp* en el inicio y se abre este chat con un código listo — con un toque quedás vinculado."
       );
       return Response.json({ ok: true, linked: false });
     }

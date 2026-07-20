@@ -6,16 +6,19 @@ import { MessageCircle, Mic, Camera, X, ArrowRight } from "lucide-react";
 
 // Número del bot de control.io (mismo que el del sidebar).
 const BOT_WA = "5493416041118";
-const HELLO = encodeURIComponent("Hola! Quiero empezar a cargar mis gastos 👋");
 
 /**
  * Hero de onboarding WhatsApp-first: lo más prominente del dashboard para quien
  * todavía no vinculó su número. Empuja el comportamiento que más engancha
- * (los usuarios de WhatsApp cargan 13× más). Desaparece una vez vinculado.
+ * (los usuarios de WhatsApp: 100% de retención y 30× más movimientos). Vincular
+ * es en 1 TOQUE: abre WhatsApp con "Vincular <code>" listo y el bot captura el
+ * número real (cero tipeo). Desaparece una vez vinculado.
  */
-export function WhatsappOnboardingHero() {
+export function WhatsappOnboardingHero({ linkCode }: { linkCode: string }) {
   const [hidden, setHidden] = useState(false);
   if (hidden) return null;
+
+  const oneTapHref = `https://wa.me/${BOT_WA}?text=${encodeURIComponent(`Vincular ${linkCode}`)}`;
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-4 md:p-5">
@@ -50,23 +53,23 @@ export function WhatsappOnboardingHero() {
       </div>
 
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-        <Link
-          href="/configuracion?tab=perfil"
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-        >
-          Vincular mi WhatsApp <ArrowRight size={15} />
-        </Link>
         <a
-          href={`https://wa.me/${BOT_WA}?text=${HELLO}`}
+          href={oneTapHref}
           target="_blank"
           rel="noopener noreferrer"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+        >
+          <MessageCircle size={15} /> Vincular en 1 toque <ArrowRight size={15} />
+        </a>
+        <Link
+          href="/configuracion?tab=perfil"
           className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/40 px-4 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
         >
-          <MessageCircle size={15} /> Escribirle al bot
-        </a>
+          Cargar mi número a mano
+        </Link>
       </div>
       <p className="mt-2 text-[11px] text-muted">
-        Tip: primero vinculá tu número así el asistente te reconoce.
+        Se abre WhatsApp con un mensaje listo — solo tocá enviar y quedás vinculado. Sin tipear tu número.
       </p>
     </div>
   );

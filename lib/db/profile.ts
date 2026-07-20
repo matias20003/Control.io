@@ -1,4 +1,52 @@
 import { prisma } from "@/lib/prisma";
+import { randomBytes } from "crypto";
+
+/**
+ * Devuelve (creándolo si hace falta) el código secreto de vinculación de WhatsApp
+ * del usuario. Se usa para el flujo "vincular en 1 toque": el usuario abre WhatsApp
+ * con "Vincular <code>" y el bot captura su número real sin que tenga que tipearlo.
+ */
+export async function getOrCreateWhatsappLinkCode(userId: string): Promise<string> {
+  const existing = await prisma.profile.findUnique({
+    where: { id: userId },
+    select: { whatsappLinkCode: true },
+  });
+  if (existing?.whatsappLinkCode) return existing.whatsappLinkCode;
+
+  // 8 chars alfanuméricos (base36) — corto pero con entropía suficiente y secreto.
+  const code = randomBytes(6).toString("hex").slice(0, 8);
+  await prisma.profile.update({
+    where: { id: userId },
+    data: { whatsappLinkCode: code },
+  });
+  return code;
+}
+
+/**
+ * Vincula un número entrante de WhatsApp a la cuenta dueña del código. Lo usa el
+ * webhook cuando llega "Vincular <code>" desde un número todavía no vinculado.
+ * Devuelve el perfil vinculado, o null si el código no existe / número ya en uso.
+ */
+export async function linkWhatsappByCode(
+  code: string,
+  incomingNumber: string
+): Promise<{ id: string; name: string | null } | null> {
+  const profile = await prisma.profile.findUnique({
+    where: { whatsappLinkCode: code },
+    select: { id: true, name: true },
+  });
+  if (!profile) return null;
+  try {
+    await prisma.profile.update({
+      where: { id: profile.id },
+      data: { whatsappNumber: normalizeWhatsapp(incomingNumber) },
+    });
+    return profile;
+  } catch {
+    // P2002: ese número ya está vinculado a otra cuenta.
+    return null;
+  }
+}
 
 export const DEFAULT_CATEGORIES = [
   // Gastos
