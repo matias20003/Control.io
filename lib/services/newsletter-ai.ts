@@ -27,14 +27,13 @@ const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 // Cuántas noticias mostramos por cada tema.
 const PER_TOPIC = 3;
 
-// Cadena de modelos gratuitos: se prueban en orden hasta que uno responda.
-// Los ":free" se rate-limitean (429) muy seguido y OpenRouter va sacando
-// disponibilidad, por eso hay varios de respaldo. Orden: primero los rápidos
-// (no-reasoning) que suelen dar mejor calidad, y de respaldo los lentos pero
-// más constantes (gpt-oss / nemotron responden aunque tarden ~15-20s).
+// Cadena de modelos: se prueban en orden hasta que uno responda.
+// Primero modelos PAGOS de OpenRouter (rápidos ~2-3s, confiables, baratísimos:
+// fracciones de centavo por edición) y de respaldo los ":free" por si se acaba
+// el crédito. Se puede overridear con la env var OPENROUTER_MODEL.
 const MODELS = (
   process.env.OPENROUTER_MODEL ??
-  "meta-llama/llama-3.3-70b-instruct:free,qwen/qwen3-next-80b-a3b-instruct:free,openai/gpt-oss-20b:free,nvidia/nemotron-nano-9b-v2:free"
+  "google/gemini-2.5-flash,google/gemini-2.5-flash-lite,openai/gpt-4o-mini,meta-llama/llama-3.3-70b-instruct:free,openai/gpt-oss-20b:free"
 )
   .split(",")
   .map((m) => m.trim())
