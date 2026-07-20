@@ -161,8 +161,9 @@ export async function generateEditionsForHour(hour: number): Promise<{
       generated++;
       if (result.usedAI) aiUsed++;
 
-      // Avisamos solo la primera vez del día y si hay algo que leer.
-      if (!alreadyExisted && result.count > 0) {
+      // Avisamos solo la primera vez del día, si hay algo que leer y si el
+      // usuario tiene el recordatorio activado.
+      if (cfg.notifyOnReady && !alreadyExisted && result.count > 0) {
         await notifyEditionReady(cfg.userId, result.edition, cfg.whatsappNumber);
         notified++;
       }

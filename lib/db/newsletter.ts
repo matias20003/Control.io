@@ -9,6 +9,7 @@ export type SerializedConfig = {
   country: string;
   isActive: boolean;
   sendHour: number;
+  notifyOnReady: boolean;
 };
 
 export type SerializedEdition = {
@@ -27,6 +28,7 @@ const DEFAULT_CONFIG: SerializedConfig = {
   country: "ar",
   isActive: true,
   sendHour: 8,
+  notifyOnReady: true,
 };
 
 export async function getConfig(userId: string): Promise<SerializedConfig> {
@@ -39,6 +41,7 @@ export async function getConfig(userId: string): Promise<SerializedConfig> {
     country: row.country,
     isActive: row.isActive,
     sendHour: row.sendHour,
+    notifyOnReady: row.notifyOnReady,
   };
 }
 
@@ -72,6 +75,7 @@ export async function upsertConfig(
       country: data.country ?? "ar",
       isActive: data.isActive ?? true,
       sendHour: sendHour ?? 8,
+      notifyOnReady: data.notifyOnReady ?? true,
     },
     update: {
       ...(data.topics !== undefined ? { topics } : {}),
@@ -82,6 +86,9 @@ export async function upsertConfig(
       ...(data.country !== undefined ? { country: data.country } : {}),
       ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
       ...(sendHour !== undefined ? { sendHour } : {}),
+      ...(data.notifyOnReady !== undefined
+        ? { notifyOnReady: data.notifyOnReady }
+        : {}),
     },
   });
 
@@ -92,6 +99,7 @@ export async function upsertConfig(
     country: row.country,
     isActive: row.isActive,
     sendHour: row.sendHour,
+    notifyOnReady: row.notifyOnReady,
   };
 }
 
@@ -189,6 +197,7 @@ export type ActiveConfig = {
   language: string;
   country: string;
   sendHour: number;
+  notifyOnReady: boolean;
   whatsappNumber: string | null;
 };
 
@@ -203,6 +212,7 @@ export async function getActiveConfigs(): Promise<ActiveConfig[]> {
       language: true,
       country: true,
       sendHour: true,
+      notifyOnReady: true,
       user: { select: { whatsappNumber: true } },
     },
   });
@@ -215,6 +225,7 @@ export async function getActiveConfigs(): Promise<ActiveConfig[]> {
       language: r.language,
       country: r.country,
       sendHour: r.sendHour,
+      notifyOnReady: r.notifyOnReady,
       whatsappNumber: r.user?.whatsappNumber ?? null,
     }));
 }

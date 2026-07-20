@@ -17,6 +17,7 @@ const configSchema = z.object({
   country: z.string().min(2).max(5).optional(),
   isActive: z.boolean().optional(),
   sendHour: z.number().int().min(0).max(23).optional(),
+  notifyOnReady: z.boolean().optional(),
 });
 
 export async function saveNewsletterConfigAction(input: {
@@ -26,6 +27,7 @@ export async function saveNewsletterConfigAction(input: {
   country?: string;
   isActive?: boolean;
   sendHour?: number;
+  notifyOnReady?: boolean;
 }) {
   const supabase = await createClient();
   const {

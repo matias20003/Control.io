@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty-state";
+import { EnablePushInline } from "@/components/push/EnablePushInline";
 import { formatDateLong } from "@/lib/utils";
 import {
   saveNewsletterConfigAction,
@@ -62,6 +63,9 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
   const [priority, setPriority] = useState<string[]>(initialConfig.priorityTopics);
   const [isActive, setIsActive] = useState<boolean>(initialConfig.isActive);
   const [sendHour, setSendHour] = useState<number>(initialConfig.sendHour);
+  const [notifyOnReady, setNotifyOnReady] = useState<boolean>(
+    initialConfig.notifyOnReady
+  );
   const [topicInput, setTopicInput] = useState("");
 
   const [showConfig, setShowConfig] = useState(initialConfig.topics.length === 0);
@@ -87,8 +91,9 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
       JSON.stringify(topics) !== JSON.stringify(config.topics) ||
       JSON.stringify(priority) !== JSON.stringify(config.priorityTopics) ||
       isActive !== config.isActive ||
-      sendHour !== config.sendHour,
-    [topics, priority, isActive, sendHour, config]
+      sendHour !== config.sendHour ||
+      notifyOnReady !== config.notifyOnReady,
+    [topics, priority, isActive, sendHour, notifyOnReady, config]
   );
 
   const addTopic = () => {
@@ -125,6 +130,7 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
         country: config.country,
         isActive,
         sendHour,
+        notifyOnReady,
       });
       if (res.error) toast.error(res.error);
       else if (res.success && res.config) {
@@ -133,6 +139,7 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
         setPriority(res.config.priorityTopics);
         setIsActive(res.config.isActive);
         setSendHour(res.config.sendHour);
+        setNotifyOnReady(res.config.notifyOnReady);
         toast.success("Preferencias guardadas");
       }
     });
@@ -289,12 +296,11 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
                 />
                 <span className="leading-snug">
                   <span className="flex items-center gap-1.5 font-medium">
-                    <Bell size={13} className="text-primary" />
+                    <RefreshCw size={13} className="text-primary" />
                     Generar mi edición automáticamente todos los días
                   </span>
                   <span className="text-xs text-muted">
-                    Te avisamos por notificación (y WhatsApp si lo tenés vinculado)
-                    cuando esté lista.
+                    A la hora que elijas armamos tu edición sola, con IA.
                   </span>
                 </span>
               </label>
@@ -318,6 +324,36 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
                 </div>
               )}
             </div>
+
+            {/* Recordatorio: el aviso que te trae de vuelta a leerla */}
+            {isActive && (
+              <div className="rounded-xl border border-border bg-surface-2/40 p-3.5 space-y-3">
+                <label className="flex items-start gap-2.5 text-sm text-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notifyOnReady}
+                    onChange={(e) => setNotifyOnReady(e.target.checked)}
+                    className="h-4 w-4 mt-0.5 accent-primary shrink-0"
+                  />
+                  <span className="leading-snug">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <Bell size={13} className="text-primary" />
+                      Recordarme con una notificación cuando esté lista
+                    </span>
+                    <span className="text-xs text-muted">
+                      Un push al celular (y WhatsApp si lo tenés vinculado) que te
+                      lleva directo a leerla. Así no te olvidás de entrar.
+                    </span>
+                  </span>
+                </label>
+
+                {notifyOnReady && (
+                  <div className="pl-6">
+                    <EnablePushInline />
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex justify-end">
               <Button onClick={saveConfig} disabled={isSaving || !dirty}>

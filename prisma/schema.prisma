@@ -615,6 +615,7 @@ model NewsletterConfig {
   country        String   @default("ar")
   isActive       Boolean  @default(true)
   sendHour       Int      @default(8) // hora ARG (0–23) de la generación automática diaria
+  notifyOnReady  Boolean  @default(true) // avisar (push/WhatsApp) cuando la edición esté lista
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
