@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { bearerMatches } from "@/lib/cron-auth";
 import { getDueReminders, markReminderSent } from "@/lib/db/reminders";
+import { fireDueRecurringReminders } from "@/lib/db/recurring-reminders";
 import { sendPushToUser } from "@/lib/push/send";
 import { sendText } from "@/lib/whatsapp/kapso";
 
@@ -53,5 +54,9 @@ export async function GET(req: NextRequest) {
     if (delivered) sent++;
   }
 
-  return Response.json({ ok: true, due: due.length, sent });
+  // Recordatorios RECURRENTES (lun-vie a tal hora, etc.): disparan los que
+  // coinciden con la hora ARG actual. Best-effort, no frena a los de una vez.
+  const recurring = await fireDueRecurringReminders().catch(() => ({ fired: 0 }));
+
+  return Response.json({ ok: true, due: due.length, sent, recurring: recurring.fired });
 }

@@ -43,7 +43,11 @@ export function todayStringArg(): string {
  * weekday: 0=Domingo … 6=Sábado (igual que Date.getDay()). hour: 0–23.
  * Útil para crons que disparan según la preferencia horaria del usuario.
  */
-export function nowArgParts(): { weekday: number; hour: number } {
+export function nowArgParts(): { weekday: number; hour: number; minute: number } {
   const nowInArg = toZonedTime(new Date(), ARG_TZ);
-  return { weekday: nowInArg.getDay(), hour: nowInArg.getHours() };
+  return {
+    weekday: nowInArg.getDay(),
+    hour: nowInArg.getHours(),
+    minute: nowInArg.getMinutes(),
+  };
 }

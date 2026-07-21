@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { hasFeature } from "@/lib/feature-flags";
 import { getTasks } from "@/lib/db/tasks";
 import { getPendingReminders } from "@/lib/db/reminders";
+import { listRecurringReminders } from "@/lib/db/recurring-reminders";
 import { getGoogleStatus, listCalendarEvents } from "@/lib/google";
 import { TareasClient } from "./TareasClient";
 
@@ -22,9 +23,10 @@ export default async function TareasPage() {
   const isTester = profile?.isTester ?? false;
   if (!hasFeature("tareas", { isTester })) redirect("/dashboard");
 
-  const [tasks, reminders, gstatus] = await Promise.all([
+  const [tasks, reminders, recurringReminders, gstatus] = await Promise.all([
     getTasks(user.id),
     getPendingReminders(user.id).catch(() => []),
+    listRecurringReminders(user.id).catch(() => []),
     getGoogleStatus(user.id).catch(() => ({ connected: false, email: null })),
   ]);
 
@@ -37,6 +39,7 @@ export default async function TareasPage() {
     <TareasClient
       initialTasks={tasks}
       reminders={reminders}
+      recurringReminders={recurringReminders}
       events={events}
       googleConnected={gstatus.connected}
       googleEnabled={googleEnabled}

@@ -119,6 +119,7 @@ model Profile {
   gruposMiembro         MiembroGrupo[]        @relation("GruposMiembro")
   tasks                 Task[]
   reminders             Reminder[]
+  recurringReminders    RecurringReminder[]
   newsletterConfig      NewsletterConfig?
   newsletterEditions    NewsletterEdition[]
 
@@ -390,6 +391,27 @@ model Reminder {
 
   @@index([sent, remindAt])
   @@map("reminders")
+}
+
+// Recordatorios RECURRENTes ("todos los días lun-vie a las 8:00: X"). A
+// diferencia de Reminder (una sola vez), se repiten según daysOfWeek + hora.
+// Los dispara /api/cron/reminders (corre cada minuto) comparando la hora ARG.
+// text cifrado como el resto.
+model RecurringReminder {
+  id          String    @id @default(cuid())
+  userId      String
+  user        Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text        String
+  daysOfWeek  Int[]     // 0=Domingo … 6=Sábado (JS getDay). Lun-Vie = [1,2,3,4,5]
+  hour        Int       // 0–23 (hora ARG)
+  minute      Int       // 0–59 (hora ARG)
+  isActive    Boolean   @default(true)
+  lastFiredOn DateTime? @db.Date // último día (ARG) que disparó, para no duplicar
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([isActive])
+  @@map("recurring_reminders")
 }
 
 model PushSubscription {

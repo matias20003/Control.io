@@ -30,6 +30,7 @@ import { getGoals, createGoal, addFundsToGoal, type SerializedGoal } from "@/lib
 import { getInvestments, type SerializedInvestment } from "@/lib/db/investments";
 import { getTasks, createTask, toggleTask, deleteTask, type SerializedTask } from "@/lib/db/tasks";
 import { createReminder, getPendingReminders, type SerializedReminder } from "@/lib/db/reminders";
+import { createRecurringReminder } from "@/lib/db/recurring-reminders";
 import { createCalendarEvent, createGoogleTask, getGoogleStatus, listCalendarEvents, listGoogleTasks, deleteCalendarEvent, updateCalendarEvent, completeGoogleTask } from "@/lib/google";
 import { getIsTester } from "@/lib/db/profile";
 import { hasFeature } from "@/lib/feature-flags";
@@ -77,6 +78,8 @@ interface Action {
   taskRef?: number; // complete_task / delete_task ([#N] de TUS TAREAS)
   inMinutes?: number; // create_reminder: dentro de X minutos
   remindAt?: string;  // create_reminder: fecha/hora exacta ARG "YYYY-MM-DDTHH:mm"
+  daysOfWeek?: number[]; // create_recurring_reminder: días 0=Dom..6=Sáb (lun-vie = [1,2,3,4,5])
+  atTime?: string;       // create_recurring_reminder: hora ARG "HH:mm"
   eventStart?: string; // agendar_evento / editar_evento: inicio ARG "YYYY-MM-DDTHH:mm"
   durationMin?: number; // agendar_evento / editar_evento: duración en minutos (default 60)
   eventRef?: number; // borrar_evento / editar_evento: [#N] de AGENDA
@@ -451,7 +454,8 @@ TIPOS DE ACCIÓN (campo "type"):
 ${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, dueDate }   // un PENDIENTE/recordatorio a HACER ("recordame entregar el TP el martes", "tengo que comprar pilas", "anotá llamar al banco"). dueDate "YYYY-MM-DD" opcional, relativo a HOY. Diferente de "remember": esto es algo PENDIENTE, no un dato.
 - "complete_task": { taskRef, title }   // marcar una tarea como HECHA ("marcá comprar pan como hecha", "ya entregué el TP", "listo lo de las pilas"). Pasá taskRef = [#N] de TUS TAREAS PENDIENTES, Y TAMBIÉN title = el texto de la tarea (ej: "comprar pan"). Siempre mandá title.
 - "delete_task": { taskRef }   // borrar/cancelar una tarea. taskRef = [#N] de TUS TAREAS PENDIENTES.` : ``}
-${hasFeature("recordatorios", { isTester: c.isTester }) ? `- "create_reminder": { title, inMinutes, remindAt }   // recordatorio CON HORA que te aviso ("haceme acordar en 5 min de sacar la comida", "recordame mañana a las 9 llamar al banco"). title = qué recordar. Para "en X minutos/horas" usá inMinutes (5, 120). Para una hora/fecha puntual usá remindAt "YYYY-MM-DDTHH:mm" en hora Argentina (calculada desde AHORA). Es distinto de create_task: el recordatorio DISPARA un aviso a una hora exacta.` : ``}
+${hasFeature("recordatorios", { isTester: c.isTester }) ? `- "create_reminder": { title, inMinutes, remindAt }   // recordatorio CON HORA que te aviso UNA SOLA VEZ ("haceme acordar en 5 min de sacar la comida", "recordame mañana a las 9 llamar al banco"). title = qué recordar. Para "en X minutos/horas" usá inMinutes (5, 120). Para una hora/fecha puntual usá remindAt "YYYY-MM-DDTHH:mm" en hora Argentina (calculada desde AHORA). Es distinto de create_task: el recordatorio DISPARA un aviso a una hora exacta.
+- "create_recurring_reminder": { title, daysOfWeek, atTime }   // recordatorio que SE REPITE ("recordame todos los lunes a viernes a las 17:00 sacar la basura", "todos los días a las 21 cargá tus gastos", "cada lunes a las 9 pagar el alquiler"). title = qué recordar. daysOfWeek = array de días donde 0=Domingo,1=Lunes,2=Martes,3=Miércoles,4=Jueves,5=Viernes,6=Sábado (ej: lunes a viernes = [1,2,3,4,5]; todos los días = [0,1,2,3,4,5,6]; fin de semana = [0,6]). atTime = hora ARG "HH:mm" (ej "17:00"). Usalo SIEMPRE que el pedido tenga una repetición ("todos", "cada", "los lunes", "de lunes a viernes"). Distinto de create_reminder (que es una sola vez).` : ``}
 ${hasFeature("google", { isTester: c.isTester }) && c.googleConnected ? `- "agendar_evento": { title, eventStart, durationMin }   // crea un EVENTO en Google Calendar ("agendá turno médico el jueves 10hs", "reunión mañana 15hs", "cumple de Ana el 20"). title = qué. eventStart = "YYYY-MM-DDTHH:mm" en hora Argentina (relativo a HOY). durationMin opcional (default 60). Usalo para citas/eventos con fecha y hora; create_task es para to-dos sin hora.
 - "borrar_evento": { eventRef }   // borra un evento del calendario ("borrá la reunión del lunes", "cancelá el turno"). eventRef = [#N] de AGENDA.
 - "editar_evento": { eventRef, title, eventStart, durationMin }   // reprograma o renombra un evento ("movélo a las 16", "cambialo para el martes 11hs"). eventRef = [#N] de AGENDA. Mandá solo lo que cambia (title y/o eventStart).` : ``}
@@ -459,7 +463,7 @@ REGLAS:
 - "intent":"action" cuando hay que ejecutar algo (llená "actions"). Podés poner varias acciones.
 - "intent":"query" para CUALQUIER pregunta o pedido de análisis/consejo/información —de finanzas, de la vida cotidiana, organización o conocimiento general—: "actions" vacío, respondé en "answer" con una respuesta EXPERTA y útil. Si es financiera, usá los datos reales (montos con $ y miles) con diagnóstico + recomendación concreta. Si es de otro tema, respondé igual de bien con tu conocimiento. NUNCA contestes "solo puedo cargar gastos" ni redirijas sin ayudar primero.
 - "intent":"chat" para saludos, charla suelta o confirmaciones ("hola", "gracias", "dale", "listo"): "actions" vacío, "answer" cordial y breve. Si el saludo trae una pregunta real, tratala como "query" y respondela.
-${hasFeature("recordatorios", { isTester: c.isTester }) ? `- ⚠️ CRÍTICO: si el usuario pide que le RECUERDES o le AVISES algo ("haceme acordar", "recordame", "avisame en 5 min", "avisame mañana a las 9"), es SIEMPRE intent "action" con UNA acción create_reminder. PROHIBIDO responder solo con texto como "te recordaré en 2 minutos" o "dale, te aviso" — eso NO programa nada y el recordatorio NO existe. TENÉS que emitir la acción: { "type": "create_reminder", "title": "<qué recordar>", "inMinutes": <N> } para "en N minutos/horas", o "remindAt":"YYYY-MM-DDTHH:mm" para una hora puntual. Ejemplo — usuario: "haceme acordar en 2 min de tomar agua" → {"intent":"action","actions":[{"type":"create_reminder","title":"tomar agua","inMinutes":2}],"answer":""}` : ``}
+${hasFeature("recordatorios", { isTester: c.isTester }) ? `- ⚠️ CRÍTICO: si el usuario pide que le RECUERDES o le AVISES algo ("haceme acordar", "recordame", "avisame en 5 min", "avisame mañana a las 9"), es SIEMPRE intent "action" con UNA acción create_reminder. PROHIBIDO responder solo con texto como "te recordaré en 2 minutos" o "dale, te aviso" — eso NO programa nada y el recordatorio NO existe. TENÉS que emitir la acción: { "type": "create_reminder", "title": "<qué recordar>", "inMinutes": <N> } para "en N minutos/horas", o "remindAt":"YYYY-MM-DDTHH:mm" para una hora puntual. Ejemplo — usuario: "haceme acordar en 2 min de tomar agua" → {"intent":"action","actions":[{"type":"create_reminder","title":"tomar agua","inMinutes":2}],"answer":""}. Y si REPITE — usuario: "recordame todos los lunes a viernes a las 17:00 sacar la basura" → {"intent":"action","actions":[{"type":"create_recurring_reminder","title":"sacar la basura","daysOfWeek":[1,2,3,4,5],"atTime":"17:00"}],"answer":""}` : ``}
 ${hasFeature("tareas", { isTester: c.isTester }) ? `- Si el usuario pide ANOTAR un pendiente sin hora ("anotá comprar pilas", "tengo que llamar al banco"), es intent "action" con create_task — NO lo prometas por texto.
 - ORGANIZACIÓN: si te preguntan qué tienen que hacer ("qué tengo que hacer", "mis tareas", "qué me falta", "qué tengo el lunes/mañana/esta semana", "cómo viene mi semana"), es intent "query". Armá la respuesta combinando TODO lo que tengas en el contexto: TUS TAREAS PENDIENTES + RECORDATORIOS PROGRAMADOS + AGENDA (Google Calendar) + GOOGLE TASKS. Si preguntan por un día puntual, filtrá a ESE día (usá la tabla de FECHAS EXACTAS para saber qué fecha es). Respondé ordenado por hora/fecha, cortito. Si no hay nada para ese día, decíselo.` : ``}
 - "remember": usalo cuando el usuario comparta algo DURABLE para tener en cuenta a futuro
@@ -812,6 +816,28 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       const sameDay = formatDateFn(label, "yyyy-MM-dd") === formatDateFn(toZonedTime(new Date(), ARG_TZ), "yyyy-MM-dd");
       const cuando = sameDay ? `hoy ${formatDateFn(label, "HH:mm")}` : formatDateFn(label, "dd/MM 'a las' HH:mm");
       return `⏰ Listo, te aviso ${cuando}: ${a.title}`;
+    }
+
+    case "create_recurring_reminder": {
+      if (!hasFeature("recordatorios", { isTester: c.isTester })) throw new Error("esa función todavía no está disponible");
+      if (!a.title) throw new Error("falta qué recordar");
+      const days = Array.isArray(a.daysOfWeek)
+        ? [...new Set(a.daysOfWeek)].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+        : [];
+      if (days.length === 0) throw new Error("no entendí qué días");
+      const m = /^(\d{1,2}):(\d{2})$/.exec(a.atTime ?? "");
+      if (!m) throw new Error("no entendí a qué hora");
+      const hour = Math.min(23, Math.max(0, parseInt(m[1], 10)));
+      const minute = Math.min(59, Math.max(0, parseInt(m[2], 10)));
+
+      await createRecurringReminder(userId, { text: a.title, daysOfWeek: days, hour, minute });
+      const DÍAS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+      const dl =
+        days.length === 7 ? "todos los días"
+        : days.length === 5 && [1, 2, 3, 4, 5].every((d) => days.includes(d)) ? "de lunes a viernes"
+        : days.slice().sort((x, y) => x - y).map((d) => DÍAS[d]).join(", ");
+      const hhmm = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+      return `🔁 Listo, te voy a recordar ${dl} a las ${hhmm}: ${a.title}`;
     }
 
     case "agendar_evento": {

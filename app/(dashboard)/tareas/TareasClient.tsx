@@ -12,6 +12,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { formatDate } from "@/lib/utils";
 import type { SerializedTask } from "@/lib/db/tasks";
 import type { SerializedReminder } from "@/lib/db/reminders";
+import type { SerializedRecurringReminder } from "@/lib/db/recurring-reminders";
+import { RecurringReminders } from "./RecurringReminders";
 import { createTaskAction, toggleTaskAction, deleteTaskAction } from "@/app/actions/tasks";
 
 const ARG_TZ = "America/Argentina/Buenos_Aires";
@@ -36,12 +38,13 @@ function fmtReminder(iso: string): string {
 type Props = {
   initialTasks: SerializedTask[];
   reminders: SerializedReminder[];
+  recurringReminders: SerializedRecurringReminder[];
   events: { id: string; summary: string; start: string }[];
   googleConnected: boolean;
   googleEnabled: boolean;
 };
 
-export function TareasClient({ initialTasks, reminders, events, googleConnected, googleEnabled }: Props) {
+export function TareasClient({ initialTasks, reminders, recurringReminders, events, googleConnected, googleEnabled }: Props) {
   const [tasks, setTasks] = useState(initialTasks);
   const [title, setTitle] = useState("");
   const [due, setDue] = useState("");
@@ -187,6 +190,9 @@ export function TareasClient({ initialTasks, reminders, events, googleConnected,
           </CardContent>
         </Card>
       )}
+
+      {/* ── Recordatorios recurrentes ──────────────────────── */}
+      <RecurringReminders initial={recurringReminders} />
 
       {/* ── Tareas ─────────────────────────────────────────── */}
       <Card>
