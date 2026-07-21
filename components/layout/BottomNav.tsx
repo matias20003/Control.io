@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ArrowUpDown, Wallet,
-  MoreHorizontal, X, BarChart2, CreditCard, Target, HandCoins, Settings, CircleDollarSign, Users, CalendarCheck, Newspaper,
+  MoreHorizontal, X, BarChart2, CreditCard, Target, HandCoins, Settings, CircleDollarSign, Users, CalendarCheck, Newspaper, Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,9 +32,20 @@ const moreItems: NavItem[] = [
   { href: "/configuracion",icon: Settings,   label: "Configuración" },
 ];
 
-export function BottomNav({ newsletterUnread = false }: { newsletterUnread?: boolean }) {
+export function BottomNav({
+  newsletterUnread = false,
+  showCorreos = false,
+}: {
+  newsletterUnread?: boolean;
+  showCorreos?: boolean;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  // "Correos" solo para el dueño: se inserta antes de Configuración.
+  const more: NavItem[] = showCorreos
+    ? [...moreItems.slice(0, -1), { href: "/correos", icon: Mail, label: "Correos" }, moreItems[moreItems.length - 1]]
+    : moreItems;
   // Portalizamos el nav directo a document.body. Si algún ancestor del
   // layout queda alguna vez con transform/filter/backdrop-filter,
   // position: fixed se vuelve relativo a ESE ancestor — y la barra
@@ -43,7 +54,7 @@ export function BottomNav({ newsletterUnread = false }: { newsletterUnread?: boo
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const isMoreActive = moreItems.some((i) => (i.match ?? [i.href]).some((m) => pathname.startsWith(m)));
+  const isMoreActive = more.some((i) => (i.match ?? [i.href]).some((m) => pathname.startsWith(m)));
   const isCuentasActive =
     pathname === "/cuentas" || pathname.startsWith("/cuentas/");
 
@@ -96,7 +107,7 @@ export function BottomNav({ newsletterUnread = false }: { newsletterUnread?: boo
             {/* Grid 2×2 balanceado — scrollable si hiciera falta */}
             <div className="overflow-y-auto overscroll-contain px-3 pb-2">
               <div className="grid grid-cols-2 gap-2.5">
-                {moreItems.map((item) => {
+                {more.map((item) => {
                   const isActive = (item.match ?? [item.href]).some((m) => pathname.startsWith(m));
                   return (
                     <Link

@@ -1,6 +1,4 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import { Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { LogoFull } from "@/components/layout/Logo";
@@ -210,13 +208,7 @@ export default async function AdminPage() {
       <header className="border-b border-border bg-surface/60 backdrop-blur px-4 md:px-6 py-4 flex items-center justify-between gap-3">
         <LogoFull size="xs" />
         <div className="flex items-center gap-3">
-          <Link
-            href="/admin/correos"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-primary/50"
-          >
-            <Mail size={13} /> Correos
-          </Link>
-          <span className="text-xs text-muted truncate max-w-[35vw] md:max-w-none hidden sm:block">Admin · {user.email}</span>
+          <span className="text-xs text-muted truncate max-w-[45vw] md:max-w-none">Admin · {user.email}</span>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-0.5 text-[10px] font-semibold text-success uppercase tracking-widest">
             <span className="h-1.5 w-1.5 rounded-full bg-success" />
             Live

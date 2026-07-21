@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ArrowUpDown, Wallet, Target, HandCoins,
-  CreditCard, BarChart3, MessageCircle, CircleDollarSign, Users, CalendarCheck, Newspaper,
+  CreditCard, BarChart3, MessageCircle, CircleDollarSign, Users, CalendarCheck, Newspaper, Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
@@ -26,8 +26,19 @@ const navItems = [
   { href: "/cotizaciones",  icon: CircleDollarSign, label: "Cotizaciones" },
 ];
 
-export function Sidebar({ newsletterUnread = false }: { newsletterUnread?: boolean }) {
+export function Sidebar({
+  newsletterUnread = false,
+  showCorreos = false,
+}: {
+  newsletterUnread?: boolean;
+  showCorreos?: boolean;
+}) {
   const pathname = usePathname();
+
+  // "Correos" (bandeja unificada) solo se muestra al dueño (gate por email en el layout).
+  const items = showCorreos
+    ? [...navItems, { href: "/correos", icon: Mail, label: "Correos" }]
+    : navItems;
 
   return (
     <aside className="hidden md:flex flex-col w-56 fixed left-0 top-0 bottom-0 z-30 glass-panel border-r border-r-[color:var(--glass-border)] border-l-0 border-t-0 border-b-0">
@@ -38,7 +49,7 @@ export function Sidebar({ newsletterUnread = false }: { newsletterUnread?: boole
 
       {/* Nav */}
       <nav className="flex-1 px-2.5 py-3 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => {
+        {items.map((item) => {
           const isActive = item.match
             ? item.match.some((m) => pathname.startsWith(m))
             : pathname === item.href ||
