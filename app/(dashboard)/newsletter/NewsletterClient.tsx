@@ -308,13 +308,13 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
               </label>
 
               {isActive && (
-                <div className="flex items-center gap-2.5 pl-6">
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 pl-6">
                   <Clock size={14} className="text-muted shrink-0" />
                   <span className="text-sm text-foreground">A las</span>
                   <Select
                     value={String(sendHour)}
                     onChange={(e) => setSendHour(Number(e.target.value))}
-                    className="h-9 w-28"
+                    className="h-9 w-24"
                   >
                     {Array.from({ length: 24 }, (_, h) => (
                       <option key={h} value={h}>

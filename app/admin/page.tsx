@@ -205,10 +205,10 @@ export default async function AdminPage() {
   return (
     <div className="min-h-dvh bg-background text-foreground">
       {/* Header */}
-      <header className="border-b border-border bg-surface/60 backdrop-blur px-6 py-4 flex items-center justify-between">
+      <header className="border-b border-border bg-surface/60 backdrop-blur px-4 md:px-6 py-4 flex items-center justify-between gap-3">
         <LogoFull size="xs" />
         <div className="flex items-center gap-3">
-          <span className="text-xs text-muted">Admin · {user.email}</span>
+          <span className="text-xs text-muted truncate max-w-[45vw] md:max-w-none">Admin · {user.email}</span>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-0.5 text-[10px] font-semibold text-success uppercase tracking-widest">
             <span className="h-1.5 w-1.5 rounded-full bg-success" />
             Live
@@ -216,7 +216,7 @@ export default async function AdminPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-10 space-y-10">
+      <main className="mx-auto max-w-5xl px-4 md:px-6 py-8 md:py-10 space-y-10">
 
         {/* Title */}
         <div className="space-y-1">

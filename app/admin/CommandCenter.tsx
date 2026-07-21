@@ -82,7 +82,7 @@ function HealthHero({ o, mon }: { o: Overview; mon: Monetization }) {
               North Star
             </p>
           </div>
-          <p className="mt-3 font-mono text-5xl font-bold tabular-nums text-foreground">
+          <p className="mt-3 font-mono text-4xl sm:text-5xl font-bold tabular-nums text-foreground">
             {fmt(o.nsm)}
           </p>
           <p className="mt-1.5 text-sm font-medium text-foreground">

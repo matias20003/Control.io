@@ -146,8 +146,8 @@ export function RecurringReminders({
             })}
           </div>
 
-          {/* Días individuales */}
-          <div className="flex gap-1.5">
+          {/* Días individuales — grilla para que nunca desborde en mobile */}
+          <div className="grid grid-cols-7 gap-1">
             {DAY_ORDER.map((d) => {
               const on = days.includes(d);
               return (
@@ -156,7 +156,7 @@ export function RecurringReminders({
                   type="button"
                   onClick={() => toggleDay(d)}
                   aria-label={DAY_SHORT[d]}
-                  className={`h-8 w-8 rounded-full text-xs font-semibold transition-colors ${
+                  className={`h-9 rounded-lg text-xs font-semibold transition-colors ${
                     on
                       ? "bg-primary/15 text-primary ring-1 ring-primary/40"
                       : "bg-surface-2 text-muted hover:text-foreground"
@@ -168,18 +168,18 @@ export function RecurringReminders({
             })}
           </div>
 
-          {/* Hora + agregar */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 h-11">
-              <Clock size={15} className="text-muted" />
+          {/* Hora + agregar — apilado en mobile, en línea desde sm */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 h-11 shrink-0">
+              <Clock size={15} className="text-muted shrink-0" />
               <input
                 type="time"
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className="bg-transparent text-sm text-foreground outline-none [color-scheme:dark]"
+                className="w-full bg-transparent text-sm text-foreground outline-none [color-scheme:dark]"
               />
             </div>
-            <Button onClick={add} disabled={isPending} className="flex-1">
+            <Button onClick={add} disabled={isPending} className="w-full sm:flex-1">
               <Plus size={16} className="mr-1" />
               {isPending ? "Creando…" : "Crear recordatorio"}
             </Button>
