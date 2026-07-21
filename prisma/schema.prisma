@@ -609,6 +609,44 @@ model EmailNotified {
   @@map("email_notified")
 }
 
+// ─────────────────────────────────────────────
+// ESTUDIO (apuntes + repaso espaciado) — solo dueño
+// summary/content cifrados. Sin FK a profiles (userId como String, patrón de
+// las tablas de whatsapp) para no tocar el modelo Profile.
+// ─────────────────────────────────────────────
+model StudyNote {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  subject   String // materia
+  title     String
+  summary   String // resumen generado (cifrado)
+  content   String? // texto original extraído (cifrado)
+  source    String   @default("text") // text | audio | pdf
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, subject])
+  @@index([userId, createdAt])
+  @@map("study_notes")
+}
+
+model StudyReview {
+  id        String    @id @default(cuid())
+  noteId    String    @map("note_id")
+  userId    String    @map("user_id")
+  subject   String
+  title     String
+  dueDate   DateTime  @map("due_date")
+  interval  Int // repaso a los N días (1,3,7,16…)
+  done      Boolean   @default(false)
+  doneAt    DateTime? @map("done_at")
+  sent      Boolean   @default(false) // recordatorio ya enviado
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([done, sent, dueDate])
+  @@index([userId, done, dueDate])
+  @@map("study_reviews")
+}
+
 // Registro de números que escribieron al bot sin estar vinculados. Sirve para
 // diagnosticar si un número YA vinculado falla el matcheo (bug real) vs un
 // tester que todavía no vinculó (comportamiento esperado).

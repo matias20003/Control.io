@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ArrowUpDown, Wallet,
-  MoreHorizontal, X, BarChart2, CreditCard, Target, HandCoins, Settings, CircleDollarSign, Users, CalendarCheck, Newspaper, Mail,
+  MoreHorizontal, X, BarChart2, CreditCard, Target, HandCoins, Settings, CircleDollarSign, Users, CalendarCheck, Newspaper, Mail, GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -42,9 +42,14 @@ export function BottomNav({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  // "Correos" solo para el dueño: se inserta antes de Configuración.
+  // "Estudio" y "Correos" solo para el dueño: se insertan antes de Configuración.
   const more: NavItem[] = showCorreos
-    ? [...moreItems.slice(0, -1), { href: "/correos", icon: Mail, label: "Correos" }, moreItems[moreItems.length - 1]]
+    ? [
+        ...moreItems.slice(0, -1),
+        { href: "/estudio", icon: GraduationCap, label: "Estudio" },
+        { href: "/correos", icon: Mail, label: "Correos" },
+        moreItems[moreItems.length - 1],
+      ]
     : moreItems;
   // Portalizamos el nav directo a document.body. Si algún ancestor del
   // layout queda alguna vez con transform/filter/backdrop-filter,

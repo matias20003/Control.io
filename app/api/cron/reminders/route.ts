@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { bearerMatches } from "@/lib/cron-auth";
 import { getDueReminders, markReminderSent } from "@/lib/db/reminders";
 import { fireDueRecurringReminders } from "@/lib/db/recurring-reminders";
+import { fireStudyReviews } from "@/lib/study/ingest";
 import { sendPushToUser } from "@/lib/push/send";
 import { sendText } from "@/lib/whatsapp/kapso";
 
@@ -58,5 +59,8 @@ export async function GET(req: NextRequest) {
   // coinciden con la hora ARG actual. Best-effort, no frena a los de una vez.
   const recurring = await fireDueRecurringReminders().catch(() => ({ fired: 0 }));
 
-  return Response.json({ ok: true, due: due.length, sent, recurring: recurring.fired });
+  // Repasos espaciados de Estudio que vencieron hoy. Best-effort.
+  const study = await fireStudyReviews().catch(() => ({ sent: 0 }));
+
+  return Response.json({ ok: true, due: due.length, sent, recurring: recurring.fired, study: study.sent });
 }

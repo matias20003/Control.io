@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sendText, markReadAndType, fetchMediaAsDataUrl, verifySignature } from "@/lib/whatsapp/kapso";
+import { sendText, markReadAndType, fetchMediaAsDataUrl, fetchMediaBuffer, verifySignature } from "@/lib/whatsapp/kapso";
+import { isStudyOwner, ingestStudyPdf, ingestStudyText, studySavedMessage } from "@/lib/study/ingest";
 import { findProfileByPhone } from "@/lib/whatsapp/users";
 import { linkWhatsappByCode } from "@/lib/db/profile";
 import { rateLimitKey } from "@/lib/rate-limit";
@@ -16,6 +17,7 @@ type KapsoMessage = {
   from?: string;
   text?: { body?: string };
   image?: { id?: string; mime_type?: string; caption?: string };
+  document?: { id?: string; mime_type?: string; filename?: string; caption?: string };
   kapso?: {
     direction?: string;
     content?: string;
@@ -132,6 +134,42 @@ export async function POST(req: NextRequest) {
 
     // Feedback inmediato: marca leído + "escribiendo..." mientras procesamos.
     if (message.id) void markReadAndType(message.id);
+
+    // ── ESTUDIO (solo el dueño): PDF o apunte de texto → resumen + repaso espaciado ──
+    if (await isStudyOwner(profile.id)) {
+      const isPdf =
+        message.type === "document" ||
+        (message.document?.mime_type ?? "").includes("pdf") ||
+        (message.document?.filename ?? "").toLowerCase().endsWith(".pdf");
+      if (isPdf && message.kapso?.media_url) {
+        try {
+          const buf = await fetchMediaBuffer(message.kapso.media_url);
+          const r = await ingestStudyPdf(profile.id, buf, message.document?.caption || undefined);
+          processed = true;
+          await sendText(
+            from,
+            r.ok
+              ? studySavedMessage(r)
+              : r.reason === "empty"
+                ? "📄 Recibí el PDF pero no pude sacarle texto (¿es escaneado/foto?). Probá con un PDF de texto seleccionable, o mandame los apuntes escritos."
+                : "Uf, tuve un problema procesando ese PDF 😕 Probá de nuevo."
+          );
+          return Response.json({ ok: true, study: r.ok });
+        } catch (err) {
+          console.error("[study] pdf:", err);
+        }
+      }
+      const tStudy = getText(message) ?? "";
+      const mStudy = tStudy.match(
+        /^\s*(?:estudio|apunte|resumen del d[ií]a|guard[aá](?:me)? (?:esto|este apunte|apunte|el resumen))\s*:?\s*([\s\S]+)/i
+      );
+      if (mStudy && mStudy[1] && mStudy[1].trim().length > 20) {
+        const r = await ingestStudyText(profile.id, mStudy[1].trim());
+        processed = true;
+        await sendText(from, r.ok ? studySavedMessage(r) : "No pude guardar el apunte 😕 Probá con un poco más de texto.");
+        return Response.json({ ok: true, study: r.ok });
+      }
+    }
 
     // Si mandó una imagen (ticket, recibo, captura), la descargamos para que la lea la IA.
     let imageUrl: string | undefined;

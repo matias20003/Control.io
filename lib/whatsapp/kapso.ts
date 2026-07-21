@@ -133,6 +133,26 @@ export async function fetchMediaAsDataUrl(mediaUrl: string, mimeType?: string): 
 }
 
 /**
+ * Descarga un archivo multimedia (ej. un PDF) como Buffer. Valida el host
+ * (anti-SSRF) y limita el tamaño. Para documentos que hay que parsear, no para
+ * pasar a un modelo con visión (para eso está fetchMediaAsDataUrl).
+ */
+export async function fetchMediaBuffer(mediaUrl: string): Promise<Buffer> {
+  const url = assertSafeMediaUrl(mediaUrl);
+  const apiKey = process.env.KAPSO_API_KEY;
+  const headers: Record<string, string> = {};
+  if (apiKey && url.hostname.toLowerCase().endsWith("kapso.ai")) headers["X-API-Key"] = apiKey;
+
+  const res = await fetch(url, { headers, redirect: "error" });
+  if (!res.ok) throw new Error(`No pude descargar el archivo (${res.status})`);
+  const len = Number(res.headers.get("content-length") ?? 0);
+  if (len > MAX_MEDIA_BYTES) throw new Error("archivo demasiado grande");
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > MAX_MEDIA_BYTES) throw new Error("archivo demasiado grande");
+  return buf;
+}
+
+/**
  * Marca el mensaje como leído y muestra "escribiendo..." al usuario.
  * Da feedback instantáneo mientras procesamos (la IA tarda unos segundos).
  * Best-effort: si falla, no rompe el flujo.

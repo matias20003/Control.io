@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ArrowUpDown, Wallet, Target, HandCoins,
-  CreditCard, BarChart3, MessageCircle, CircleDollarSign, Users, CalendarCheck, Newspaper, Mail,
+  CreditCard, BarChart3, MessageCircle, CircleDollarSign, Users, CalendarCheck, Newspaper, Mail, GraduationCap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
@@ -35,9 +35,13 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
 
-  // "Correos" (bandeja unificada) solo se muestra al dueño (gate por email en el layout).
+  // "Estudio" y "Correos" solo se muestran al dueño (gate por email en el layout).
   const items = showCorreos
-    ? [...navItems, { href: "/correos", icon: Mail, label: "Correos" }]
+    ? [
+        ...navItems,
+        { href: "/estudio", icon: GraduationCap, label: "Estudio" },
+        { href: "/correos", icon: Mail, label: "Correos" },
+      ]
     : navItems;
 
   return (
