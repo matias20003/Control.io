@@ -72,6 +72,43 @@ function assertSafeMediaUrl(raw: string): URL {
 }
 
 /**
+ * Envía un MENSAJE DE PLANTILLA (HSM) aprobada por Meta. Es la única forma de
+ * escribirle a un usuario FUERA de la ventana de 24h (reactivación de dormidos).
+ * `bodyParams` llena las variables {{1}}, {{2}}, … en orden.
+ */
+export async function sendTemplate(
+  to: string,
+  templateName: string,
+  langCode: string,
+  bodyParams: string[] = []
+): Promise<void> {
+  const apiKey = process.env.KAPSO_API_KEY;
+  if (!apiKey) throw new Error("KAPSO_API_KEY no configurada");
+  const phoneId = process.env.KAPSO_PHONE_NUMBER_ID;
+  if (!phoneId) throw new Error("KAPSO_PHONE_NUMBER_ID no configurada");
+
+  const components = bodyParams.length
+    ? [{ type: "body", parameters: bodyParams.map((t) => ({ type: "text", text: t })) }]
+    : [];
+
+  const res = await fetch(`${apiUrl()}/meta/whatsapp/v24.0/${phoneId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "template",
+      template: { name: templateName, language: { code: langCode }, components },
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Kapso sendTemplate falló (${res.status}): ${body}`);
+  }
+}
+
+/**
  * Descarga un archivo multimedia (ej. una imagen) y lo devuelve como data URL
  * (base64) para pasárselo a un modelo con visión. Valida el host (anti-SSRF) y
  * limita el tamaño.

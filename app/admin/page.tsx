@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { LogoFull } from "@/components/layout/Logo";
 import { MigrateButton } from "./MigrateButton";
 import { FixDoubleEncryptButton } from "./FixDoubleEncryptButton";
+import { ReactivarDormidosButton } from "./ReactivarDormidosButton";
 import { getAdminAnalytics } from "@/lib/db/admin-stats";
 import { AdminAnalytics } from "./AdminAnalytics";
 import { getResendDomainStatus } from "@/lib/email/domain-status";
@@ -426,6 +427,16 @@ export default async function AdminPage() {
               </p>
             </div>
             <FixDoubleEncryptButton />
+          </div>
+          <div className="rounded-xl border border-border bg-surface p-5 flex items-start justify-between gap-6">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-foreground">Reactivar dormidos por WhatsApp</p>
+              <p className="text-xs text-muted max-w-md">
+                Envía la plantilla aprobada «reactivacion_dormidos» a los usuarios con WhatsApp
+                vinculado e inactivos 7+ días. Requiere que la plantilla esté APPROVED en Kapso.
+              </p>
+            </div>
+            <ReactivarDormidosButton />
           </div>
         </section>
 
