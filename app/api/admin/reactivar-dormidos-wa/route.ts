@@ -6,7 +6,7 @@ import { sendTemplate } from "@/lib/whatsapp/kapso";
 // usuarios que TIENEN WhatsApp vinculado pero están dormidos 7+ días. Es el único
 // canal para escribirles fuera de la ventana de 24h. La plantilla debe estar
 // APPROVED en Kapso/Meta; si no, Meta rechaza el envío y lo contamos como error.
-const TEMPLATE_NAME = "reactivacion_dormidos";
+const TEMPLATE_NAME = "reactivacion";
 const TEMPLATE_LANG = "es";
 
 export async function POST() {

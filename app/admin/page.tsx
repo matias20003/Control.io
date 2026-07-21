@@ -353,7 +353,7 @@ export default async function AdminPage() {
             <div className="space-y-1">
               <p className="text-sm font-semibold text-foreground">Reactivar dormidos por WhatsApp</p>
               <p className="text-xs text-muted max-w-md">
-                Envía la plantilla aprobada «reactivacion_dormidos» a los usuarios con WhatsApp
+                Envía la plantilla aprobada «reactivacion» a los usuarios con WhatsApp
                 vinculado e inactivos 7+ días. Requiere que la plantilla esté APPROVED en Kapso.
               </p>
             </div>
