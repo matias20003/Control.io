@@ -10,6 +10,8 @@ import { AdminAnalytics } from "./AdminAnalytics";
 import { getResendDomainStatus } from "@/lib/email/domain-status";
 import { getReactivationFollowup } from "@/lib/db/reactivation-followup";
 import { ReactivationFollowup } from "./ReactivationFollowup";
+import { getBusinessMetrics } from "@/lib/db/business-metrics";
+import { CommandCenter } from "./CommandCenter";
 
 export const dynamic = "force-dynamic";
 
@@ -161,33 +163,6 @@ const PROFILE_LABELS: Record<string, string> = {
   other:      "Otro",
 };
 
-/* ── mini bar chart (server-rendered SVG) ── */
-function MiniBarChart({ data }: { data: { date: string; count: number }[] }) {
-  const max    = Math.max(...data.map((d) => d.count), 1);
-  const W      = 560;
-  const H      = 48;
-  const barW   = Math.floor(W / data.length) - 1;
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-12" aria-hidden>
-      {data.map((d, i) => {
-        const h = Math.max(2, Math.round((d.count / max) * H));
-        return (
-          <rect
-            key={d.date}
-            x={i * (barW + 1)}
-            y={H - h}
-            width={barW}
-            height={h}
-            rx={2}
-            className={d.count > 0 ? "fill-primary/70" : "fill-border"}
-          />
-        );
-      })}
-    </svg>
-  );
-}
-
 /* ── stat tile ── */
 function Tile({
   label, value, sub, accent,
@@ -212,11 +187,12 @@ export default async function AdminPage() {
     redirect("/dashboard");
   }
 
-  const [s, analytics, domainStatus, followup] = await Promise.all([
+  const [s, analytics, domainStatus, followup, business] = await Promise.all([
     getStats(),
     getAdminAnalytics(),
     getResendDomainStatus(),
     getReactivationFollowup(),
+    getBusinessMetrics(),
   ]);
   const feedback = await prisma.feedback
     .findMany({ orderBy: { createdAt: "desc" }, take: 50 })
@@ -244,13 +220,23 @@ export default async function AdminPage() {
 
         {/* Title */}
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold">Panel de administración</h1>
+          <h1 className="text-2xl font-bold">Centro de comando</h1>
           <p className="text-sm text-muted">
-            Métricas del sistema — actualizado {now.toLocaleString("es-AR")}
+            La salud del negocio de un vistazo — actualizado {now.toLocaleString("es-AR")}
           </p>
         </div>
 
-        {/* Analítica avanzada: evolución, embudo, conectados, reactivación */}
+        {/* ── NEGOCIO: North Star, embudo, cohortes, adopción, churn, monetización ── */}
+        <CommandCenter m={business} />
+
+        {/* ── OPERATIVO ── */}
+        <div className="pt-2">
+          <h2 className="text-sm font-bold text-foreground border-b border-border pb-2">
+            Operativo &amp; evolución
+          </h2>
+        </div>
+
+        {/* Analítica: evolución histórica, embudo de onboarding, conectados, reactivación */}
         <AdminAnalytics data={analytics} domainStatus={domainStatus} gmailReady={!!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)} />
 
         {/* Seguimiento de la campaña de reactivación */}
@@ -316,31 +302,6 @@ export default async function AdminPage() {
           )}
         </section>
 
-        {/* Users */}
-        <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">Usuarios registrados</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Tile label="Total registrados"  value={s.users.total.toLocaleString("es-AR")} />
-            <Tile label="Nuevos esta semana" value={s.users.newWeek.toLocaleString("es-AR")}  accent="text-primary" />
-            <Tile label="Nuevos este mes"    value={s.users.newMonth.toLocaleString("es-AR")} accent="text-primary" />
-            <Tile label="Activos últimos 30d" value={s.users.active.toLocaleString("es-AR")}
-              sub={`${s.users.activePct} del total`} accent="text-success" />
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Tile
-              label="Activación"
-              value={s.users.activatedPct}
-              sub={`${s.users.activated}/${s.users.total} cargaron al menos 1 movimiento`}
-              accent={s.users.activated > 0 ? "text-success" : "text-muted"}
-            />
-            <Tile
-              label="Push activadas"
-              value={s.users.pushOn.toLocaleString("es-AR")}
-              sub={`${pct(s.users.pushOn, s.users.total)} del total`}
-            />
-          </div>
-        </section>
-
         {/* Bot de WhatsApp */}
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
@@ -360,46 +321,6 @@ export default async function AdminPage() {
               Plan gratis de Kapso: {s.whatsapp.limit} mensajes/mes (todos los usuarios juntos). El número exacto está en el panel de Kapso.
               {s.whatsapp.percent >= 80 ? " ⚠️ Cerca del límite del plan." : ""}
             </p>
-          </div>
-        </section>
-
-        {/* Registrations chart */}
-        <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-            Registros diarios — últimos 30 días
-          </h2>
-          <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
-            <MiniBarChart data={s.dailyRegistrations} />
-            <div className="flex justify-between text-[10px] text-muted">
-              <span>hace 30 días</span>
-              <span>hoy</span>
-            </div>
-          </div>
-        </section>
-
-        {/* Transactions */}
-        <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">Movimientos</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Tile label="Total histórico"     value={s.transactions.total.toLocaleString("es-AR")} />
-            <Tile label={`En ${monthName}`}   value={s.transactions.thisMonth.toLocaleString("es-AR")} accent="text-primary" />
-            <Tile label="Últimos 30 días"     value={s.transactions.last30.toLocaleString("es-AR")} />
-            <Tile label="Promedio por usuario activo" value={s.transactions.perActive}
-              sub="movimientos / 30d" />
-          </div>
-        </section>
-
-        {/* Entities */}
-        <section className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-            Entidades creadas (total histórico)
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <Tile label="Cuentas"              value={s.entities.accounts.toLocaleString("es-AR")} />
-            <Tile label="Metas"                value={s.entities.goals.toLocaleString("es-AR")} />
-            <Tile label="Inversiones"          value={s.entities.investments.toLocaleString("es-AR")} />
-            <Tile label="Deudas"               value={s.entities.debts.toLocaleString("es-AR")} />
-            <Tile label="Gastos fijos activos"  value={s.entities.recurring.toLocaleString("es-AR")} />
           </div>
         </section>
 
