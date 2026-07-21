@@ -36,6 +36,7 @@
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
     "dotenv": "^17.4.2",
+    "imapflow": "^1.4.8",
     "lucide-react": "^1.14.0",
     "motion": "^12.40.0",
     "next": "^16.2.10",

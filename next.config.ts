@@ -35,7 +35,7 @@ const nextConfig: NextConfig = {
   // sueltos en carpetas padre (C:\Users\yoris\, ...\Finanzas Personales\) hacen
   // que Turbopack infiera la raíz equivocada y no resuelva Tailwind/módulos.
   turbopack: { root: __dirname },
-  serverExternalPackages: ["web-push", "resend", "@prisma/client", "pg"],
+  serverExternalPackages: ["web-push", "resend", "@prisma/client", "pg", "imapflow"],
   experimental: {
     // Cachea en el navegador las páginas ya visitadas: volver a una pantalla
     // reciente es instantáneo (sin re-fetch). Las acciones hacen revalidatePath,
