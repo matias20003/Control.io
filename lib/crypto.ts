@@ -60,7 +60,11 @@ export function decrypt(encoded: string | null | undefined): string | null {
     decipher.setAuthTag(tag);
     return decipher.update(ciphertext).toString("utf8") + decipher.final("utf8");
   } catch {
-    // Authentication failed or corrupted — return null rather than garbage
+    // Falló la autenticación / dato corrupto / CLAVE EQUIVOCADA. Logueamos (sin
+    // el texto plano) para poder detectar una rotación de ENCRYPTION_KEY o
+    // corrupción antes de que "desaparezcan" datos en silencio. Devolvemos null
+    // en vez de basura.
+    console.warn("[crypto] decrypt falló sobre un valor 'enc:' (clave equivocada o dato corrupto)");
     return null;
   }
 }

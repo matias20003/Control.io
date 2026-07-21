@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { bearerMatches } from "@/lib/cron-auth";
 import { prisma } from "@/lib/prisma";
 import { getResend, FROM } from "@/lib/email/client";
 import { getWeeklyData, buildWeeklyReportHtml } from "@/lib/email/weekly-report";
@@ -15,8 +16,7 @@ function authorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
   // Auth exigida en todo ambiente (sin atajo por NODE_ENV).
-  const auth = req.headers.get("authorization");
-  return auth === `Bearer ${secret}`;
+  return bearerMatches(req.headers.get("authorization"), secret);
 }
 
 export async function GET(req: NextRequest) {

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { bearerMatches } from "@/lib/cron-auth";
 import { getDueReminders, markReminderSent } from "@/lib/db/reminders";
 import { sendPushToUser } from "@/lib/push/send";
 import { sendText } from "@/lib/whatsapp/kapso";
@@ -14,7 +15,7 @@ function authorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
   // Auth exigida en todo ambiente (sin atajo por NODE_ENV).
-  return req.headers.get("authorization") === `Bearer ${secret}`;
+  return bearerMatches(req.headers.get("authorization"), secret);
 }
 
 export async function GET(req: NextRequest) {

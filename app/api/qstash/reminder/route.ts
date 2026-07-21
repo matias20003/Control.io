@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { bearerMatches } from "@/lib/cron-auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { sendPushToUser } from "@/lib/push/send";
@@ -12,7 +13,7 @@ export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
-  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!secret || !bearerMatches(req.headers.get("authorization"), secret)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

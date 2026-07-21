@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
     const data = forceRefresh ? await refreshCotizaciones() : await getCotizaciones();
     return NextResponse.json({ ok: true, data });
   } catch (err) {
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
+    console.error("[cotizaciones] error:", err);
+    return NextResponse.json({ ok: false, error: "No se pudieron obtener las cotizaciones" }, { status: 500 });
   }
 }

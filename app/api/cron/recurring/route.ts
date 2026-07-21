@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { bearerMatches } from "@/lib/cron-auth";
 import { prisma } from "@/lib/prisma";
 import { differenceInDays, isAfter, isBefore } from "date-fns";
 import { sendPushToUser } from "@/lib/push/send";
@@ -17,8 +18,7 @@ export const maxDuration = 60;
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false; // Si no hay secret configurado, denegar siempre
-  const auth = req.headers.get("authorization");
-  return auth === `Bearer ${secret}`;
+  return bearerMatches(req.headers.get("authorization"), secret);
 }
 
 function shouldExecuteToday(
