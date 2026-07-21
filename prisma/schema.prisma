@@ -600,6 +600,15 @@ model WhatsappProcessedMessage {
   @@map("whatsapp_processed_messages")
 }
 
+// Correos ya notificados por el vigilante de UTN (dedup: no avisar 2 veces el
+// mismo correo). id = Message-ID del correo.
+model EmailNotified {
+  messageId String   @id @map("message_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("email_notified")
+}
+
 // Registro de números que escribieron al bot sin estar vinculados. Sirve para
 // diagnosticar si un número YA vinculado falla el matcheo (bug real) vs un
 // tester que todavía no vinculó (comportamiento esperado).

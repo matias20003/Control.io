@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { bearerMatches } from "@/lib/cron-auth";
 import { generateEditionsForHour } from "@/lib/services/newsletter";
+import { watchUtnEmails } from "@/lib/email/utn-watch";
 import { nowArgParts } from "@/lib/timezone";
 
 // Generación horaria del newsletter. NO está en vercel.json (Vercel Hobby
@@ -34,5 +35,10 @@ export async function GET(req: NextRequest) {
       : nowArgParts().hour;
 
   const result = await generateEditionsForHour(hour);
-  return Response.json({ ok: true, hour, ...result });
+
+  // Colgado acá (best-effort): vigilante de correos de la UTN. Corre cada vez que
+  // se pinga el newsletter (horario), sin necesitar un cron aparte.
+  const utnWatch = await watchUtnEmails().catch(() => ({ notified: 0, skipped: 0 }));
+
+  return Response.json({ ok: true, hour, ...result, utnWatch });
 }
