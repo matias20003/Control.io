@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { startOfWeek, endOfWeek, subWeeks, format } from "date-fns";
 import { es } from "date-fns/locale";
+import { decrypt } from "@/lib/crypto";
+import { escapeHtml } from "./escape";
 
 type WeekData = {
   income: number;
@@ -65,7 +67,7 @@ export async function getWeeklyData(userId: string, weekStart: Date, weekEnd: Da
     expense,
     balance: income - expense,
     topCategories,
-    accountBalances: accounts.map((a) => ({ name: a.name, currency: a.currency, balance: toNum(a.balance) })),
+    accountBalances: accounts.map((a) => ({ name: decrypt(a.name) ?? a.name, currency: a.currency, balance: toNum(a.balance) })),
   };
 }
 
@@ -87,7 +89,7 @@ export function buildWeeklyReportHtml(opts: {
         .map(
           (c) => `
         <tr>
-          <td style="padding:8px 0; color:#f8fafc; font-size:14px;">${c.icon} ${c.name}</td>
+          <td style="padding:8px 0; color:#f8fafc; font-size:14px;">${escapeHtml(c.icon)} ${escapeHtml(c.name)}</td>
           <td style="padding:8px 0; color:#ef4444; font-size:14px; text-align:right; font-family:monospace;">${fmt(c.total)}</td>
         </tr>`
         )
@@ -98,7 +100,7 @@ export function buildWeeklyReportHtml(opts: {
     .map(
       (a) => `
       <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #334155;">
-        <span style="color:#94a3b8; font-size:13px;">${a.name}</span>
+        <span style="color:#94a3b8; font-size:13px;">${escapeHtml(a.name)}</span>
         <span style="color:#f8fafc; font-size:13px; font-family:monospace;">${fmt(a.balance, a.currency)}</span>
       </div>`
     )
@@ -122,7 +124,7 @@ export function buildWeeklyReportHtml(opts: {
 
     <!-- Greeting -->
     <div style="padding:28px 0 20px;">
-      <h1 style="margin:0 0 8px; font-size:20px; font-weight:700; color:#f8fafc;">Hola, ${name} 👋</h1>
+      <h1 style="margin:0 0 8px; font-size:20px; font-weight:700; color:#f8fafc;">Hola, ${escapeHtml(name)} 👋</h1>
       <p style="margin:0; font-size:14px; color:#94a3b8;">Tu reporte financiero de la semana del <strong style="color:#f8fafc;">${period}</strong>.</p>
     </div>
 

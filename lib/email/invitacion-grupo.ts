@@ -1,3 +1,5 @@
+import { escapeHtml } from "./escape";
+
 interface InvitacionGrupoParams {
   grupoNombre: string;
   invitadoPorNombre: string;
@@ -5,12 +7,13 @@ interface InvitacionGrupoParams {
   link: string;
 }
 
-export function invitacionGrupoHtml({
-  grupoNombre,
-  invitadoPorNombre,
-  nombreInvitado,
-  link,
-}: InvitacionGrupoParams): string {
+export function invitacionGrupoHtml(params: InvitacionGrupoParams): string {
+  // Escapamos los valores controlados por el usuario (nombres) para evitar
+  // inyección de HTML/links en el email.
+  const grupoNombre = escapeHtml(params.grupoNombre);
+  const invitadoPorNombre = escapeHtml(params.invitadoPorNombre);
+  const nombreInvitado = params.nombreInvitado ? escapeHtml(params.nombreInvitado) : undefined;
+  const link = params.link;
   const saludo = nombreInvitado ? `Hola ${nombreInvitado},` : "Hola,";
 
   return `<!DOCTYPE html>

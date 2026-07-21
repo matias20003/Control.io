@@ -13,7 +13,7 @@ export const maxDuration = 30;
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
-  if (process.env.NODE_ENV !== "production") return true;
+  // Auth exigida en todo ambiente (sin atajo por NODE_ENV).
   return req.headers.get("authorization") === `Bearer ${secret}`;
 }
 

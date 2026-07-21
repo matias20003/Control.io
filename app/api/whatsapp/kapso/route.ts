@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { sendText, markReadAndType, fetchMediaAsDataUrl, verifySignature } from "@/lib/whatsapp/kapso";
 import { findProfileByPhone } from "@/lib/whatsapp/users";
 import { linkWhatsappByCode } from "@/lib/db/profile";
+import { rateLimitKey } from "@/lib/rate-limit";
 import { handleUserMessage } from "@/lib/whatsapp/assistant";
 
 export const runtime = "nodejs";
@@ -75,6 +76,15 @@ export async function POST(req: NextRequest) {
 
     from = message.from ?? null;
     if (!from) return Response.json({ ok: true, ignored: "no-sender" });
+
+    // Rate limit por remitente: el webhook invoca LLMs de visión/chat (caros) y
+    // escribe en la DB. Sin esto, un flujo de mensajes de un mismo número podría
+    // disparar gasto y escrituras sin techo. 15 mensajes por minuto es holgado
+    // para un uso humano real.
+    const rl = await rateLimitKey(`wa:${from.replace(/\D/g, "")}`, 15, 60);
+    if (!rl.success) {
+      return Response.json({ ok: true, rateLimited: true }, { status: 429 });
+    }
 
     // Idempotencia: Kapso reintenta el webhook si tardamos en responder. Si ya
     // procesamos este mensaje, no lo volvemos a cargar (evita duplicados).

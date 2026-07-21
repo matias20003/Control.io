@@ -103,6 +103,27 @@ export async function rateLimit(
   return memLimit(key, limit, windowSec);
 }
 
+/**
+ * Rate limit por una clave arbitraria (no la IP). Útil para el webhook de
+ * WhatsApp, donde la IP es siempre la de Kapso y hay que limitar por remitente.
+ */
+export async function rateLimitKey(
+  key: string,
+  limit: number,
+  windowSec: number
+): Promise<RateLimitResult> {
+  const upstash = getUpstashLimiter(limit, windowSec);
+  if (upstash) {
+    const res = await upstash.limit(key);
+    return {
+      success: res.success,
+      retryAfterSec: res.success ? 0 : Math.max(1, Math.ceil((res.reset - Date.now()) / 1000)),
+    };
+  }
+  sweepMemStore();
+  return memLimit(key, limit, windowSec);
+}
+
 /** Mensaje amigable para mostrar al usuario cuando se excede el límite. */
 export function rateLimitMessage(retryAfterSec: number): string {
   const min = Math.ceil(retryAfterSec / 60);

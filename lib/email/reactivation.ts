@@ -3,8 +3,12 @@
  * ningún movimiento. Objetivo: llevarlos a su primer "aha" (cargar un gasto y
  * ver el dashboard cobrar vida).
  */
+import { escapeHtml } from "./escape";
+
 export function buildReactivationHtml(opts: { name: string; appUrl: string; dormant?: boolean }): string {
-  const { name, appUrl, dormant = false } = opts;
+  const { appUrl, dormant = false } = opts;
+  const name = escapeHtml(opts.name); // valor controlado por el usuario
+
 
   const headline = dormant ? `${name}, ¿todo bien? 👋` : `${name}, ¿arrancamos? 👋`;
   const intro = dormant

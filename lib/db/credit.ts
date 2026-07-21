@@ -94,6 +94,21 @@ export async function createCreditPurchase(
     categoryId?: string;
   }
 ): Promise<SerializedCreditPurchase> {
+  // Anti-IDOR: la cuenta y la categoría deben ser del propio usuario.
+  const ownsAccount = await prisma.account.findFirst({
+    where: { id: data.accountId, userId },
+    select: { id: true },
+  });
+  if (!ownsAccount) throw new Error("Cuenta inválida");
+  let safeCategoryId: string | null = null;
+  if (data.categoryId) {
+    const cat = await prisma.category.findFirst({
+      where: { id: data.categoryId, userId },
+      select: { id: true },
+    });
+    safeCategoryId = cat?.id ?? null;
+  }
+
   const firstDate = new Date(data.firstPaymentDate);
 
   // splitInstallments garantiza que la suma de cuotas dé el total exacto
@@ -116,7 +131,7 @@ export async function createCreditPurchase(
       currency: data.currency,
       totalInstallments: data.totalInstallments,
       firstPaymentDate: firstDate,
-      categoryId: data.categoryId || null,
+      categoryId: safeCategoryId,
       installments: { create: installmentsData },
     },
     include: INCLUDE,
@@ -205,6 +220,16 @@ export async function updateCreditPurchase(
     include: { installments: { orderBy: { installmentNumber: "asc" } } },
   });
   if (!current) throw new Error("No encontrado");
+
+  // Anti-IDOR: si cambian cuenta/categoría, deben ser del propio usuario.
+  if (data.accountId !== undefined) {
+    const ok = await prisma.account.findFirst({ where: { id: data.accountId, userId }, select: { id: true } });
+    if (!ok) throw new Error("Cuenta inválida");
+  }
+  if (data.categoryId) {
+    const ok = await prisma.category.findFirst({ where: { id: data.categoryId, userId }, select: { id: true } });
+    if (!ok) throw new Error("Categoría inválida");
+  }
 
   const unpaid = current.installments.filter((i) => !i.isPaid);
   const newFirstDate = data.firstPaymentDate ? new Date(data.firstPaymentDate) : null;

@@ -8,9 +8,13 @@ export const runtime = "nodejs";
 
 function esc(v: string | null | undefined): string {
   if (!v) return "";
-  return v.includes(",") || v.includes('"') || v.includes("\n")
-    ? `"${v.replace(/"/g, '""')}"`
-    : v;
+  // Anti CSV/formula injection: una celda que empieza con = + - @ (o tab/CR) puede
+  // ejecutarse como fórmula al abrir el CSV en Excel/Sheets. La prefijamos con ' .
+  let s = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+    s = `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
 }
 
 function toNum(v: unknown): number {

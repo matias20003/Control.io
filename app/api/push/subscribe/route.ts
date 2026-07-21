@@ -16,6 +16,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
   }
 
+  // Anti-takeover: si el endpoint ya pertenece a OTRO usuario, no lo reasignamos
+  // (evita robar las notificaciones de otra cuenta conociendo su endpoint).
+  const existing = await prisma.pushSubscription.findUnique({
+    where: { endpoint },
+    select: { userId: true },
+  });
+  if (existing && existing.userId !== user.id) {
+    return NextResponse.json({ error: "Endpoint already registered" }, { status: 409 });
+  }
+
   await prisma.pushSubscription.upsert({
     where: { endpoint },
     create: {
@@ -25,7 +35,6 @@ export async function POST(req: NextRequest) {
       auth: keys.auth,
     },
     update: {
-      userId: user.id,
       p256dh: keys.p256dh,
       auth: keys.auth,
     },

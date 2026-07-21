@@ -93,6 +93,14 @@ export async function createOrUpdateBudget(
     alertAt?: number;
   }
 ): Promise<void> {
+  // Anti-IDOR: la categoría debe ser del propio usuario (sin esto, un usuario
+  // podría crear un presupuesto sobre la categoría de otro y leer su nombre).
+  const owns = await prisma.category.findFirst({
+    where: { id: data.categoryId, userId },
+    select: { id: true },
+  });
+  if (!owns) throw new Error("Categoría inválida");
+
   await prisma.budget.upsert({
     where: {
       userId_categoryId_month_year: {

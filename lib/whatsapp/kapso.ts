@@ -37,20 +37,60 @@ export async function sendText(to: string, text: string): Promise<void> {
   }
 }
 
+// Hosts permitidos para descargar media (Kapso + CDNs oficiales de WhatsApp/Meta).
+// Evita SSRF: el media_url viene del payload del webhook y no debe poder apuntar
+// a IPs internas / servicios del propio servidor.
+const ALLOWED_MEDIA_HOSTS = [
+  /(^|\.)kapso\.ai$/i,
+  /(^|\.)whatsapp\.net$/i,
+  /(^|\.)fbcdn\.net$/i,
+  /(^|\.)fbsbx\.com$/i,
+  /(^|\.)cdninstagram\.com$/i,
+];
+const MAX_MEDIA_BYTES = 15 * 1024 * 1024; // 15 MB
+
+function assertSafeMediaUrl(raw: string): URL {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    throw new Error("media_url inválida");
+  }
+  if (u.protocol !== "https:") throw new Error("media_url debe ser https");
+  const host = u.hostname.toLowerCase();
+  // Rechazar IPs literales y hosts internos (SSRF a metadata / red interna).
+  if (
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":") ||
+    host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")
+  ) {
+    throw new Error("media_url apunta a un host no permitido");
+  }
+  if (!ALLOWED_MEDIA_HOSTS.some((re) => re.test(host))) {
+    throw new Error(`media_url de host no permitido: ${host}`);
+  }
+  return u;
+}
+
 /**
  * Descarga un archivo multimedia (ej. una imagen) y lo devuelve como data URL
- * (base64) para pasárselo a un modelo con visión.
+ * (base64) para pasárselo a un modelo con visión. Valida el host (anti-SSRF) y
+ * limita el tamaño.
  */
 export async function fetchMediaAsDataUrl(mediaUrl: string, mimeType?: string): Promise<string> {
+  const url = assertSafeMediaUrl(mediaUrl);
   const apiKey = process.env.KAPSO_API_KEY;
   const headers: Record<string, string> = {};
   // La auth solo va a los hosts de Kapso; los CDN públicos de WhatsApp no la necesitan.
-  if (apiKey && mediaUrl.includes("kapso.ai")) headers["X-API-Key"] = apiKey;
+  if (apiKey && url.hostname.toLowerCase().endsWith("kapso.ai")) headers["X-API-Key"] = apiKey;
 
-  const res = await fetch(mediaUrl, { headers });
+  const res = await fetch(url, { headers, redirect: "error" });
   if (!res.ok) throw new Error(`No pude descargar el archivo (${res.status})`);
 
+  const len = Number(res.headers.get("content-length") ?? 0);
+  if (len > MAX_MEDIA_BYTES) throw new Error("archivo demasiado grande");
+
   const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > MAX_MEDIA_BYTES) throw new Error("archivo demasiado grande");
   const mt = mimeType || res.headers.get("content-type") || "image/jpeg";
   return `data:${mt};base64,${buf.toString("base64")}`;
 }
@@ -82,11 +122,13 @@ export async function markReadAndType(messageId: string): Promise<void> {
 
 /**
  * Verifica la firma HMAC-SHA256 del webhook de Kapso.
- * Si no hay KAPSO_WEBHOOK_SECRET configurado, no bloquea (modo dev).
+ * En PRODUCCIÓN, la ausencia del secret NO puede saltear la verificación
+ * (fail-closed): si falta el secret en prod, se rechaza todo. Solo en dev/local
+ * (sin secret configurado) se permite para poder testear.
  */
 export function verifySignature(rawBody: string, signature: string | null): boolean {
   const secret = process.env.KAPSO_WEBHOOK_SECRET;
-  if (!secret) return true;
+  if (!secret) return process.env.NODE_ENV !== "production";
   if (!signature) return false;
 
   const received = signature.replace(/^sha256=/, "").trim();

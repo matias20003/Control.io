@@ -34,7 +34,12 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
       api_host: HOST,
       capture_pageview: false, // lo manejamos manualmente (App Router)
       capture_pageleave: true,
-      autocapture: true, // captura clicks/inputs automáticamente
+      // Autocapture DESACTIVADO: en una app de finanzas, los eventos automáticos
+      // de click/change mandan el texto del elemento ($el_text) —montos, nombres
+      // de cuentas/categorías— a un tercero. El enmascarado del session-replay NO
+      // aplica al autocapture. Capturamos solo eventos explícitos y seguros.
+      autocapture: false,
+      mask_all_element_attributes: true,
       persistence: "localStorage+cookie",
       session_recording: {
         // Privacidad (app de finanzas con datos reales): enmascaramos TODO.
