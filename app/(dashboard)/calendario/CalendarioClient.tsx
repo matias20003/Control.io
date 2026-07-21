@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
 import type { SerializedTask } from "@/lib/db/tasks";
+import type { SerializedRecurringReminder } from "@/lib/db/recurring-reminders";
+import { RecurringReminders } from "../tareas/RecurringReminders";
 import { createCalendarEventAction, updateCalendarEventAction, deleteCalendarEventAction } from "@/app/actions/calendar";
 import { createTaskAction, toggleTaskAction, deleteTaskAction, updateTaskAction } from "@/app/actions/tasks";
 
@@ -30,10 +32,11 @@ function prettyDay(key: string): string {
 type Form = { mode: "create" | "edit"; id?: string; title: string; day: string; time: string };
 
 export function CalendarioClient({
-  cells, initialTasks, monthLabel, todayArg, prevMonth, nextMonth, googleConnected, googleEnabled,
+  cells, initialTasks, recurringReminders, monthLabel, todayArg, prevMonth, nextMonth, googleConnected, googleEnabled,
 }: {
   cells: Cell[];
   initialTasks: SerializedTask[];
+  recurringReminders: SerializedRecurringReminder[];
   monthLabel: string;
   todayArg: string;
   prevMonth: string;
@@ -232,6 +235,9 @@ export function CalendarioClient({
           )}
         </CardContent>
       </Card>
+
+      {/* Recordatorios recurrentes */}
+      <RecurringReminders initial={recurringReminders} />
 
       {/* ── Card del día (ventana emergente) ── */}
       <Dialog open={!!dayKey} onOpenChange={(o) => { if (!o) { setDayKey(null); setForm(null); } }}>

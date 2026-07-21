@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { hasFeature } from "@/lib/feature-flags";
 import { getTasks } from "@/lib/db/tasks";
 import { getPendingReminders } from "@/lib/db/reminders";
+import { listRecurringReminders } from "@/lib/db/recurring-reminders";
 import { getGoogleStatus, listCalendarEvents } from "@/lib/google";
 import { CalendarioClient, type Cell, type CalItem } from "./CalendarioClient";
 
@@ -47,9 +48,10 @@ export default async function CalendarioPage({ searchParams }: { searchParams: P
   const rangeTo = new Date(gridStart);
   rangeTo.setUTCDate(gridStart.getUTCDate() + 42);
 
-  const [tasks, reminders, gstatus] = await Promise.all([
+  const [tasks, reminders, recurringReminders, gstatus] = await Promise.all([
     getTasks(user.id).catch(() => []),
     getPendingReminders(user.id).catch(() => []),
+    listRecurringReminders(user.id).catch(() => []),
     getGoogleStatus(user.id).catch(() => ({ connected: false, email: null })),
   ]);
   const googleEnabled = hasFeature("google", { isTester });
@@ -86,6 +88,7 @@ export default async function CalendarioPage({ searchParams }: { searchParams: P
     <CalendarioClient
       cells={cells}
       initialTasks={tasks}
+      recurringReminders={recurringReminders}
       monthLabel={`${MESES[mon - 1]} ${year}`}
       todayArg={todayArg}
       prevMonth={prevMonth}
