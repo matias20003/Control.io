@@ -1,0 +1,118 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { isStudyOwner } from "@/lib/study/ingest";
+import {
+  createSubject,
+  createBlock,
+  closeSession,
+  updateBlockStatus,
+} from "@/lib/db/study-system";
+import { MASTERY } from "@/lib/study/spaced";
+
+async function requireOwner(): Promise<string | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  if (!(await isStudyOwner(user.id))) return null;
+  return user.id;
+}
+
+const subjectSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  code: z.string().trim().min(1).max(12),
+  type: z.enum(["anual", "cuatrimestral"]).optional(),
+  color: z.string().trim().max(20).optional(),
+});
+
+export async function createSubjectAction(input: z.infer<typeof subjectSchema>) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const parsed = subjectSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  try {
+    const subject = await createSubject(userId, parsed.data);
+    revalidatePath("/estudio");
+    return { success: true, subject };
+  } catch {
+    return { error: "No se pudo crear la materia" };
+  }
+}
+
+const blockSchema = z.object({
+  subjectId: z.string().min(1),
+  parcial: z.number().int().min(1).max(4),
+  topic: z.string().trim().min(1).max(160),
+  unit: z.string().trim().max(80).optional(),
+  subtopic: z.string().trim().max(160).optional(),
+  summary: z.string().trim().max(8000).optional(),
+  source: z.string().trim().max(200).optional(),
+  importance: z.number().int().min(1).max(4).optional(),
+  difficulty: z.number().int().min(1).max(4).optional(),
+});
+
+export async function createBlockAction(input: z.infer<typeof blockSchema>) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const parsed = blockSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  try {
+    const block = await createBlock(userId, parsed.data);
+    revalidatePath("/estudio");
+    return { success: true, block };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "No se pudo crear el bloque" };
+  }
+}
+
+const closeSchema = z.object({
+  blockId: z.string().min(1),
+  result: z.enum(MASTERY as [string, ...string[]]),
+  actualDuration: z.number().int().min(0).max(600).optional(),
+  explainedWithoutNotes: z.boolean().optional(),
+  solvedWithoutHelp: z.boolean().optional(),
+  usedNotes: z.boolean().optional(),
+  errorCategory: z.string().trim().max(60).optional(),
+  errorDescription: z.string().trim().max(2000).optional(),
+  notes: z.string().trim().max(2000).optional(),
+});
+
+export async function closeSessionAction(input: z.infer<typeof closeSchema>) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const parsed = closeSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  try {
+    const block = await closeSession(userId, {
+      blockId: parsed.data.blockId,
+      result: parsed.data.result as (typeof MASTERY)[number],
+      actualDuration: parsed.data.actualDuration,
+      explainedWithoutNotes: parsed.data.explainedWithoutNotes,
+      solvedWithoutHelp: parsed.data.solvedWithoutHelp,
+      usedNotes: parsed.data.usedNotes,
+      errorCategory: parsed.data.errorCategory ?? null,
+      errorDescription: parsed.data.errorDescription ?? null,
+      notes: parsed.data.notes ?? null,
+    });
+    revalidatePath("/estudio");
+    return { success: true, block };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "No se pudo cerrar la sesión" };
+  }
+}
+
+export async function archiveBlockAction(blockId: string) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  try {
+    await updateBlockStatus(userId, blockId, "ARCHIVADO");
+    revalidatePath("/estudio");
+    return { success: true };
+  } catch {
+    return { error: "No se pudo archivar" };
+  }
+}

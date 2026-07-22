@@ -648,6 +648,80 @@ model StudyReview {
   @@map("study_reviews")
 }
 
+// ─────────────────────────────────────────────
+// SISTEMA DE ESTUDIO POR REPETICIÓN ESPACIADA (solo dueño)
+// Materias → bloques (tema manejable) → sesiones. El bloque tiene una única
+// próxima fecha activa; el motor la recalcula según el resultado.
+// ─────────────────────────────────────────────
+model StudySubject {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  name      String
+  code      String // AM2, FIS2, ASI, PDP, SO…
+  type      String   @default("cuatrimestral") // anual | cuatrimestral
+  color     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, active])
+  @@map("study_subjects")
+}
+
+model StudyBlock {
+  id               String    @id @default(cuid())
+  userId           String    @map("user_id")
+  subjectId        String    @map("subject_id")
+  code             String // AM2-P2-03
+  unit             String? // unidad
+  topic            String // tema
+  subtopic         String?
+  summary          String? // cifrado
+  source           String? // fuente/archivo/páginas
+  importance       Int       @default(2) // 1 baja … 4 muy alta
+  difficulty       Int       @default(2) // 1..4
+  masteryLevel     String    @default("ROJO") @map("mastery_level") // ROJO|AMARILLO|VERDE|CONSOLIDADO
+  reviewStage      String    @default("D0") @map("review_stage") // D0|D+1|D+3|D+7|D+16|MANT_SEM|MANT_QUIN
+  reviewDuration   Int       @default(25) @map("review_duration") // min estimados del próximo repaso
+  incorporationDate DateTime @default(now()) @map("incorporation_date")
+  lastStudyDate    DateTime? @map("last_study_date")
+  nextReviewDate   DateTime? @map("next_review_date")
+  reviewCount      Int       @default(0) @map("review_count")
+  successCount     Int       @default(0) @map("success_count")
+  errorCount       Int       @default(0) @map("error_count")
+  status           String    @default("ACTIVO") // ACTIVO|PAUSADO|ARCHIVADO
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId, status])
+  @@index([userId, nextReviewDate])
+  @@index([subjectId])
+  @@map("study_blocks")
+}
+
+model StudySession {
+  id                    String    @id @default(cuid())
+  userId                String    @map("user_id")
+  blockId               String    @map("block_id")
+  sessionType           String    @map("session_type") // ESTUDIO_INICIAL|RECUPERACION_ACTIVA|EJERCICIOS|...
+  stage                 String
+  masteryBefore         String    @map("mastery_before")
+  masteryAfter          String    @map("mastery_after") // resultado ROJO|AMARILLO|VERDE|CONSOLIDADO
+  plannedDuration       Int?      @map("planned_duration")
+  actualDuration        Int?      @map("actual_duration")
+  explainedWithoutNotes Boolean?  @map("explained_without_notes")
+  solvedWithoutHelp     Boolean?  @map("solved_without_help")
+  usedNotes             Boolean?  @map("used_notes")
+  errorCategory         String?   @map("error_category")
+  errorDescription      String?   @map("error_description") // cifrado
+  notes                 String? // cifrado
+  nextDateCalculated    DateTime? @map("next_date_calculated")
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, blockId])
+  @@index([blockId, createdAt])
+  @@map("study_sessions")
+}
+
 // Registro de números que escribieron al bot sin estar vinculados. Sirve para
 // diagnosticar si un número YA vinculado falla el matcheo (bug real) vs un
 // tester que todavía no vinculó (comportamiento esperado).
