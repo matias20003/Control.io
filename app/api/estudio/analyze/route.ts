@@ -18,21 +18,24 @@ export async function POST(req: NextRequest) {
   try {
     const form = await req.formData();
     const hint = (form.get("subject") as string) || undefined;
-    const file = form.get("file");
+    const files = form.getAll("file").filter((f): f is File => typeof f !== "string");
     const text = (form.get("text") as string) || "";
 
-    if (file && typeof file !== "string") {
-      const type = (file as File).type || "";
-      const buf = Buffer.from(await file.arrayBuffer());
+    if (files.length) {
+      const images = files.filter((f) => (f.type || "").startsWith("image/")).slice(0, 10);
 
-      if (type.startsWith("image/")) {
-        const dataUrl = `data:${type};base64,${buf.toString("base64")}`;
-        const r = await analyzeImagesToBlocks([dataUrl], hint);
-        if (!r.blocks.length) return Response.json({ error: "No pude leer la imagen. Probá una foto más nítida." }, { status: 400 });
+      // Varias fotos (páginas de una clase) → una sola división en bloques.
+      if (images.length) {
+        const dataUrls = await Promise.all(
+          images.map(async (f) => `data:${f.type};base64,${Buffer.from(await f.arrayBuffer()).toString("base64")}`)
+        );
+        const r = await analyzeImagesToBlocks(dataUrls, hint);
+        if (!r.blocks.length) return Response.json({ error: "No pude leer las imágenes. Probá con fotos más nítidas." }, { status: 400 });
         return Response.json({ ok: true, unit: r.unit, blocks: r.blocks });
       }
 
-      // PDF: intento texto; si es manuscrito (sin texto), lo trato como imagen.
+      // PDF: intento texto; si es manuscrito (sin texto), pido que sea foto.
+      const buf = Buffer.from(await files[0].arrayBuffer());
       const pdfText = await extractPdfText(buf).catch(() => "");
       if (pdfText.trim().length >= 40) {
         const r = await analyzeTextToBlocks(pdfText, hint);
@@ -40,7 +43,7 @@ export async function POST(req: NextRequest) {
         return Response.json({ ok: true, unit: r.unit, blocks: r.blocks });
       }
       return Response.json(
-        { error: "Ese PDF es manuscrito (imagen). Subilo como FOTO y te leo la letra 📸" },
+        { error: "Ese PDF es manuscrito (imagen). Subilo como FOTOS y te leo la letra 📸" },
         { status: 400 }
       );
     }

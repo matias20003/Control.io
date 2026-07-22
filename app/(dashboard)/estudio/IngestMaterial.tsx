@@ -34,13 +34,13 @@ export function IngestMaterial({
 
   const subjectCode = subjects.find((s) => s.id === subjectId)?.code;
 
-  const analyze = async (file?: File) => {
+  const analyze = async (files?: File[]) => {
     if (!subjectId) { toast.error("Elegí la materia primero"); return; }
-    if (!file && text.trim().length < 40) { toast.error("Pegá el apunte o subí un PDF/foto"); return; }
+    if ((!files || files.length === 0) && text.trim().length < 40) { toast.error("Pegá el apunte o subí un PDF/foto"); return; }
     setAnalyzing(true);
     try {
       const fd = new FormData();
-      if (file) fd.append("file", file);
+      for (const f of files ?? []) fd.append("file", f);
       if (text.trim()) fd.append("text", text.trim());
       if (subjectCode) fd.append("subject", subjectCode);
       const res = await fetch("/api/estudio/analyze", { method: "POST", body: fd });
@@ -88,7 +88,7 @@ export function IngestMaterial({
         <Wand2 size={16} className="text-primary" />
         <p className="text-sm font-semibold text-foreground">Cargar material — la IA lo divide en bloques</p>
       </div>
-      <p className="text-[11px] text-muted -mt-1">Pegá un apunte/clase/guía o subí PDF/foto. Te lo parto en bloques con resumen y te los reparto en el calendario sin sobrecargar días.</p>
+      <p className="text-[11px] text-muted -mt-1">Pegá un apunte/clase/guía o subí un PDF / <b>varias fotos juntas</b> (las páginas de la clase). Te lo parto en bloques con resumen y te los reparto en el calendario sin sobrecargar días.</p>
 
       <div className="grid grid-cols-2 gap-2">
         <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground">
@@ -104,9 +104,9 @@ export function IngestMaterial({
         <>
           <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Pegá el contenido del apunte/clase…" rows={3} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground resize-y" />
           <div className="flex flex-wrap items-center gap-2">
-            <input ref={fileRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) analyze(f); }} />
+            <input ref={fileRef} type="file" accept="application/pdf,image/*" multiple className="hidden" onChange={(e) => { const fs = Array.from(e.target.files ?? []); if (fs.length) analyze(fs); }} />
             <button onClick={() => fileRef.current?.click()} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:border-primary/50 disabled:opacity-50">
-              <FileText size={15} /> PDF o foto
+              <FileText size={15} /> PDF o fotos
             </button>
             <button onClick={() => analyze()} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
               {analyzing ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
