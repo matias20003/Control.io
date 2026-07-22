@@ -4,7 +4,9 @@ import { NextResponse, type NextRequest } from "next/server";
 // /setup-2fa NO es pública — requiere sesión activa (la página la valida).
 // /api/cron y /api/qstash se autentican con CRON_SECRET (Bearer), no con sesión:
 // hay que dejarlos pasar el proxy o los redirige a /login y nunca corren.
-const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/auth", "/presentacion", "/grupos/unirse", "/api/whatsapp", "/api/cron", "/api/qstash", "/privacidad", "/terminos"];
+// /api/estudio/calendar es un feed .ics: los clientes de calendario no mandan
+// cookies, así que debe ser público (se protege con un token secreto en la URL).
+const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/auth", "/presentacion", "/grupos/unirse", "/api/whatsapp", "/api/cron", "/api/qstash", "/api/estudio/calendar", "/privacidad", "/terminos"];
 // Rutas públicas con match exacto (para no abrir todo el árbol con startsWith("/")).
 const PUBLIC_EXACT = ["/"];
 
