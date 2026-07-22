@@ -137,26 +137,25 @@ export async function POST(req: NextRequest) {
 
     // ── ESTUDIO (solo el dueño): PDF/foto o apunte de texto → resumen + repaso ──
     const owner = await isStudyOwner(profile.id);
-    // Diagnóstico temporal: registrar qué llega en documentos/imágenes.
-    if (message.type === "document" || message.document || message.type === "image" || message.kapso?.media_url) {
-      try {
-        await prisma.$executeRaw`INSERT INTO wh_debug (info) VALUES (${JSON.stringify({
-          owner,
-          type: message.type ?? null,
-          hasDoc: !!message.document,
-          docMime: message.document?.mime_type ?? null,
-          docFile: message.document?.filename ?? null,
-          hasImg: !!message.image,
-          hasMediaUrl: !!message.kapso?.media_url,
-          caption: message.image?.caption ?? message.document?.caption ?? null,
-          kapsoContent: (message.kapso?.content ?? "").slice(0, 80) || null,
-          text: (getText(message) ?? "").slice(0, 80) || null,
-        })}::jsonb)`;
-      } catch {
-        // best-effort
-      }
-    }
     if (owner) {
+      // "¿Qué estudio hoy?" → devuelve el plan del día en formato lindo.
+      const qText = (getText(message) ?? "").toLowerCase().trim();
+      if (
+        /\b(qu[eé]|q)\s+(estudio|repaso|tengo que estudiar|toca)\b/.test(qText) ||
+        /plan de (hoy|estudio)/.test(qText) ||
+        /^estudio hoy$|^que estudio hoy|^mi plan/.test(qText)
+      ) {
+        try {
+          const { getTodayPlanText } = await import("@/lib/study/notify");
+          const planText = await getTodayPlanText(profile.id);
+          processed = true;
+          await sendText(from, planText);
+          return Response.json({ ok: true, studyPlan: true });
+        } catch (err) {
+          console.error("[study] plan:", err);
+        }
+      }
+
       const isPdf =
         message.type === "document" ||
         (message.document?.mime_type ?? "").includes("pdf") ||

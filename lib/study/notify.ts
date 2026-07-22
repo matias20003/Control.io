@@ -47,6 +47,13 @@ export function buildPlanText(plan: Awaited<ReturnType<typeof getTodayPlan>>): s
   return `📚 *Plan de estudio de hoy*\n${plan.items.length} bloque(s) · ~${plan.totalMin} min\n\n${lines.join("\n\n")}`;
 }
 
+/** Texto del plan de hoy listo para responder por el bot (reprograma vencidos primero). */
+export async function getTodayPlanText(userId: string): Promise<string> {
+  await reprogramarVencidos(userId).catch(() => {});
+  const plan = await getTodayPlan(userId);
+  return `${buildPlanText(plan)}\n\nAbrir: ${planUrl()}`;
+}
+
 /**
  * Reprograma lo vencido, arma el plan de hoy y lo manda por push + WhatsApp.
  * Devuelve un resumen de lo enviado.
