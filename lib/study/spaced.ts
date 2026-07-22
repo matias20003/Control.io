@@ -95,6 +95,26 @@ export function priorityScore(
   return s;
 }
 
+/** Disponibilidad semanal por defecto (minutos). 0=Dom … 6=Sáb. Dom = descanso. */
+export const DEFAULT_AVAILABILITY: Record<number, number> = {
+  0: 0, 1: 300, 2: 240, 3: 210, 4: 240, 5: 180, 6: 270,
+};
+
+/** Prioridad extra por parcial/examen cercano (Sección 15). daysToExam null = sin examen. */
+export function examBoost(daysToExam: number | null): number {
+  if (daysToExam == null || daysToExam < 0) return 0;
+  if (daysToExam <= 2) return 80;
+  if (daysToExam <= 5) return 50;
+  if (daysToExam <= 10) return 30;
+  if (daysToExam <= 20) return 15;
+  return 5;
+}
+
+/** ¿Este día de la semana es de descanso? (0 min disponibles) */
+export function isRestDay(dayOfWeek: number, availability: Record<number, number>): boolean {
+  return (availability[dayOfWeek] ?? 0) <= 0;
+}
+
 /** Actividad sugerida según etapa (Sección 26 — estudio activo). */
 export function suggestedActivity(stage: Stage): string {
   switch (stage) {

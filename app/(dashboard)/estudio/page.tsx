@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getStudyNotes, getUpcomingReviews } from "@/lib/db/study";
-import { listSubjects, listBlocks, getTodayPlan, studyStats } from "@/lib/db/study-system";
+import {
+  listSubjects, listBlocks, getTodayPlan, studyStats,
+  listExams, listExercises, listRecentErrors, listAvailability,
+} from "@/lib/db/study-system";
 import { StudySystemClient } from "./StudySystemClient";
 
 export const dynamic = "force-dynamic";
@@ -12,13 +15,17 @@ export default async function EstudioPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || user.email !== process.env.ADMIN_EMAIL) redirect("/dashboard");
 
-  const [notes, reviews, subjects, blocks, plan, stats] = await Promise.all([
+  const [notes, reviews, subjects, blocks, plan, stats, exams, exercises, errors, availability] = await Promise.all([
     getStudyNotes(user.id).catch(() => []),
     getUpcomingReviews(user.id).catch(() => []),
     listSubjects(user.id).catch(() => []),
     listBlocks(user.id).catch(() => []),
-    getTodayPlan(user.id).catch(() => ({ items: [], totalMin: 0, budgetMin: 240, overflow: [] })),
+    getTodayPlan(user.id).catch(() => ({ items: [], totalMin: 0, budgetMin: 240, overflow: [], isRestDay: false })),
     studyStats(user.id).catch(() => ({ total: 0, byLevel: {}, dueToday: 0, overdue: 0 })),
+    listExams(user.id).catch(() => []),
+    listExercises(user.id).catch(() => []),
+    listRecentErrors(user.id).catch(() => []),
+    listAvailability(user.id).catch(() => []),
   ]);
 
   return (
@@ -30,6 +37,10 @@ export default async function EstudioPage() {
         stats={stats}
         notes={notes}
         reviews={reviews}
+        initialExams={exams}
+        initialExercises={exercises}
+        initialErrors={errors}
+        availability={availability}
       />
     </div>
   );

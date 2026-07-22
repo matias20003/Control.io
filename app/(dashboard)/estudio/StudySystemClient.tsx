@@ -5,17 +5,26 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   CalendarClock, BookOpen, Table2, Sparkles, Plus, Loader2, X,
-  Clock, Target, ChevronRight, CheckCircle2, AlertCircle,
+  Clock, Target, ChevronRight, CheckCircle2, AlertCircle, Settings2,
+  GraduationCap, ListChecks, RefreshCw, Trash2, CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   createSubjectAction, createBlockAction, closeSessionAction,
+  createExamAction, toggleExamAction, deleteExamAction,
+  createExerciseAction, toggleExerciseAction, deleteExerciseAction,
+  setAvailabilityAction, reprogramarAction,
 } from "@/app/actions/study-system";
-import type { SubjectDTO, BlockDTO, PlanItem } from "@/lib/db/study-system";
+import type {
+  SubjectDTO, BlockDTO, PlanItem, ExamDTO, ExerciseDTO, ErrorLogDTO, AvailabilityDTO,
+} from "@/lib/db/study-system";
 import { EstudioClient } from "./EstudioClient";
 import type { StudyNoteView, ReviewView } from "@/lib/db/study";
 
-type Tab = "hoy" | "materias" | "tabla" | "apuntes";
+type Tab = "hoy" | "materias" | "tabla" | "parciales" | "pendientes" | "apuntes";
+
+const DAY_NAME: Record<number, string> = { 0: "Domingo", 1: "Lunes", 2: "Martes", 3: "Miércoles", 4: "Jueves", 5: "Viernes", 6: "Sábado" };
+const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 const MASTERY_META: Record<string, { label: string; dot: string; text: string; ring: string }> = {
   ROJO: { label: "Rojo", dot: "bg-red-500", text: "text-red-500", ring: "ring-red-500/40" },
@@ -294,27 +303,314 @@ function NewBlock({ subjects, onCreated }: { subjects: SubjectDTO[]; onCreated: 
 }
 
 // ─────────────────────────────────────────────
+// Modal de disponibilidad semanal
+// ─────────────────────────────────────────────
+function AvailabilityModal({
+  availability, onClose, onSaved,
+}: {
+  availability: AvailabilityDTO[];
+  onClose: () => void;
+  onSaved: (day: number, minutes: number) => void;
+}) {
+  const map = new Map(availability.map((a) => [a.dayOfWeek, a.minutes]));
+  const [values, setValues] = useState<Record<number, string>>(
+    Object.fromEntries(DAY_ORDER.map((d) => [d, String(((map.get(d) ?? 0) / 60).toFixed(1)).replace(".0", "")]))
+  );
+  const [savingDay, setSavingDay] = useState<number | null>(null);
+
+  const saveDay = async (day: number) => {
+    const hours = parseFloat(values[day] || "0");
+    if (isNaN(hours) || hours < 0) { toast.error("Horas inválidas"); return; }
+    const minutes = Math.round(hours * 60);
+    setSavingDay(day);
+    const res = await setAvailabilityAction(day, minutes);
+    setSavingDay(null);
+    if (res.error) { toast.error(res.error); return; }
+    onSaved(day, minutes);
+    toast.success(`${DAY_NAME[day]}: ${hours || 0} h`);
+  };
+
+  const total = DAY_ORDER.reduce((acc, d) => acc + (parseFloat(values[d] || "0") || 0), 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={onClose}>
+      <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-border bg-surface p-5 space-y-3 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-bold text-foreground flex items-center gap-2"><CalendarDays size={17} /> Disponibilidad semanal</h3>
+            <p className="text-[11px] text-muted">Cuántas horas tenés para estudiar cada día. 0 = descanso.</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-muted hover:text-foreground"><X size={18} /></button>
+        </div>
+        <div className="space-y-1.5">
+          {DAY_ORDER.map((d) => (
+            <div key={d} className="flex items-center gap-2">
+              <span className="w-24 text-sm text-foreground">{DAY_NAME[d]}</span>
+              <input
+                type="number" step="0.5" min="0" inputMode="decimal"
+                value={values[d]}
+                onChange={(e) => setValues((v) => ({ ...v, [d]: e.target.value }))}
+                onBlur={() => saveDay(d)}
+                className="w-20 rounded-lg border border-border bg-surface-2/40 px-3 py-1.5 text-sm text-foreground text-right"
+              />
+              <span className="text-xs text-muted flex-1">horas</span>
+              {savingDay === d && <Loader2 size={14} className="animate-spin text-muted" />}
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-between border-t border-border pt-2 text-sm">
+          <span className="text-muted">Total semanal</span>
+          <span className="font-bold text-foreground">{total.toFixed(1).replace(".0", "")} h</span>
+        </div>
+        <p className="text-[11px] text-muted">Se guarda al salir de cada casillero. El plan de hoy respeta estas horas.</p>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Pestaña Parciales / objetivos
+// ─────────────────────────────────────────────
+function ExamsTab({
+  subjects, exams, setExams,
+}: {
+  subjects: SubjectDTO[];
+  exams: ExamDTO[];
+  setExams: React.Dispatch<React.SetStateAction<ExamDTO[]>>;
+}) {
+  const router = useRouter();
+  const [subjectId, setSubjectId] = useState("");
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState("");
+  const [importance, setImportance] = useState("3");
+  const [isPending, start] = useTransition();
+
+  const add = () => {
+    if (!subjectId) { toast.error("Elegí la materia"); return; }
+    if (!title.trim() || !date) { toast.error("Poné título y fecha"); return; }
+    start(async () => {
+      const res = await createExamAction({ subjectId, title: title.trim(), examDate: date, importance: Number(importance) });
+      if (res.error) { toast.error(res.error); return; }
+      if (res.success && res.exam) {
+        setExams((p) => [...p, res.exam!].sort((a, b) => a.examDate.localeCompare(b.examDate)));
+        setTitle(""); setDate("");
+        toast.success("Parcial agendado — sube la prioridad de esa materia al acercarse");
+        router.refresh();
+      }
+    });
+  };
+
+  const toggle = (id: string, done: boolean) => {
+    setExams((p) => p.map((e) => (e.id === id ? { ...e, done } : e)));
+    toggleExamAction(id, done).then((r) => { if (r.error) toast.error(r.error); else router.refresh(); });
+  };
+  const del = (id: string) => {
+    const prev = exams;
+    setExams((p) => p.filter((e) => e.id !== id));
+    deleteExamAction(id).then((r) => { if (r.error) { toast.error(r.error); setExams(prev); } else router.refresh(); });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-border bg-surface p-4 space-y-3">
+        <p className="text-sm font-semibold text-foreground flex items-center gap-1.5"><GraduationCap size={15} className="text-primary" /> Nuevo parcial / final</p>
+        <div className="grid grid-cols-2 gap-2">
+          <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground">
+            <option value="">Materia…</option>
+            {subjects.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}
+          </select>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground [color-scheme:dark]" />
+        </div>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título (ej. 1º Parcial AM2)" className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground" />
+        <div className="flex items-center gap-2">
+          <select value={importance} onChange={(e) => setImportance(e.target.value)} className="rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground">
+            <option value="2">Importancia media</option><option value="3">Alta</option><option value="4">Muy alta</option>
+          </select>
+          <button onClick={add} disabled={isPending} className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            {isPending ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} Agendar
+          </button>
+        </div>
+      </div>
+
+      {exams.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted">Sin parciales agendados.</div>
+      ) : (
+        <div className="space-y-2">
+          {exams.map((e) => {
+            const soon = !e.done && e.daysLeft >= 0 && e.daysLeft <= 7;
+            return (
+              <div key={e.id} className={cn("flex items-center gap-3 rounded-xl border bg-surface p-3", e.done ? "border-border opacity-60" : soon ? "border-danger/40" : "border-border")}>
+                <div className="min-w-0 flex-1">
+                  <p className={cn("text-sm font-semibold", e.done ? "text-muted line-through" : "text-foreground")}>{e.subjectCode} · {e.title}</p>
+                  <p className="text-[11px] text-muted">
+                    {new Date(e.examDate).toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short" })}
+                    {!e.done && (e.daysLeft < 0 ? " · pasó" : e.daysLeft === 0 ? " · ¡HOY!" : ` · faltan ${e.daysLeft} días`)}
+                  </p>
+                </div>
+                <button onClick={() => toggle(e.id, !e.done)} className="shrink-0 rounded-lg p-1.5 text-muted hover:text-success" title={e.done ? "Reabrir" : "Marcar rendido"}>
+                  <CheckCircle2 size={16} className={e.done ? "text-success" : ""} />
+                </button>
+                <button onClick={() => del(e.id)} className="shrink-0 rounded-lg p-1.5 text-muted hover:text-danger"><Trash2 size={15} /></button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Pestaña Pendientes (ejercicios + errores recientes)
+// ─────────────────────────────────────────────
+function PendientesTab({
+  subjects, blocks, exercises, setExercises, errors,
+}: {
+  subjects: SubjectDTO[];
+  blocks: BlockDTO[];
+  exercises: ExerciseDTO[];
+  setExercises: React.Dispatch<React.SetStateAction<ExerciseDTO[]>>;
+  errors: ErrorLogDTO[];
+}) {
+  const router = useRouter();
+  const [desc, setDesc] = useState("");
+  const [blockId, setBlockId] = useState("");
+  const [isPending, start] = useTransition();
+
+  const add = () => {
+    if (!desc.trim()) { toast.error("Describí el ejercicio"); return; }
+    start(async () => {
+      const res = await createExerciseAction({ description: desc.trim(), blockId: blockId || undefined });
+      if (res.error) { toast.error(res.error); return; }
+      setDesc(""); setBlockId("");
+      toast.success("Ejercicio agregado");
+      router.refresh();
+    });
+  };
+  const toggle = (id: string, done: boolean) => {
+    setExercises((p) => p.map((x) => (x.id === id ? { ...x, done } : x)));
+    toggleExerciseAction(id, done).then((r) => { if (r.error) toast.error(r.error); });
+  };
+  const del = (id: string) => {
+    const prev = exercises;
+    setExercises((p) => p.filter((x) => x.id !== id));
+    deleteExerciseAction(id).then((r) => { if (r.error) { toast.error(r.error); setExercises(prev); } });
+  };
+
+  const pending = exercises.filter((x) => !x.done);
+  const done = exercises.filter((x) => x.done);
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-border bg-surface p-4 space-y-3">
+        <p className="text-sm font-semibold text-foreground flex items-center gap-1.5"><ListChecks size={15} className="text-primary" /> Ejercicio pendiente</p>
+        <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Ej. Guía 3, ej. 5 al 10 (integrales por partes)" className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground" />
+        <div className="flex items-center gap-2">
+          <select value={blockId} onChange={(e) => setBlockId(e.target.value)} className="flex-1 rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground">
+            <option value="">Sin bloque asociado</option>
+            {blocks.map((b) => <option key={b.id} value={b.id}>{b.code} — {b.topic}</option>)}
+          </select>
+          <button onClick={add} disabled={isPending} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            {isPending ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} Agregar
+          </button>
+        </div>
+        {subjects.length === 0 && <p className="text-[11px] text-muted">Tip: creá materias y bloques para asociarlos.</p>}
+      </div>
+
+      {pending.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-muted">Pendientes · {pending.length}</h3>
+          {pending.map((x) => (
+            <div key={x.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
+              <button onClick={() => toggle(x.id, true)} className="shrink-0 h-5 w-5 rounded-md border-2 border-border hover:border-success" title="Marcar hecho" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-foreground">{x.description}</p>
+                {x.blockCode && <p className="text-[11px] text-muted">{x.blockCode}</p>}
+              </div>
+              <button onClick={() => del(x.id)} className="shrink-0 rounded-lg p-1.5 text-muted hover:text-danger"><Trash2 size={14} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {done.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-muted">Hechos · {done.length}</h3>
+          {done.slice(0, 10).map((x) => (
+            <div key={x.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3 opacity-60">
+              <button onClick={() => toggle(x.id, false)} className="shrink-0 grid h-5 w-5 place-items-center rounded-md bg-success text-white" title="Reabrir"><CheckCircle2 size={13} /></button>
+              <p className="text-sm text-muted line-through flex-1 truncate">{x.description}</p>
+              <button onClick={() => del(x.id)} className="shrink-0 rounded-lg p-1.5 text-muted hover:text-danger"><Trash2 size={14} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {pending.length === 0 && done.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted">Sin ejercicios cargados.</div>
+      )}
+
+      {errors.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-muted flex items-center gap-1.5"><AlertCircle size={13} /> Errores recientes</h3>
+          <div className="rounded-2xl border border-border bg-surface divide-y divide-border overflow-hidden">
+            {errors.slice(0, 12).map((e) => (
+              <div key={e.id} className="px-4 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-foreground truncate">{e.blockCode} · {e.topic}</p>
+                  <span className="text-[11px] text-amber-500 shrink-0">{e.category}</span>
+                </div>
+                {e.description && <p className="text-[11px] text-muted mt-0.5">{e.description}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────
 export function StudySystemClient({
   initialSubjects, initialBlocks, initialPlan, stats, notes, reviews,
+  initialExams, initialExercises, initialErrors, availability,
 }: {
   initialSubjects: SubjectDTO[];
   initialBlocks: BlockDTO[];
-  initialPlan: { items: PlanItem[]; totalMin: number; budgetMin: number; overflow: PlanItem[] };
+  initialPlan: { items: PlanItem[]; totalMin: number; budgetMin: number; overflow: PlanItem[]; isRestDay: boolean };
   stats: { total: number; byLevel: Record<string, number>; dueToday: number; overdue: number };
   notes: StudyNoteView[];
   reviews: ReviewView[];
+  initialExams: ExamDTO[];
+  initialExercises: ExerciseDTO[];
+  initialErrors: ErrorLogDTO[];
+  availability: AvailabilityDTO[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("hoy");
   const [subjects, setSubjects] = useState(initialSubjects);
   const [blocks, setBlocks] = useState(initialBlocks);
+  const [exams, setExams] = useState(initialExams);
+  const [exercises, setExercises] = useState(initialExercises);
+  const [avail, setAvail] = useState(availability);
   const [closing, setClosing] = useState<PlanItem | BlockDTO | null>(null);
+  const [showAvail, setShowAvail] = useState(false);
+  const [reprogramming, startReprogram] = useTransition();
 
   const applyClosed = (b: BlockDTO) => {
     setBlocks((prev) => prev.map((x) => (x.id === b.id ? b : x)));
     router.refresh(); // recalcula plan de hoy en el server
+  };
+
+  const reprogramar = () => {
+    startReprogram(async () => {
+      const res = await reprogramarAction();
+      if (res.error) { toast.error(res.error); return; }
+      toast.success(res.reprogrammed ? `Reprogramé ${res.reprogrammed} bloque(s) atrasado(s)` : "No había nada atrasado");
+      router.refresh();
+    });
   };
 
   const planItems = initialPlan.items;
@@ -322,7 +618,9 @@ export function StudySystemClient({
   const TABS: { id: Tab; label: string; icon: typeof CalendarClock }[] = [
     { id: "hoy", label: "Plan de hoy", icon: CalendarClock },
     { id: "materias", label: "Materias", icon: BookOpen },
-    { id: "tabla", label: "Tabla maestra", icon: Table2 },
+    { id: "tabla", label: "Tabla", icon: Table2 },
+    { id: "parciales", label: "Parciales", icon: GraduationCap },
+    { id: "pendientes", label: "Pendientes", icon: ListChecks },
     { id: "apuntes", label: "Apuntes IA", icon: Sparkles },
   ];
 
@@ -333,10 +631,13 @@ export function StudySystemClient({
         <span className="w-10 h-10 rounded-2xl bg-primary/15 text-primary flex items-center justify-center shrink-0">
           <Target size={20} />
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-bold text-foreground">Estudio</h1>
           <p className="text-xs text-muted">Repetición espaciada + recuperación activa. Te digo qué estudiar hoy y cuándo repasarlo.</p>
         </div>
+        <button onClick={() => setShowAvail(true)} className="shrink-0 rounded-lg border border-border p-2 text-muted hover:text-foreground" title="Disponibilidad semanal">
+          <Settings2 size={17} />
+        </button>
       </div>
 
       {stats.total > 0 && (
@@ -370,7 +671,20 @@ export function StudySystemClient({
       {/* PLAN DE HOY */}
       {tab === "hoy" && (
         <div className="space-y-3">
-          {planItems.length === 0 ? (
+          {initialPlan.isRestDay ? (
+            <div className="rounded-2xl border border-dashed border-border p-8 text-center">
+              <span className="text-3xl">😴</span>
+              <p className="text-sm font-medium text-foreground mt-2">Hoy es día de descanso</p>
+              <p className="text-xs text-muted mt-1">
+                No cargué repasos. {initialPlan.overflow.length > 0 && `Tenés ${initialPlan.overflow.length} bloque(s) esperando para el próximo día hábil.`}
+              </p>
+              {stats.overdue > 0 && (
+                <button onClick={reprogramar} disabled={reprogramming} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:border-primary/50 disabled:opacity-50">
+                  {reprogramming ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Reorganizar {stats.overdue} atrasado(s)
+                </button>
+              )}
+            </div>
+          ) : planItems.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border p-8 text-center">
               <CheckCircle2 size={28} className="mx-auto mb-2 text-success" />
               <p className="text-sm font-medium text-foreground">No tenés nada pendiente para hoy 🎉</p>
@@ -379,8 +693,14 @@ export function StudySystemClient({
           ) : (
             <>
               <div className="flex items-center justify-between px-1">
-                <p className="text-xs text-muted">{planItems.length} bloque(s) · ~{initialPlan.totalMin} min</p>
-                <p className="text-[11px] text-muted">Ordenado por prioridad</p>
+                <p className="text-xs text-muted">{planItems.length} bloque(s) · ~{initialPlan.totalMin}/{initialPlan.budgetMin} min</p>
+                {stats.overdue > 0 ? (
+                  <button onClick={reprogramar} disabled={reprogramming} className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline disabled:opacity-50">
+                    {reprogramming ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />} Reorganizar atrasados
+                  </button>
+                ) : (
+                  <p className="text-[11px] text-muted">Ordenado por prioridad</p>
+                )}
               </div>
               {planItems.map((it) => {
                 const m = MASTERY_META[it.masteryLevel] ?? MASTERY_META.ROJO;
@@ -482,10 +802,25 @@ export function StudySystemClient({
         </div>
       )}
 
+      {/* PARCIALES */}
+      {tab === "parciales" && <ExamsTab subjects={subjects} exams={exams} setExams={setExams} />}
+
+      {/* PENDIENTES */}
+      {tab === "pendientes" && (
+        <PendientesTab subjects={subjects} blocks={blocks} exercises={exercises} setExercises={setExercises} errors={initialErrors} />
+      )}
+
       {/* APUNTES IA (flujo existente) */}
       {tab === "apuntes" && <EstudioClient notes={notes} reviews={reviews} />}
 
       {closing && <CloseSessionModal block={closing} onClose={() => setClosing(null)} onDone={applyClosed} />}
+      {showAvail && (
+        <AvailabilityModal
+          availability={avail}
+          onClose={() => { setShowAvail(false); router.refresh(); }}
+          onSaved={(day, minutes) => setAvail((prev) => prev.map((a) => (a.dayOfWeek === day ? { ...a, minutes } : a)))}
+        />
+      )}
     </div>
   );
 }

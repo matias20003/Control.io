@@ -722,6 +722,51 @@ model StudySession {
   @@map("study_sessions")
 }
 
+model StudyAvailability {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  dayOfWeek Int      @map("day_of_week") // 0=Dom … 6=Sáb
+  minutes   Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, dayOfWeek])
+  @@map("study_availability")
+}
+
+model StudyExam {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  subjectId  String   @map("subject_id")
+  title      String
+  examDate   DateTime @map("exam_date")
+  importance Int      @default(3)
+  notes      String?
+  done       Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId, examDate])
+  @@index([subjectId])
+  @@map("study_exams")
+}
+
+model StudyExercise {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  blockId     String?   @map("block_id")
+  subjectId   String?   @map("subject_id")
+  description String // cifrado
+  source      String?
+  done        Boolean   @default(false)
+  doneAt      DateTime? @map("done_at")
+  dueDate     DateTime? @map("due_date")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, done])
+  @@index([blockId])
+  @@map("study_exercises")
+}
+
 // Registro de números que escribieron al bot sin estar vinculados. Sirve para
 // diagnosticar si un número YA vinculado falla el matcheo (bug real) vs un
 // tester que todavía no vinculó (comportamiento esperado).

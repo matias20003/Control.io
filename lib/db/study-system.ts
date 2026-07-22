@@ -5,9 +5,12 @@ import {
   calcularProximoRepaso,
   priorityScore,
   suggestedActivity,
+  examBoost,
+  DEFAULT_AVAILABILITY,
   type Mastery,
   type Stage,
 } from "@/lib/study/spaced";
+import { endOfTodayArg, startOfTodayArg, nowArgParts } from "@/lib/timezone";
 
 // ─────────────────────────────────────────────
 // Tipos serializables para el cliente (sin Date crudos ni texto cifrado).
@@ -193,27 +196,44 @@ export async function createBlock(
   return toBlockDTO(b, subject.code);
 }
 
+/** Mapa subjectId → días hasta su examen más cercano (no vencido, no hecho). */
+async function upcomingExamDaysBySubject(userId: string, now: Date): Promise<Map<string, number>> {
+  const exams = await prisma.studyExam.findMany({
+    where: { userId, done: false, examDate: { gte: now } },
+    select: { subjectId: true, examDate: true },
+  });
+  const map = new Map<string, number>();
+  for (const e of exams) {
+    const days = Math.ceil((e.examDate.getTime() - now.getTime()) / 86_400_000);
+    const prev = map.get(e.subjectId);
+    if (prev == null || days < prev) map.set(e.subjectId, days);
+  }
+  return map;
+}
+
 // ─────────────────────────────────────────────
-// Plan de hoy (Sección 36) — bloques con repaso vencido/para hoy, priorizados.
-// budgetMin: minutos disponibles hoy; corta cuando se llena el día.
+// Plan de hoy (Sección 36) — bloques con repaso vencido/para hoy, priorizados
+// según dominio + atraso + importancia + errores + examen cercano.
+// El presupuesto de minutos sale de tu disponibilidad real del día.
 // ─────────────────────────────────────────────
 export async function getTodayPlan(
   userId: string,
-  budgetMin = 240,
+  budgetMin?: number,
   now = new Date()
-): Promise<{ items: PlanItem[]; totalMin: number; budgetMin: number; overflow: PlanItem[] }> {
-  const endOfToday = new Date(now);
-  endOfToday.setUTCHours(23, 59, 59, 999);
+): Promise<{ items: PlanItem[]; totalMin: number; budgetMin: number; overflow: PlanItem[]; isRestDay: boolean }> {
+  const endOfToday = endOfTodayArg();
+  const weekday = nowArgParts().weekday;
 
-  const [blocks, subjects] = await Promise.all([
+  const availability = await getAvailabilityMap(userId);
+  const todayMinutes = budgetMin ?? availability[weekday] ?? 0;
+  const rest = todayMinutes <= 0;
+
+  const [blocks, subjects, examDays] = await Promise.all([
     prisma.studyBlock.findMany({
-      where: {
-        userId,
-        status: "ACTIVO",
-        nextReviewDate: { lte: endOfToday },
-      },
+      where: { userId, status: "ACTIVO", nextReviewDate: { lte: endOfToday } },
     }),
     prisma.studySubject.findMany({ where: { userId }, select: { id: true, code: true } }),
+    upcomingExamDaysBySubject(userId, now),
   ]);
   const codeMap = new Map(subjects.map((s) => [s.id, s.code]));
 
@@ -223,30 +243,29 @@ export async function getTodayPlan(
       const overdueDays = b.nextReviewDate
         ? Math.max(0, Math.floor((now.getTime() - b.nextReviewDate.getTime()) / 86_400_000))
         : 0;
-      return {
-        ...dto,
-        score: priorityScore(
-          { masteryLevel: b.masteryLevel, nextReviewDate: b.nextReviewDate, importance: b.importance, errorCount: b.errorCount, incorporationDate: b.incorporationDate },
-          now
-        ),
-        activity: suggestedActivity(b.reviewStage as Stage),
-        overdueDays,
-      };
+      const base = priorityScore(
+        { masteryLevel: b.masteryLevel, nextReviewDate: b.nextReviewDate, importance: b.importance, errorCount: b.errorCount, incorporationDate: b.incorporationDate },
+        now
+      );
+      const boost = examBoost(examDays.get(b.subjectId) ?? null);
+      return { ...dto, score: base + boost, activity: suggestedActivity(b.reviewStage as Stage), overdueDays };
     })
     .sort((a, b) => b.score - a.score);
 
+  // En día de descanso no cargamos nada nuevo; todo queda como overflow.
   const items: PlanItem[] = [];
   const overflow: PlanItem[] = [];
   let totalMin = 0;
   for (const it of scored) {
-    if (totalMin + it.reviewDuration <= budgetMin || items.length === 0) {
+    const fits = totalMin + it.reviewDuration <= todayMinutes;
+    if (!rest && (fits || items.length === 0)) {
       items.push(it);
       totalMin += it.reviewDuration;
     } else {
       overflow.push(it);
     }
   }
-  return { items, totalMin, budgetMin, overflow };
+  return { items, totalMin, budgetMin: todayMinutes, overflow, isRestDay: rest };
 }
 
 // ─────────────────────────────────────────────
@@ -353,4 +372,242 @@ export async function studyStats(userId: string, now = new Date()) {
     }
   }
   return { total: blocks.length, byLevel, dueToday, overdue };
+}
+
+// ─────────────────────────────────────────────
+// Disponibilidad semanal (Sección — calendario/disponibilidad)
+// ─────────────────────────────────────────────
+export type AvailabilityDTO = { dayOfWeek: number; minutes: number };
+
+/** Mapa día(0-6)→minutos, mergeando lo guardado con los valores por defecto. */
+export async function getAvailabilityMap(userId: string): Promise<Record<number, number>> {
+  const rows = await prisma.studyAvailability.findMany({ where: { userId } });
+  const map: Record<number, number> = { ...DEFAULT_AVAILABILITY };
+  for (const r of rows) map[r.dayOfWeek] = r.minutes;
+  return map;
+}
+
+export async function listAvailability(userId: string): Promise<AvailabilityDTO[]> {
+  const map = await getAvailabilityMap(userId);
+  return [0, 1, 2, 3, 4, 5, 6].map((d) => ({ dayOfWeek: d, minutes: map[d] ?? 0 }));
+}
+
+export async function setAvailability(userId: string, dayOfWeek: number, minutes: number): Promise<void> {
+  const existing = await prisma.studyAvailability.findFirst({ where: { userId, dayOfWeek }, select: { id: true } });
+  if (existing) {
+    await prisma.studyAvailability.update({ where: { id: existing.id }, data: { minutes } });
+  } else {
+    await prisma.studyAvailability.create({ data: { userId, dayOfWeek, minutes } });
+  }
+}
+
+// ─────────────────────────────────────────────
+// Parciales / objetivos (Sección 15)
+// ─────────────────────────────────────────────
+export type ExamDTO = {
+  id: string; subjectId: string; subjectCode: string; title: string;
+  examDate: string; daysLeft: number; importance: number; done: boolean;
+};
+
+export async function listExams(userId: string, now = new Date()): Promise<ExamDTO[]> {
+  const [exams, subjects] = await Promise.all([
+    prisma.studyExam.findMany({ where: { userId }, orderBy: { examDate: "asc" } }),
+    prisma.studySubject.findMany({ where: { userId }, select: { id: true, code: true } }),
+  ]);
+  const codeMap = new Map(subjects.map((s) => [s.id, s.code]));
+  return exams.map((e) => ({
+    id: e.id,
+    subjectId: e.subjectId,
+    subjectCode: codeMap.get(e.subjectId) ?? "?",
+    title: e.title,
+    examDate: e.examDate.toISOString(),
+    daysLeft: Math.ceil((e.examDate.getTime() - now.getTime()) / 86_400_000),
+    importance: e.importance,
+    done: e.done,
+  }));
+}
+
+export async function createExam(
+  userId: string,
+  input: { subjectId: string; title: string; examDate: Date; importance?: number; notes?: string | null }
+): Promise<ExamDTO> {
+  const subject = await prisma.studySubject.findFirst({ where: { id: input.subjectId, userId }, select: { id: true, code: true } });
+  if (!subject) throw new Error("Materia no encontrada");
+  const e = await prisma.studyExam.create({
+    data: { userId, subjectId: subject.id, title: input.title, examDate: input.examDate, importance: input.importance ?? 3, notes: input.notes ?? null },
+  });
+  return {
+    id: e.id, subjectId: e.subjectId, subjectCode: subject.code, title: e.title,
+    examDate: e.examDate.toISOString(),
+    daysLeft: Math.ceil((e.examDate.getTime() - Date.now()) / 86_400_000),
+    importance: e.importance, done: e.done,
+  };
+}
+
+export async function toggleExam(userId: string, id: string, done: boolean): Promise<void> {
+  await prisma.studyExam.updateMany({ where: { id, userId }, data: { done } });
+}
+export async function deleteExam(userId: string, id: string): Promise<void> {
+  await prisma.studyExam.deleteMany({ where: { id, userId } });
+}
+
+// ─────────────────────────────────────────────
+// Ejercicios pendientes (Sección 13)
+// ─────────────────────────────────────────────
+export type ExerciseDTO = {
+  id: string; blockId: string | null; subjectId: string | null; subjectCode: string | null;
+  blockCode: string | null; description: string; source: string | null;
+  done: boolean; dueDate: string | null;
+};
+
+export async function listExercises(userId: string, includeDone = false): Promise<ExerciseDTO[]> {
+  const [rows, subjects, blocks] = await Promise.all([
+    prisma.studyExercise.findMany({
+      where: { userId, ...(includeDone ? {} : { done: false }) },
+      orderBy: [{ done: "asc" }, { createdAt: "desc" }],
+    }),
+    prisma.studySubject.findMany({ where: { userId }, select: { id: true, code: true } }),
+    prisma.studyBlock.findMany({ where: { userId }, select: { id: true, code: true } }),
+  ]);
+  const subjMap = new Map(subjects.map((s) => [s.id, s.code]));
+  const blockMap = new Map(blocks.map((b) => [b.id, b.code]));
+  return rows.map((x) => ({
+    id: x.id,
+    blockId: x.blockId,
+    subjectId: x.subjectId,
+    subjectCode: x.subjectId ? subjMap.get(x.subjectId) ?? null : null,
+    blockCode: x.blockId ? blockMap.get(x.blockId) ?? null : null,
+    description: decrypt(x.description) ?? "",
+    source: x.source,
+    done: x.done,
+    dueDate: x.dueDate ? x.dueDate.toISOString() : null,
+  }));
+}
+
+export async function createExercise(
+  userId: string,
+  input: { description: string; blockId?: string | null; subjectId?: string | null; source?: string | null; dueDate?: Date | null }
+): Promise<void> {
+  await prisma.studyExercise.create({
+    data: {
+      userId,
+      description: encrypt(input.description) ?? input.description,
+      blockId: input.blockId ?? null,
+      subjectId: input.subjectId ?? null,
+      source: input.source ?? null,
+      dueDate: input.dueDate ?? null,
+    },
+  });
+}
+
+export async function toggleExercise(userId: string, id: string, done: boolean): Promise<void> {
+  await prisma.studyExercise.updateMany({ where: { id, userId }, data: { done, doneAt: done ? new Date() : null } });
+}
+export async function deleteExercise(userId: string, id: string): Promise<void> {
+  await prisma.studyExercise.deleteMany({ where: { id, userId } });
+}
+
+// Errores recientes: se derivan del log de sesiones (Sección 12), sin tabla aparte.
+export type ErrorLogDTO = {
+  id: string; blockCode: string; topic: string; category: string;
+  description: string | null; date: string;
+};
+export async function listRecentErrors(userId: string, limit = 30): Promise<ErrorLogDTO[]> {
+  const [sessions, blocks] = await Promise.all([
+    prisma.studySession.findMany({
+      where: { userId, errorCategory: { not: null } },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    }),
+    prisma.studyBlock.findMany({ where: { userId }, select: { id: true, code: true, topic: true } }),
+  ]);
+  const bMap = new Map(blocks.map((b) => [b.id, b]));
+  return sessions.map((s) => {
+    const b = bMap.get(s.blockId);
+    return {
+      id: s.id,
+      blockCode: b?.code ?? "?",
+      topic: b?.topic ?? "",
+      category: s.errorCategory ?? "",
+      description: decrypt(s.errorDescription),
+      date: s.createdAt.toISOString(),
+    };
+  });
+}
+
+// ─────────────────────────────────────────────
+// Reprogramación automática capacity-aware (Sección — nunca borrar sin nueva fecha).
+// Toma los bloques vencidos (fecha < hoy) y los reparte hacia adelante en los
+// próximos días disponibles, respetando la capacidad diaria y saltando descansos.
+// Devuelve cuántos bloques se reprogramaron.
+// ─────────────────────────────────────────────
+export async function reprogramarVencidos(userId: string, now = new Date()): Promise<number> {
+  const startOfToday = startOfTodayArg(); // medianoche ARG, en UTC
+
+  const availability = await getAvailabilityMap(userId);
+  const hasAnyCapacity = Object.values(availability).some((m) => m > 0);
+  if (!hasAnyCapacity) return 0; // sin disponibilidad configurada, no reprogramamos
+
+  const [overdue, subjects, futureBlocks] = await Promise.all([
+    prisma.studyBlock.findMany({
+      where: { userId, status: "ACTIVO", nextReviewDate: { lt: startOfToday } },
+    }),
+    prisma.studySubject.findMany({ where: { userId }, select: { id: true } }),
+    // carga ya comprometida en días futuros (no vencida) para no sobrepasar capacidad
+    prisma.studyBlock.findMany({
+      where: { userId, status: "ACTIVO", nextReviewDate: { gte: startOfToday } },
+      select: { nextReviewDate: true, reviewDuration: true },
+    }),
+  ]);
+  void subjects;
+  if (overdue.length === 0) return 0;
+
+  const examDays = await upcomingExamDaysBySubject(userId, now);
+
+  // minutos ya usados por día (clave = YYYY-MM-DD)
+  const usedByDay = new Map<string, number>();
+  const key = (d: Date) => d.toISOString().slice(0, 10);
+  for (const fb of futureBlocks) {
+    if (fb.nextReviewDate) {
+      const k = key(fb.nextReviewDate);
+      usedByDay.set(k, (usedByDay.get(k) ?? 0) + fb.reviewDuration);
+    }
+  }
+
+  // ordenar vencidos por prioridad (más atrasado / más importante primero)
+  const ordered = overdue.sort((a, b) => {
+    const sa = priorityScore({ masteryLevel: a.masteryLevel, nextReviewDate: a.nextReviewDate, importance: a.importance, errorCount: a.errorCount, incorporationDate: a.incorporationDate }, now) + examBoost(examDays.get(a.subjectId) ?? null);
+    const sb = priorityScore({ masteryLevel: b.masteryLevel, nextReviewDate: b.nextReviewDate, importance: b.importance, errorCount: b.errorCount, incorporationDate: b.incorporationDate }, now) + examBoost(examDays.get(b.subjectId) ?? null);
+    return sb - sa;
+  });
+
+  let cursor = new Date(startOfToday);
+  cursor.setHours(12, 0, 0, 0);
+  const advance = () => { cursor = new Date(cursor.getTime() + 86_400_000); cursor.setHours(12, 0, 0, 0); };
+
+  let reprogrammed = 0;
+  for (const block of ordered) {
+    // buscar el primer día (desde hoy) con capacidad para este bloque
+    let safety = 0;
+    while (safety < 90) {
+      const dow = cursor.getDay();
+      const cap = availability[dow] ?? 0;
+      const used = usedByDay.get(key(cursor)) ?? 0;
+      if (cap > 0 && used + block.reviewDuration <= cap) {
+        await prisma.studyBlock.update({
+          where: { id: block.id },
+          data: { nextReviewDate: new Date(cursor) },
+        });
+        usedByDay.set(key(cursor), used + block.reviewDuration);
+        reprogrammed++;
+        break;
+      }
+      advance();
+      safety++;
+    }
+    // reiniciar cursor a hoy para el próximo bloque (así llena huecos de días tempranos)
+    cursor = new Date(startOfToday);
+    cursor.setHours(12, 0, 0, 0);
+  }
+  return reprogrammed;
 }
