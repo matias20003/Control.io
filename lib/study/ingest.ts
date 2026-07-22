@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { summarizeStudyContent, createStudyNote, getDueReviews, markReviewSent, SPACED_INTERVALS } from "@/lib/db/study";
+import { summarizeStudyContent, summarizeStudyImage, createStudyNote, getDueReviews, markReviewSent, SPACED_INTERVALS } from "@/lib/db/study";
 import { sendText } from "@/lib/whatsapp/kapso";
 import { sendPushToUser } from "@/lib/push/send";
 
@@ -47,6 +47,28 @@ export async function ingestStudyPdf(
       source: "pdf",
     });
     return { ok: true, subject, title, reviewDates };
+  } catch {
+    return { ok: false, reason: "error" };
+  }
+}
+
+/** Desde IMÁGENES (fotos/capturas, manuscrito) — usa visión para leer la letra. */
+export async function ingestStudyImage(
+  userId: string,
+  imageDataUrls: string[],
+  hintSubject?: string
+): Promise<IngestResult> {
+  try {
+    if (!imageDataUrls.length) return { ok: false, reason: "empty" };
+    const s = await summarizeStudyImage(imageDataUrls, hintSubject);
+    if (!s.summary || s.summary.startsWith("(no pude")) return { ok: false, reason: "empty" };
+    const { reviewDates } = await createStudyNote(userId, {
+      subject: s.subject,
+      title: s.title,
+      summary: s.summary,
+      source: "image",
+    });
+    return { ok: true, subject: s.subject, title: s.title, reviewDates };
   } catch {
     return { ok: false, reason: "error" };
   }

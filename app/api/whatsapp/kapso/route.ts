@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendText, markReadAndType, fetchMediaAsDataUrl, fetchMediaBuffer, verifySignature } from "@/lib/whatsapp/kapso";
-import { isStudyOwner, ingestStudyPdf, ingestStudyText, studySavedMessage } from "@/lib/study/ingest";
+import { isStudyOwner, ingestStudyPdf, ingestStudyText, ingestStudyImage, studySavedMessage } from "@/lib/study/ingest";
 import { findProfileByPhone } from "@/lib/whatsapp/users";
 import { linkWhatsappByCode } from "@/lib/db/profile";
 import { rateLimitKey } from "@/lib/rate-limit";
@@ -151,12 +151,28 @@ export async function POST(req: NextRequest) {
             r.ok
               ? studySavedMessage(r)
               : r.reason === "empty"
-                ? "📄 Recibí el PDF pero no pude sacarle texto (¿es escaneado/foto?). Probá con un PDF de texto seleccionable, o mandame los apuntes escritos."
+                ? "📄 Ese PDF es manuscrito (imagen), no tiene texto. Mandámelo como *FOTO* y te leo la letra 📸"
                 : "Uf, tuve un problema procesando ese PDF 😕 Probá de nuevo."
           );
           return Response.json({ ok: true, study: r.ok });
         } catch (err) {
           console.error("[study] pdf:", err);
+        }
+      }
+      // Foto/captura de un apunte (manuscrito) con caption de estudio → visión.
+      const cap = (message.image?.caption ?? "").toLowerCase();
+      if (
+        message.type === "image" && message.kapso?.media_url &&
+        /apunte|estudio|materia|clase|resumen|facultad/.test(cap)
+      ) {
+        try {
+          const dataUrl = await fetchMediaAsDataUrl(message.kapso.media_url, message.image?.mime_type);
+          const r = await ingestStudyImage(profile.id, [dataUrl], message.image?.caption || undefined);
+          processed = true;
+          await sendText(from, r.ok ? studySavedMessage(r) : "No pude leer esa foto 😕 Probá con una más nítida o mejor luz.");
+          return Response.json({ ok: true, study: r.ok });
+        } catch (err) {
+          console.error("[study] image:", err);
         }
       }
       const tStudy = getText(message) ?? "";

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { ingestStudyPdf, ingestStudyText } from "@/lib/study/ingest";
+import { ingestStudyPdf, ingestStudyText, ingestStudyImage } from "@/lib/study/ingest";
 
 // Solo dueño: sube un apunte (PDF o texto) → resumen IA + repaso espaciado.
 export const runtime = "nodejs";
@@ -20,11 +20,27 @@ export async function POST(req: NextRequest) {
     const text = (form.get("text") as string) || "";
 
     if (file && typeof file !== "string") {
+      const type = (file as File).type || "";
       const buf = Buffer.from(await file.arrayBuffer());
+
+      // Imagen (foto/captura de la nota, ideal para manuscrito) → visión.
+      if (type.startsWith("image/")) {
+        const dataUrl = `data:${type};base64,${buf.toString("base64")}`;
+        const r = await ingestStudyImage(user.id, [dataUrl], subject);
+        if (!r.ok) return Response.json({ error: "No pude leer la imagen. Probá con una foto más nítida." }, { status: 400 });
+        return Response.json({ ok: true, subject: r.subject, title: r.title });
+      }
+
+      // PDF con texto seleccionable → extracción directa.
       const r = await ingestStudyPdf(user.id, buf, subject);
       if (!r.ok) {
         return Response.json(
-          { error: r.reason === "empty" ? "No pude leer texto del PDF (¿es escaneado?)." : "Error procesando el PDF." },
+          {
+            error:
+              r.reason === "empty"
+                ? "Ese PDF es manuscrito (imagen), no tiene texto. Subilo como FOTO/imagen y te leo la letra 📸"
+                : "Error procesando el PDF.",
+          },
           { status: 400 }
         );
       }

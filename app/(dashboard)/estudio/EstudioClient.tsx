@@ -110,14 +110,14 @@ export function EstudioClient({ notes, reviews }: { notes: StudyNoteView[]; revi
           className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground placeholder:text-muted resize-y"
         />
         <div className="flex flex-wrap items-center gap-2">
-          <input ref={fileRef} type="file" accept="application/pdf" className="hidden"
+          <input ref={fileRef} type="file" accept="application/pdf,image/*" className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) submit(f); }} />
           <button
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-primary/50 disabled:opacity-50"
           >
-            <FileText size={15} /> Subir PDF
+            <FileText size={15} /> Subir PDF o foto
           </button>
           <button
             onClick={() => submit()}
@@ -127,7 +127,7 @@ export function EstudioClient({ notes, reviews }: { notes: StudyNoteView[]; revi
             {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
             {uploading ? "Procesando…" : "Guardar y agendar repaso"}
           </button>
-          <span className="text-[11px] text-muted">También podés mandarle el PDF al bot de WhatsApp.</span>
+          <span className="text-[11px] text-muted">¿Apuntes a mano? Subí una <b>foto</b> (leo tu letra). También podés mandarla al bot de WhatsApp.</span>
         </div>
       </div>
 

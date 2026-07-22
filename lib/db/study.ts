@@ -77,6 +77,59 @@ export async function summarizeStudyContent(
 }
 
 /**
+ * Resume apuntes desde IMÁGENES (fotos/capturas, posiblemente manuscritas) usando
+ * el modelo de VISIÓN del bot (OpenAI, el mismo que lee tickets). Lee la letra a
+ * mano y devuelve materia/título/resumen.
+ */
+export async function summarizeStudyImage(
+  imageDataUrls: string[],
+  hintSubject?: string
+): Promise<{ subject: string; title: string; summary: string }> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const model = process.env.CHAT_MODEL ?? "gpt-4o-mini";
+  const baseUrl = (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/+$/, "");
+  if (!apiKey || !imageDataUrls.length) {
+    return { subject: hintSubject || "General", title: "Apunte", summary: "(no pude leer la imagen)" };
+  }
+  const prompt =
+    `Estas imágenes son apuntes de clase (posiblemente MANUSCRITOS) de un estudiante de la UTN. ` +
+    `Leé/transcribí el contenido —incluida la letra a mano y los diagramas— y generá un RESUMEN de ` +
+    `estudio ordenado para repasar: conceptos clave, definiciones y fórmulas, con viñetas y **negritas**. ` +
+    `Respondé SOLO JSON: {"subject":"materia","title":"tema","summary":"resumen en markdown"}.` +
+    (hintSubject ? ` La materia probablemente es: ${hintSubject}.` : "");
+  try {
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        temperature: 0.3,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              ...imageDataUrls.map((url) => ({ type: "image_url", image_url: { url } })),
+            ],
+          },
+        ],
+      }),
+    });
+    if (!res.ok) throw new Error("vision");
+    const j = await res.json();
+    const p = JSON.parse(j.choices?.[0]?.message?.content ?? "{}");
+    return {
+      subject: (p.subject || hintSubject || "General").toString().slice(0, 60),
+      title: (p.title || "Apunte").toString().slice(0, 120),
+      summary: (p.summary || "").toString() || "(no pude leer la imagen)",
+    };
+  } catch {
+    return { subject: hintSubject || "General", title: "Apunte", summary: "(no pude leer la imagen)" };
+  }
+}
+
+/**
  * Crea una nota de estudio (resumen ya generado) y agenda su repaso espaciado.
  */
 export async function createStudyNote(
