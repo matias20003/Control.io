@@ -2,12 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Repeat, Plus, Trash2, Clock, Link2 } from "lucide-react";
+import { Repeat, Plus, Trash2, Clock, Link2, Pencil, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   createRecurringReminderAction,
+  updateRecurringReminderAction,
   toggleRecurringReminderAction,
   deleteRecurringReminderAction,
 } from "@/app/actions/recurring-reminders";
@@ -52,12 +53,29 @@ export function RecurringReminders({
   const [link, setLink] = useState("");
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [time, setTime] = useState("09:00");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isPending, start] = useTransition();
 
   const toggleDay = (d: number) =>
     setDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
 
-  const add = () => {
+  const resetForm = () => {
+    setText("");
+    setLink("");
+    setDays([1, 2, 3, 4, 5]);
+    setTime("09:00");
+    setEditingId(null);
+  };
+
+  const startEdit = (r: SerializedRecurringReminder) => {
+    setEditingId(r.id);
+    setText(r.text);
+    setLink(r.link ?? "");
+    setDays(r.daysOfWeek);
+    setTime(fmtTime(r.hour, r.minute));
+  };
+
+  const save = () => {
     const t = text.trim();
     if (!t) {
       toast.error("Escribí el mensaje del recordatorio");
@@ -68,20 +86,28 @@ export function RecurringReminders({
       return;
     }
     const [hh, mm] = time.split(":").map(Number);
+    const payload = { text: t, link: link.trim() || undefined, daysOfWeek: days, hour: hh, minute: mm };
     start(async () => {
-      const res = await createRecurringReminderAction({
-        text: t,
-        link: link.trim() || undefined,
-        daysOfWeek: days,
-        hour: hh,
-        minute: mm,
-      });
-      if (res.error) toast.error(res.error);
-      else if (res.success && res.reminder) {
-        setItems((prev) => [...prev, res.reminder!]);
-        setText("");
-        setLink("");
-        toast.success("Recordatorio recurrente creado");
+      if (editingId) {
+        const res = await updateRecurringReminderAction(editingId, payload);
+        if (res.error) toast.error(res.error);
+        else {
+          setItems((prev) =>
+            prev.map((i) =>
+              i.id === editingId ? { ...i, text: t, link: link.trim() || null, daysOfWeek: days, hour: hh, minute: mm } : i
+            )
+          );
+          resetForm();
+          toast.success("Recordatorio actualizado");
+        }
+      } else {
+        const res = await createRecurringReminderAction(payload);
+        if (res.error) toast.error(res.error);
+        else if (res.success && res.reminder) {
+          setItems((prev) => [...prev, res.reminder!]);
+          resetForm();
+          toast.success("Recordatorio recurrente creado");
+        }
       }
     });
   };
@@ -194,10 +220,15 @@ export function RecurringReminders({
                 className="w-full bg-transparent text-sm text-foreground outline-none [color-scheme:dark]"
               />
             </div>
-            <Button onClick={add} disabled={isPending} className="w-full sm:flex-1">
-              <Plus size={16} className="mr-1" />
-              {isPending ? "Creando…" : "Crear recordatorio"}
+            <Button onClick={save} disabled={isPending} className="w-full sm:flex-1">
+              {editingId ? <Check size={16} className="mr-1" /> : <Plus size={16} className="mr-1" />}
+              {isPending ? "Guardando…" : editingId ? "Guardar cambios" : "Crear recordatorio"}
             </Button>
+            {editingId && (
+              <Button type="button" variant="outline" onClick={resetForm} disabled={isPending} className="shrink-0">
+                <X size={16} className="mr-1" /> Cancelar
+              </Button>
+            )}
           </div>
         </div>
 
@@ -205,7 +236,7 @@ export function RecurringReminders({
         {items.length > 0 && (
           <div className="divide-y divide-border-subtle">
             {items.map((r) => (
-              <div key={r.id} className="flex items-center gap-3 py-2.5">
+              <div key={r.id} className={`flex items-center gap-3 py-2.5 ${editingId === r.id ? "rounded-lg bg-primary/5 -mx-1 px-1" : ""}`}>
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
                   <Repeat size={15} />
                 </span>
@@ -234,6 +265,13 @@ export function RecurringReminders({
                     className="h-4 w-4 accent-primary"
                   />
                 </label>
+                <button
+                  onClick={() => startEdit(r)}
+                  className="shrink-0 rounded-lg p-1.5 text-muted hover:bg-primary/10 hover:text-primary transition-colors"
+                  aria-label="Editar"
+                >
+                  <Pencil size={14} />
+                </button>
                 <button
                   onClick={() => remove(r.id)}
                   className="shrink-0 rounded-lg p-1.5 text-muted hover:bg-danger/10 hover:text-danger transition-colors"

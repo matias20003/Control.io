@@ -50,6 +50,34 @@ export async function createRecurringReminderAction(input: {
   }
 }
 
+export async function updateRecurringReminderAction(
+  id: string,
+  input: { text: string; link?: string; daysOfWeek: number[]; hour: number; minute: number }
+) {
+  const user = await requireUser();
+  if (!user) return { error: "No autorizado" };
+
+  const parsed = createSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  }
+
+  try {
+    await updateRecurringReminder(user.id, id, {
+      text: parsed.data.text,
+      link: parsed.data.link ?? null, // si viene vacío, limpia el link
+      daysOfWeek: parsed.data.daysOfWeek,
+      hour: parsed.data.hour,
+      minute: parsed.data.minute,
+    });
+    revalidatePath("/tareas");
+    revalidatePath("/calendario");
+    return { success: true };
+  } catch {
+    return { error: "No se pudo actualizar el recordatorio" };
+  }
+}
+
 export async function toggleRecurringReminderAction(id: string, isActive: boolean) {
   const user = await requireUser();
   if (!user) return { error: "No autorizado" };
