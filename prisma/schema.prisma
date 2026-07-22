@@ -750,6 +750,17 @@ model StudyExam {
   @@map("study_exams")
 }
 
+model StudySettings {
+  userId        String   @id @map("user_id")
+  planHour      Int      @default(8) @map("plan_hour")
+  planMinute    Int      @default(0) @map("plan_minute")
+  notifyEnabled Boolean  @default(true) @map("notify_enabled")
+  lastPlanSent  String?  @map("last_plan_sent") // "YYYY-MM-DD" ARG del último envío
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("study_settings")
+}
+
 model StudyExercise {
   id          String    @id @default(cuid())
   userId      String    @map("user_id")

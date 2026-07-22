@@ -302,3 +302,25 @@ export async function reprogramarAction() {
     return { error: "No se pudo reprogramar" };
   }
 }
+
+// ─────────── Aviso diario (hora + on/off) ───────────
+const notifySchema = z.object({
+  planHour: z.number().int().min(0).max(23),
+  planMinute: z.number().int().min(0).max(59),
+  notifyEnabled: z.boolean(),
+});
+
+export async function setStudyNotifyAction(input: z.infer<typeof notifySchema>) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const parsed = notifySchema.safeParse(input);
+  if (!parsed.success) return { error: "Datos inválidos" };
+  try {
+    const { setStudySettings } = await import("@/lib/study/notify");
+    await setStudySettings(userId, parsed.data);
+    revalidatePath("/estudio");
+    return { success: true };
+  } catch {
+    return { error: "No se pudo guardar" };
+  }
+}

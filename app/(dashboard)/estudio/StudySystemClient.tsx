@@ -14,6 +14,7 @@ import {
   createExamAction, toggleExamAction, deleteExamAction,
   createExerciseAction, toggleExerciseAction, deleteExerciseAction,
   setAvailabilityAction, reprogramarAction, summarizeForBlockAction,
+  setStudyNotifyAction,
 } from "@/app/actions/study-system";
 import type {
   SubjectDTO, BlockDTO, PlanItem, ExamDTO, ExerciseDTO, ErrorLogDTO, AvailabilityDTO,
@@ -331,9 +332,10 @@ function NewBlock({ subjects, onCreated }: { subjects: SubjectDTO[]; onCreated: 
 // Modal de disponibilidad semanal
 // ─────────────────────────────────────────────
 function AvailabilityModal({
-  availability, onClose, onSaved,
+  availability, settings, onClose, onSaved,
 }: {
   availability: AvailabilityDTO[];
+  settings: { planHour: number; planMinute: number; notifyEnabled: boolean };
   onClose: () => void;
   onSaved: (day: number, minutes: number) => void;
 }) {
@@ -342,6 +344,18 @@ function AvailabilityModal({
     Object.fromEntries(DAY_ORDER.map((d) => [d, String(((map.get(d) ?? 0) / 60).toFixed(1)).replace(".0", "")]))
   );
   const [savingDay, setSavingDay] = useState<number | null>(null);
+  const [notifyEnabled, setNotifyEnabled] = useState(settings.notifyEnabled);
+  const [planTime, setPlanTime] = useState(`${String(settings.planHour).padStart(2, "0")}:${String(settings.planMinute).padStart(2, "0")}`);
+  const [savingNotify, setSavingNotify] = useState(false);
+
+  const saveNotify = async (enabled: boolean, time: string) => {
+    const [hh, mm] = time.split(":").map(Number);
+    setSavingNotify(true);
+    const res = await setStudyNotifyAction({ planHour: hh, planMinute: mm, notifyEnabled: enabled });
+    setSavingNotify(false);
+    if (res.error) { toast.error(res.error); return; }
+    toast.success(enabled ? `Aviso diario a las ${time} ⏰` : "Aviso diario desactivado");
+  };
 
   const saveDay = async (day: number) => {
     const hours = parseFloat(values[day] || "0");
@@ -388,6 +402,32 @@ function AvailabilityModal({
           <span className="font-bold text-foreground">{total.toFixed(1).replace(".0", "")} h</span>
         </div>
         <p className="text-[11px] text-muted">Se guarda al salir de cada casillero. El plan de hoy respeta estas horas.</p>
+
+        {/* Aviso diario por WhatsApp/push */}
+        <div className="border-t border-border pt-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground flex items-center gap-1.5"><CalendarClock size={15} /> Aviso diario</p>
+              <p className="text-[11px] text-muted">Todas las mañanas te mando qué estudiar por WhatsApp y push.</p>
+            </div>
+            <label className="relative inline-flex cursor-pointer items-center">
+              <input type="checkbox" checked={notifyEnabled} className="peer sr-only"
+                onChange={(e) => { setNotifyEnabled(e.target.checked); saveNotify(e.target.checked, planTime); }} />
+              <div className="h-6 w-11 rounded-full bg-surface-2 peer-checked:bg-primary transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-5" />
+            </label>
+          </div>
+          {notifyEnabled && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted">Horario</span>
+              <input type="time" value={planTime}
+                onChange={(e) => setPlanTime(e.target.value)}
+                onBlur={() => saveNotify(notifyEnabled, planTime)}
+                className="rounded-lg border border-border bg-surface-2/40 px-3 py-1.5 text-sm text-foreground [color-scheme:dark]" />
+              {savingNotify && <Loader2 size={14} className="animate-spin text-muted" />}
+              <span className="text-[11px] text-muted">hora de Argentina</span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -600,7 +640,7 @@ function PendientesTab({
 // ─────────────────────────────────────────────
 export function StudySystemClient({
   initialSubjects, initialBlocks, initialPlan, stats, notes, reviews,
-  initialExams, initialExercises, initialErrors, availability,
+  initialExams, initialExercises, initialErrors, availability, settings,
 }: {
   initialSubjects: SubjectDTO[];
   initialBlocks: BlockDTO[];
@@ -612,6 +652,7 @@ export function StudySystemClient({
   initialExercises: ExerciseDTO[];
   initialErrors: ErrorLogDTO[];
   availability: AvailabilityDTO[];
+  settings: { planHour: number; planMinute: number; notifyEnabled: boolean; lastPlanSent: string | null };
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("hoy");
@@ -878,6 +919,7 @@ export function StudySystemClient({
       {showAvail && (
         <AvailabilityModal
           availability={avail}
+          settings={settings}
           onClose={() => { setShowAvail(false); router.refresh(); }}
           onSaved={(day, minutes) => setAvail((prev) => prev.map((a) => (a.dayOfWeek === day ? { ...a, minutes } : a)))}
         />
