@@ -47,7 +47,7 @@ const ALLOWED_MEDIA_HOSTS = [
   /(^|\.)fbsbx\.com$/i,
   /(^|\.)cdninstagram\.com$/i,
 ];
-const MAX_MEDIA_BYTES = 15 * 1024 * 1024; // 15 MB
+const MAX_MEDIA_BYTES = 30 * 1024 * 1024; // 30 MB (PDFs de apuntes pueden ser pesados)
 
 function assertSafeMediaUrl(raw: string): URL {
   let u: URL;
