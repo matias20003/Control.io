@@ -12,7 +12,7 @@
  *   OPENAI_BASE_URL  → opcional, default https://api.openai.com/v1
  *   CHAT_MODEL       → opcional, default "gpt-4o-mini"
  */
-import { getAccounts, createAccount, updateAccount, type SerializedAccount } from "@/lib/db/accounts";
+import { getAccounts, createAccount, updateAccount, deleteAccount, type SerializedAccount } from "@/lib/db/accounts";
 import { getCategories, type SerializedCategory } from "@/lib/db/categories";
 import {
   createTransaction,
@@ -24,13 +24,13 @@ import {
   type SerializedTransaction,
 } from "@/lib/db/transactions";
 import { getNetWorth, type NetWorth } from "@/lib/db/insights";
-import { getDebts, createDebt, payDebt, type SerializedDebt } from "@/lib/db/debts";
-import { getBudgets, createOrUpdateBudget, type SerializedBudget } from "@/lib/db/budgets";
-import { getGoals, createGoal, addFundsToGoal, type SerializedGoal } from "@/lib/db/goals";
+import { getDebts, createDebt, payDebt, deleteDebt, type SerializedDebt } from "@/lib/db/debts";
+import { getBudgets, createOrUpdateBudget, deleteBudget, type SerializedBudget } from "@/lib/db/budgets";
+import { getGoals, createGoal, addFundsToGoal, updateGoal, deleteGoal, type SerializedGoal } from "@/lib/db/goals";
 import { getInvestments, type SerializedInvestment } from "@/lib/db/investments";
 import { getTasks, createTask, toggleTask, deleteTask, type SerializedTask } from "@/lib/db/tasks";
 import { createReminder, getPendingReminders, type SerializedReminder } from "@/lib/db/reminders";
-import { createRecurringReminder } from "@/lib/db/recurring-reminders";
+import { createRecurringReminder, listRecurringReminders, updateRecurringReminder, deleteRecurringReminder, type SerializedRecurringReminder } from "@/lib/db/recurring-reminders";
 import { createCalendarEvent, createGoogleTask, getGoogleStatus, listCalendarEvents, listGoogleTasks, deleteCalendarEvent, updateCalendarEvent, completeGoogleTask } from "@/lib/google";
 import { getIsTester } from "@/lib/db/profile";
 import { hasFeature } from "@/lib/feature-flags";
@@ -81,6 +81,7 @@ interface Action {
   daysOfWeek?: number[]; // create_recurring_reminder: días 0=Dom..6=Sáb (lun-vie = [1,2,3,4,5])
   atTime?: string;       // create_recurring_reminder: hora ARG "HH:mm"
   link?: string;         // create_recurring_reminder: link opcional que se manda con el aviso
+  recRef?: number;       // edit_recurring_reminder / delete_recurring_reminder: [#N] de RECORDATORIOS RECURRENTES
   eventStart?: string; // agendar_evento / editar_evento: inicio ARG "YYYY-MM-DDTHH:mm"
   durationMin?: number; // agendar_evento / editar_evento: duración en minutos (default 60)
   eventRef?: number; // borrar_evento / editar_evento: [#N] de AGENDA
@@ -110,6 +111,7 @@ interface FinancialContext {
   isTester: boolean;
   tasks: SerializedTask[];
   reminders: SerializedReminder[];
+  recurringReminders: SerializedRecurringReminder[];
   nowArg: string; // "YYYY-MM-DDTHH:mm" hora Argentina (para recordatorios)
   dateRef: string; // tabla de los próximos días con su fecha exacta (ARG)
   googleConnected: boolean;
@@ -167,6 +169,20 @@ function findAccount(c: FinancialContext, name: string | null | undefined) {
     c.accounts.find((a) => norm(a.name).includes(norm(name))) ??
     null
   );
+}
+
+/** Parsea un ref [#N] que puede venir como número o string ("[#2]", "#2", "2"). */
+function refNum(v: unknown): number {
+  if (typeof v === "number") return v;
+  const m = String(v ?? "").match(/\d+/);
+  return m ? parseInt(m[0], 10) : 0;
+}
+
+/** Match genérico por nombre (metas, presupuestos, etc.). */
+function findByName<T extends { name: string }>(list: T[], q: string | null | undefined): T | null {
+  if (!q) return null;
+  const n = norm(q);
+  return list.find((x) => norm(x.name) === n) ?? list.find((x) => norm(x.name).includes(n)) ?? null;
 }
 
 
@@ -277,6 +293,26 @@ function formatFinancialState(c: FinancialContext): string {
           .map((r) => {
             const d = toZonedTime(new Date(r.remindAt), ARG_TZ);
             return `- ${formatDateFn(d, "dd/MM HH:mm")}: ${r.text}`;
+          })
+          .join("\n")
+    );
+  }
+
+  if (hasFeature("recordatorios", { isTester: c.isTester }) && c.recurringReminders.length) {
+    const DIAS = ["D", "L", "M", "M", "J", "V", "S"];
+    s.push(
+      `RECORDATORIOS RECURRENTES (usá el número [#N] como "recRef" para editar/borrar):\n` +
+        c.recurringReminders
+          .slice(0, 15)
+          .map((r, i) => {
+            const days =
+              r.daysOfWeek.length === 7
+                ? "todos los días"
+                : r.daysOfWeek.length === 5 && [1, 2, 3, 4, 5].every((d) => r.daysOfWeek.includes(d))
+                  ? "Lun-Vie"
+                  : r.daysOfWeek.slice().sort((a, b) => a - b).map((d) => DIAS[d]).join("");
+            const t = `${String(r.hour).padStart(2, "0")}:${String(r.minute).padStart(2, "0")}`;
+            return `[#${i + 1}] ${r.text} — ${days} ${t}${r.link ? " (con link)" : ""}${r.isActive ? "" : " [pausado]"}`;
           })
           .join("\n")
     );
@@ -444,11 +480,17 @@ TIPOS DE ACCIÓN (campo "type"):
 - "transfer": { amount, currency, description, fromAccount, toAccount, date }
 - "create_account": { name, accountType, currency, balance }   // accountType de la lista
 - "set_balance": { account, balance }   // FIJA el saldo ACTUAL de una cuenta existente (no es ingreso ni gasto)
+- "rename_account": { account, name }   // RENOMBRAR una cuenta existente ("cambiale el nombre a X", "la cuenta Y llamala Z"). account = cuenta actual, name = nombre nuevo.
+- "delete_account": { account }         // BORRAR una cuenta ("borrá la cuenta X", "eliminá X"). account = una de las cuentas existentes.
 - "create_debt": { direction: "i_owe"|"they_owe", personName, amount, currency, description }
 - "pay_debt": { personName, amount }
+- "delete_debt": { personName }         // BORRAR una deuda ("borrá la deuda con Juan", "sacá lo que le debo a X"). personName = de la lista DEUDAS.
 - "create_budget": { category, amount }                        // categoría de gasto, mes actual
+- "delete_budget": { category }         // BORRAR un presupuesto ("sacá el presupuesto de Comida"). category = categoría del presupuesto (de la lista PRESUPUESTOS).
 - "create_goal": { name, targetAmount, currency, currentAmount }
 - "add_to_goal": { goalName, amount }
+- "update_goal": { goalName, name, targetAmount }   // EDITAR una meta ("cambiale el objetivo a X", "la meta Y llamala Z"). goalName = meta actual (de la lista METAS). name = nombre nuevo (opcional), targetAmount = objetivo nuevo (opcional).
+- "delete_goal": { goalName }           // BORRAR una meta ("borrá la meta del auto", "eliminá X"). goalName = de la lista METAS.
 - "delete_transaction": { ref }                                // ref = número [#N] de la lista
 - "update_transaction": { ref, amount, description, category, account }  // solo los campos a cambiar
 - "remember": { fact }   // guardar un DATO DURABLE del usuario (cómo es su plata/vida: "cobro los días 10", "mi alquiler es 200k"). NO es una tarea.
@@ -457,7 +499,9 @@ ${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, du
 - "delete_task": { taskRef }   // borrar/cancelar una tarea. taskRef = [#N] de TUS TAREAS PENDIENTES.` : ``}
 ${hasFeature("recordatorios", { isTester: c.isTester }) ? `- "create_reminder": { title, inMinutes, remindAt }   // recordatorio CON HORA que te aviso UNA SOLA VEZ ("haceme acordar en 5 min de sacar la comida", "recordame mañana a las 9 llamar al banco"). title = qué recordar. Para "en X minutos/horas" usá inMinutes (5, 120). Para una hora/fecha puntual usá remindAt "YYYY-MM-DDTHH:mm" en hora Argentina (calculada desde AHORA). Es distinto de create_task: el recordatorio DISPARA un aviso a una hora exacta.
 - "create_recurring_reminder": { title, daysOfWeek, atTime, link }   // recordatorio que SE REPITE ("recordame todos los lunes a viernes a las 17:00 sacar la basura", "todos los días a las 21 cargá tus gastos", "cada lunes a las 9 pagar el alquiler"). title = qué recordar. daysOfWeek = array de días donde 0=Domingo,1=Lunes,2=Martes,3=Miércoles,4=Jueves,5=Viernes,6=Sábado (ej: lunes a viernes = [1,2,3,4,5]; todos los días = [0,1,2,3,4,5,6]; fin de semana = [0,6]). atTime = hora ARG "HH:mm" (ej "17:00"). link = URL opcional que se manda JUNTO al aviso (ej: link de asistencia de la facultad). Usalo SIEMPRE que el pedido tenga una repetición ("todos", "cada", "los lunes", "de lunes a viernes"). Distinto de create_reminder (que es una sola vez).
-  ⚠️ LINK: si el usuario quiere adjuntar un link pero TODAVÍA NO lo pasó ("quiero dejar un link", "con un link"), NO crees el recordatorio aún: respondé intent "chat" pidiéndoselo ("Dale, pasame el link y lo dejo listo 👍"). En el PRÓXIMO mensaje (lo vas a ver en el HISTORIAL con los datos del recordatorio pendiente) creá el recordatorio con ese "link". Si el usuario ya incluyó el link en el mismo mensaje, ponelo directo en "link".` : ``}
+  ⚠️ LINK: si el usuario quiere adjuntar un link pero TODAVÍA NO lo pasó ("quiero dejar un link", "con un link"), NO crees el recordatorio aún: respondé intent "chat" pidiéndoselo ("Dale, pasame el link y lo dejo listo 👍"). En el PRÓXIMO mensaje (lo vas a ver en el HISTORIAL con los datos del recordatorio pendiente) creá el recordatorio con ese "link". Si el usuario ya incluyó el link en el mismo mensaje, ponelo directo en "link".
+- "edit_recurring_reminder": { recRef, title, daysOfWeek, atTime, link }   // EDITAR un recordatorio recurrente existente ("cambiá el de asistencia a las 20", "el recordatorio de la basura ponelo también los sábados", "agregale este link al de asistencia: ..."). recRef = [#N] de RECORDATORIOS RECURRENTES. Mandá SOLO los campos que cambian. Para quitar el link mandá link:"".
+- "delete_recurring_reminder": { recRef }   // BORRAR un recordatorio recurrente ("borrá el recordatorio de asistencia", "sacá el de la basura"). recRef = [#N] de RECORDATORIOS RECURRENTES.` : ``}
 ${hasFeature("google", { isTester: c.isTester }) && c.googleConnected ? `- "agendar_evento": { title, eventStart, durationMin }   // crea un EVENTO en Google Calendar ("agendá turno médico el jueves 10hs", "reunión mañana 15hs", "cumple de Ana el 20"). title = qué. eventStart = "YYYY-MM-DDTHH:mm" en hora Argentina (relativo a HOY). durationMin opcional (default 60). Usalo para citas/eventos con fecha y hora; create_task es para to-dos sin hora.
 - "borrar_evento": { eventRef }   // borra un evento del calendario ("borrá la reunión del lunes", "cancelá el turno"). eventRef = [#N] de AGENDA.
 - "editar_evento": { eventRef, title, eventStart, durationMin }   // reprograma o renombra un evento ("movélo a las 16", "cambialo para el martes 11hs"). eventRef = [#N] de AGENDA. Mandá solo lo que cambia (title y/o eventStart).` : ``}
@@ -842,6 +886,78 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       return `🔁 Listo, te voy a recordar ${dl} a las ${hhmm}: ${a.title}`;
     }
 
+    case "edit_recurring_reminder": {
+      const idx = refNum(a.recRef) - 1;
+      const rr = c.recurringReminders[idx];
+      if (!rr) throw new Error("no encontré ese recordatorio recurrente");
+      const patch: { text?: string; daysOfWeek?: number[]; hour?: number; minute?: number; link?: string | null } = {};
+      if (a.title) patch.text = a.title;
+      if (Array.isArray(a.daysOfWeek) && a.daysOfWeek.length) {
+        patch.daysOfWeek = [...new Set(a.daysOfWeek)].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+      }
+      const m = /^(\d{1,2}):(\d{2})$/.exec(a.atTime ?? "");
+      if (m) { patch.hour = Math.min(23, Math.max(0, parseInt(m[1], 10))); patch.minute = Math.min(59, Math.max(0, parseInt(m[2], 10))); }
+      if (a.link !== undefined) patch.link = a.link || null;
+      await updateRecurringReminder(userId, rr.id, patch);
+      return `✏️ Listo, actualicé el recordatorio: ${patch.text ?? rr.text}`;
+    }
+
+    case "delete_recurring_reminder": {
+      const rr = c.recurringReminders[refNum(a.recRef) - 1];
+      if (!rr) throw new Error("no encontré ese recordatorio recurrente");
+      await deleteRecurringReminder(userId, rr.id);
+      return `🗑️ Borré el recordatorio: ${rr.text}`;
+    }
+
+    case "update_goal": {
+      const g = findByName(c.goals, a.goalName ?? a.name);
+      if (!g) throw new Error("no encontré esa meta");
+      const patch: { name?: string; targetAmount?: number } = {};
+      if (a.name && a.name !== g.name) patch.name = a.name;
+      if (a.targetAmount != null) patch.targetAmount = a.targetAmount;
+      if (!patch.name && patch.targetAmount == null) throw new Error("no entendí qué cambiar de la meta");
+      await updateGoal(userId, g.id, patch);
+      return `✏️ Listo, actualicé la meta ${patch.name ?? g.name}${patch.targetAmount != null ? ` (objetivo ${money(patch.targetAmount, g.currency)})` : ""}`;
+    }
+
+    case "delete_goal": {
+      const g = findByName(c.goals, a.goalName ?? a.name);
+      if (!g) throw new Error("no encontré esa meta");
+      await deleteGoal(userId, g.id);
+      return `🗑️ Borré la meta: ${g.name}`;
+    }
+
+    case "delete_debt": {
+      const d = c.debts.find((x) => !x.isCompleted && norm(x.personName) === norm(a.personName ?? "")) ??
+        c.debts.find((x) => norm(x.personName).includes(norm(a.personName ?? "")));
+      if (!d) throw new Error("no encontré esa deuda");
+      await deleteDebt(userId, d.id);
+      return `🗑️ Borré la deuda con ${d.personName}`;
+    }
+
+    case "delete_budget": {
+      const cat = findCategory(c, a.category, "EXPENSE");
+      const b = cat ? c.budgets.find((x) => x.categoryId === cat.id) : findByName(c.budgets.map((x) => ({ id: x.id, name: x.categoryName })), a.category);
+      if (!b) throw new Error("no encontré ese presupuesto");
+      await deleteBudget(userId, b.id);
+      return `🗑️ Borré el presupuesto`;
+    }
+
+    case "delete_account": {
+      const acc = findAccount(c, a.account ?? a.name);
+      if (!acc) throw new Error("no encontré esa cuenta");
+      await deleteAccount(userId, acc.id);
+      return `🗑️ Borré la cuenta ${acc.name}`;
+    }
+
+    case "rename_account": {
+      const acc = findAccount(c, a.account);
+      if (!acc) throw new Error("no encontré esa cuenta");
+      if (!a.name) throw new Error("no entendí el nuevo nombre");
+      await updateAccount(userId, acc.id, { name: a.name });
+      return `✏️ Listo, renombré la cuenta a ${a.name}`;
+    }
+
     case "agendar_evento": {
       if (!hasFeature("google", { isTester: c.isTester })) throw new Error("esa función todavía no está disponible");
       if (!c.googleConnected) throw new Error("primero conectá tu Google en Configuración → Google Calendar y Tareas");
@@ -899,7 +1015,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage, history, memory, isTester, allTasks, reminders, googleConnected] =
+  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage, history, memory, isTester, allTasks, reminders, recurringReminders, googleConnected] =
     await Promise.all([
       getAccounts(userId),
       getCategories(userId),
@@ -915,6 +1031,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
       getIsTester(userId).catch(() => false),
       getTasks(userId).catch(() => [] as SerializedTask[]),
       getPendingReminders(userId).catch(() => [] as SerializedReminder[]),
+      listRecurringReminders(userId).catch(() => [] as SerializedRecurringReminder[]),
       getGoogleStatus(userId).then((s) => s.connected).catch(() => false),
     ]);
 
@@ -962,6 +1079,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
     isTester,
     tasks: allTasks.filter((t) => !t.done),
     reminders,
+    recurringReminders,
     nowArg: formatDateFn(toZonedTime(now, ARG_TZ), "yyyy-MM-dd'T'HH:mm"),
     dateRef,
     googleConnected,
