@@ -13,7 +13,7 @@ import {
   createSubjectAction, createBlockAction, closeSessionAction,
   createExamAction, toggleExamAction, deleteExamAction,
   createExerciseAction, toggleExerciseAction, deleteExerciseAction,
-  setAvailabilityAction, reprogramarAction,
+  setAvailabilityAction, reprogramarAction, summarizeForBlockAction,
 } from "@/app/actions/study-system";
 import type {
   SubjectDTO, BlockDTO, PlanItem, ExamDTO, ExerciseDTO, ErrorLogDTO, AvailabilityDTO,
@@ -248,7 +248,24 @@ function NewBlock({ subjects, onCreated }: { subjects: SubjectDTO[]; onCreated: 
   const [importance, setImportance] = useState("2");
   const [difficulty, setDifficulty] = useState("2");
   const [summary, setSummary] = useState("");
+  const [raw, setRaw] = useState("");
   const [isPending, start] = useTransition();
+  const [summarizing, startSummarize] = useTransition();
+
+  const selectedCode = subjects.find((s) => s.id === subjectId)?.code;
+
+  const summarize = () => {
+    if (raw.trim().length < 30) { toast.error("Pegá el texto del apunte para resumir"); return; }
+    startSummarize(async () => {
+      const res = await summarizeForBlockAction({ text: raw.trim(), hintSubject: selectedCode });
+      if (res.error) { toast.error(res.error); return; }
+      if (res.success) {
+        if (res.summary) setSummary(res.summary);
+        if (res.topic && !topic.trim()) setTopic(res.topic);
+        toast.success("Resumen generado ✍️ revisalo y guardá");
+      }
+    });
+  };
 
   const save = () => {
     if (!subjectId) { toast.error("Elegí la materia"); return; }
@@ -262,7 +279,7 @@ function NewBlock({ subjects, onCreated }: { subjects: SubjectDTO[]; onCreated: 
       if (res.error) { toast.error(res.error); return; }
       if (res.success && res.block) {
         onCreated(res.block);
-        setTopic(""); setUnit(""); setSummary("");
+        setTopic(""); setUnit(""); setSummary(""); setRaw("");
         toast.success(`Bloque ${res.block.code} creado — entra al plan de hoy`);
       }
     });
@@ -294,7 +311,14 @@ function NewBlock({ subjects, onCreated }: { subjects: SubjectDTO[]; onCreated: 
           </select>
         </label>
       </div>
-      <textarea value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="Resumen / puntos clave del tema (opcional)…" rows={2} className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground resize-y" />
+      {/* Resumen con IA: pegás el apunte y la IA arma el resumen + propone el tema */}
+      <div className="rounded-lg border border-dashed border-border p-2.5 space-y-2">
+        <textarea value={raw} onChange={(e) => setRaw(e.target.value)} placeholder="¿Tenés el apunte? Pegá el texto acá y la IA te arma el resumen y propone el tema…" rows={2} className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground resize-y" />
+        <button onClick={summarize} disabled={summarizing} className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 px-3 py-1.5 text-xs font-semibold text-primary disabled:opacity-50">
+          {summarizing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Resumir con IA
+        </button>
+      </div>
+      <textarea value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="Resumen / puntos clave del tema (opcional)…" rows={3} className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground resize-y" />
       <button onClick={save} disabled={isPending} className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
         {isPending ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} Agregar bloque
       </button>
@@ -750,13 +774,21 @@ export function StudySystemClient({
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {subjects.map((s) => (
-                <div key={s.id} className="rounded-xl border border-border bg-surface p-3">
-                  <p className="text-sm font-bold text-foreground">{s.code}</p>
-                  <p className="text-[11px] text-muted truncate">{s.name}</p>
-                  <p className="text-[11px] text-muted mt-1">{s.blockCount} bloque(s)</p>
-                </div>
-              ))}
+              {subjects.map((s) => {
+                const sb = blocks.filter((b) => b.subjectId === s.id);
+                const dominated = sb.filter((b) => b.masteryLevel === "VERDE" || b.masteryLevel === "CONSOLIDADO").length;
+                const pct = sb.length ? Math.round((dominated / sb.length) * 100) : 0;
+                return (
+                  <div key={s.id} className="rounded-xl border border-border bg-surface p-3">
+                    <p className="text-sm font-bold text-foreground">{s.code}</p>
+                    <p className="text-[11px] text-muted truncate">{s.name}</p>
+                    <div className="mt-2 h-1.5 w-full rounded-full bg-surface-2 overflow-hidden">
+                      <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                    <p className="text-[11px] text-muted mt-1">{dominated}/{sb.length} dominados · {pct}%</p>
+                  </div>
+                );
+              })}
             </div>
           )}
           {subjects.length > 0 && <NewBlock subjects={subjects} onCreated={(b) => { setBlocks((p) => [...p, b]); router.refresh(); }} />}

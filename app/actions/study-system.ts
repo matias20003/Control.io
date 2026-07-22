@@ -225,6 +225,21 @@ export async function deleteExerciseAction(id: string) {
   catch { return { error: "No se pudo eliminar" }; }
 }
 
+// ─────────── Resumen con IA para prellenar un bloque ───────────
+export async function summarizeForBlockAction(input: { text: string; hintSubject?: string }) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const text = (input.text ?? "").trim();
+  if (text.length < 30) return { error: "Pegá un poco más de texto para resumir" };
+  try {
+    const { summarizeStudyContent } = await import("@/lib/db/study");
+    const r = await summarizeStudyContent(text.slice(0, 45000), input.hintSubject);
+    return { success: true, topic: r.title, summary: r.summary };
+  } catch {
+    return { error: "No se pudo generar el resumen" };
+  }
+}
+
 // ─────────── Reprogramación automática ───────────
 export async function reprogramarAction() {
   const userId = await requireOwner();
