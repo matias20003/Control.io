@@ -7,6 +7,7 @@ import {
 } from "@/lib/db/study-system";
 import { getStudySettings } from "@/lib/study/notify";
 import { getNotionConfigView } from "@/lib/study/notion";
+import { getGcalView } from "@/lib/study/gcal";
 import { StudySystemClient } from "./StudySystemClient";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export default async function EstudioPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || user.email !== process.env.ADMIN_EMAIL) redirect("/dashboard");
 
-  const [notes, reviews, subjects, blocks, plan, stats, exams, exercises, errors, availability, settings, notion] = await Promise.all([
+  const [notes, reviews, subjects, blocks, plan, stats, exams, exercises, errors, availability, settings, notion, gcal] = await Promise.all([
     getStudyNotes(user.id).catch(() => []),
     getUpcomingReviews(user.id).catch(() => []),
     listSubjects(user.id).catch(() => []),
@@ -30,6 +31,7 @@ export default async function EstudioPage() {
     listAvailability(user.id).catch(() => []),
     getStudySettings(user.id).catch(() => ({ planHour: 8, planMinute: 0, notifyEnabled: true, lastPlanSent: null })),
     getNotionConfigView(user.id).catch(() => ({ connected: false, dbId: null, hasIcs: false })),
+    getGcalView(user.id).catch(() => ({ connected: false })),
   ]);
 
   return (
@@ -47,6 +49,7 @@ export default async function EstudioPage() {
         availability={availability}
         settings={settings}
         notion={notion}
+        gcal={gcal}
       />
     </div>
   );

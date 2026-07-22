@@ -641,7 +641,7 @@ function PendientesTab({
 // ─────────────────────────────────────────────
 export function StudySystemClient({
   initialSubjects, initialBlocks, initialPlan, stats, notes, reviews,
-  initialExams, initialExercises, initialErrors, availability, settings, notion,
+  initialExams, initialExercises, initialErrors, availability, settings, notion, gcal,
 }: {
   initialSubjects: SubjectDTO[];
   initialBlocks: BlockDTO[];
@@ -655,6 +655,7 @@ export function StudySystemClient({
   availability: AvailabilityDTO[];
   settings: { planHour: number; planMinute: number; notifyEnabled: boolean; lastPlanSent: string | null };
   notion: { connected: boolean; dbId: string | null; hasIcs: boolean };
+  gcal: { connected: boolean };
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("hoy");
@@ -856,7 +857,7 @@ export function StudySystemClient({
                   <Database size={13} /> Notion y calendario (importar / suscribir)
                 </summary>
                 <div className="mt-2">
-                  <NotionCalendar subjects={subjects} notion={notion} onImported={(bs) => { setBlocks((p) => [...p, ...bs]); router.refresh(); }} />
+                  <NotionCalendar subjects={subjects} notion={notion} gcal={gcal} onImported={(bs) => { setBlocks((p) => [...p, ...bs]); router.refresh(); }} />
                 </div>
               </details>
             </>

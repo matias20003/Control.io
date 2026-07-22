@@ -759,6 +759,7 @@ model StudySettings {
   notionToken   String?  @map("notion_token") // cifrado
   notionDbId    String?  @map("notion_db_id")
   icsToken      String?  @map("ics_token") // secreto para la URL del calendario
+  gcalIcsUrl    String?  @map("gcal_ics_url") // URL secreta iCal de Google (cifrada)
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@index([icsToken])

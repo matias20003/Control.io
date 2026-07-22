@@ -349,6 +349,57 @@ export async function disconnectNotionAction() {
   return { success: true };
 }
 
+// ─────────── Google Calendar (importar / ver) ───────────
+export async function connectGcalAction(input: { url: string }) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const url = (input.url ?? "").trim();
+  if (!/^https:\/\/.+/.test(url) || !/(ical|\.ics|calendar\.google)/i.test(url)) {
+    return { error: "Pegá la URL secreta en formato iCal de Google (termina en .ics)" };
+  }
+  try {
+    const { setGcalUrl, fetchUpcomingEvents } = await import("@/lib/study/gcal");
+    await setGcalUrl(userId, url);
+    const test = await fetchUpcomingEvents(userId, 21);
+    if (!test.ok) return { error: test.error ?? "No pude leer el calendario" };
+    revalidatePath("/estudio");
+    return { success: true, count: test.events.length };
+  } catch {
+    return { error: "No se pudo conectar el calendario" };
+  }
+}
+
+export async function disconnectGcalAction() {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const { disconnectGcal } = await import("@/lib/study/gcal");
+  await disconnectGcal(userId);
+  revalidatePath("/estudio");
+  return { success: true };
+}
+
+export async function getCalendarEventsAction(daysAhead = 21) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const { fetchUpcomingEvents } = await import("@/lib/study/gcal");
+  const r = await fetchUpcomingEvents(userId, daysAhead);
+  if (!r.ok) return { error: r.error ?? "No pude leer el calendario" };
+  return { success: true, events: r.events.map((e) => ({ title: e.title, start: e.start.toISOString(), allDay: e.allDay })) };
+}
+
+export async function importCalendarExamsAction() {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  try {
+    const { importDetectedExams } = await import("@/lib/study/gcal");
+    const r = await importDetectedExams(userId);
+    revalidatePath("/estudio");
+    return { success: true, imported: r.imported, unmatched: r.unmatched };
+  } catch {
+    return { error: "No se pudieron importar los parciales" };
+  }
+}
+
 // ─────────── Calendario ICS ───────────
 export async function getIcsUrlAction() {
   const userId = await requireOwner();
