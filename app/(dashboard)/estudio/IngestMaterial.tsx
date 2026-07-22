@@ -32,6 +32,7 @@ export function IngestMaterial({
   const [expanded, setExpanded] = useState<number | null>(null);
   const [creating, startCreate] = useTransition();
   const [notebookMode, setNotebookMode] = useState(false);
+  const [fromPage, setFromPage] = useState("");
   const [notebookInfo, setNotebookInfo] = useState<NotebookInfo | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const lastFile = useRef<File | null>(null); // el cuaderno, para "procesar siguientes"
@@ -51,6 +52,8 @@ export function IngestMaterial({
       if (!useNotebook && text.trim()) fd.append("text", text.trim());
       if (subjectCode) fd.append("subject", subjectCode);
       if (useNotebook) { fd.append("notebook", "1"); fd.append("subjectId", subjectId); }
+      // "Desde la página X" solo en la primera pasada (después sigue por el puntero).
+      if (useNotebook && !opts?.skip && files && fromPage.trim()) fd.append("fromPage", fromPage.trim());
       if (opts?.skip) fd.append("skip", "1");
 
       const res = await fetch("/api/estudio/analyze", { method: "POST", body: fd });
@@ -116,7 +119,7 @@ export function IngestMaterial({
         <Wand2 size={16} className="text-primary" />
         <p className="text-sm font-semibold text-foreground">Cargar material — la IA lo divide en bloques</p>
       </div>
-      <p className="text-[11px] text-muted -mt-1">Pegá un apunte/clase/guía o subí un PDF / <b>varias fotos juntas</b>. Te lo parto en bloques con resumen y te los reparto en el calendario sin sobrecargar días.</p>
+      <p className="text-[11px] text-muted -mt-1">Pegá un apunte/clase/guía, o subí un PDF / <b>varias imágenes juntas</b> (seleccioná todas las hojas de la clase con Ctrl+clic o Ctrl+A). Te lo parto en bloques y los reparto en el calendario sin sobrecargar días.</p>
 
       <div className="grid grid-cols-2 gap-2">
         <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground">
@@ -132,10 +135,17 @@ export function IngestMaterial({
       <label className="flex items-start gap-2 rounded-lg border border-border bg-surface/60 p-2.5 cursor-pointer">
         <input type="checkbox" checked={notebookMode} onChange={(e) => setNotebookMode(e.target.checked)} className="mt-0.5 h-4 w-4 accent-primary" />
         <span className="text-[11px] text-foreground">
-          <b className="flex items-center gap-1"><BookOpen size={12} /> Es mi cuaderno completo (proceso solo lo nuevo)</b>
-          <span className="text-muted">Subís el PDF entero de la materia y solo leo las hojas que agregaste desde la última vez. Ideal para Samsung Notes.</span>
+          <b className="flex items-center gap-1"><BookOpen size={12} /> Es un PDF de cuaderno (elijo el rango de hojas)</b>
+          <span className="text-muted">Subís el PDF de la materia y le decís desde qué hoja leer (ej. de la 15 a la última). Si no ponés nada, sigue desde donde quedó la última vez.</span>
         </span>
       </label>
+      {notebookMode && (
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-surface/60 px-3 py-2">
+          <span className="text-[11px] text-muted">Analizar desde la página</span>
+          <input type="number" min="1" inputMode="numeric" value={fromPage} onChange={(e) => setFromPage(e.target.value)} placeholder="auto" className="w-20 rounded-lg border border-border bg-surface-2/40 px-2 py-1 text-sm text-foreground text-center" />
+          <span className="text-[11px] text-muted">hasta la última</span>
+        </div>
+      )}
 
       {!proposed && (
         <>
@@ -158,7 +168,7 @@ export function IngestMaterial({
               </button>
             )}
           </div>
-          {notebookMode && <p className="text-[11px] text-muted">La primera vez, si tenés muchas hojas viejas, tocá <b>“Empezar desde acá”</b> (subí el PDF y no reproceso el backlog). De ahí en más, subís el cuaderno y solo leo lo nuevo.</p>}
+          {notebookMode && <p className="text-[11px] text-muted">Poné el número de hoja donde empezó la clase de hoy (ej. 15) y leo de ahí a la última. Lo hago de a 6 hojas y sigo solo. Si dejás “auto”, continúa desde donde quedó. <b>“Empezar desde acá”</b> marca el PDF actual como visto sin leerlo.</p>}
         </>
       )}
 

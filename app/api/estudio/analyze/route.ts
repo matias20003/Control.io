@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     const notebook = form.get("notebook") === "1";
     const skipBacklog = form.get("skip") === "1";
     const subjectId = (form.get("subjectId") as string) || "";
+    const fromPageRaw = parseInt((form.get("fromPage") as string) || "", 10); // 1-indexado, opcional
 
     // ── MODO CUADERNO: PDF manuscrito completo, procesar SOLO páginas nuevas ──
     if (notebook && subjectId && files.length) {
@@ -52,7 +53,9 @@ export async function POST(req: NextRequest) {
         return Response.json({ ok: true, notebook: { skipped: true, total } });
       }
 
-      const from = Math.min(subject.notebookPages, total);
+      // Rango manual "desde la página X" (1-indexado) tiene prioridad sobre el puntero.
+      const manualFrom = Number.isInteger(fromPageRaw) && fromPageRaw >= 1 ? fromPageRaw - 1 : null;
+      const from = manualFrom != null ? Math.min(manualFrom, total) : Math.min(subject.notebookPages, total);
       if (from >= total) {
         return Response.json({ ok: true, notebook: { noNew: true, total, processed: from }, blocks: [] });
       }
@@ -68,7 +71,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (files.length) {
-      const images = files.filter((f) => (f.type || "").startsWith("image/")).slice(0, 10);
+      const images = files.filter((f) => (f.type || "").startsWith("image/")).slice(0, 20);
 
       // Varias fotos (páginas de una clase) → una sola división en bloques.
       if (images.length) {
