@@ -19,6 +19,7 @@ import type {
   SubjectDTO, BlockDTO, PlanItem, ExamDTO, ExerciseDTO, ErrorLogDTO, AvailabilityDTO,
 } from "@/lib/db/study-system";
 import { EstudioClient } from "./EstudioClient";
+import { IngestMaterial } from "./IngestMaterial";
 import type { StudyNoteView, ReviewView } from "@/lib/db/study";
 
 type Tab = "hoy" | "materias" | "tabla" | "parciales" | "pendientes" | "apuntes";
@@ -738,6 +739,11 @@ export function StudySystemClient({
                       <MasteryBadge level={it.masteryLevel} />
                     </div>
                     <p className="text-xs text-foreground/80 rounded-lg bg-surface-2/40 px-3 py-2">{it.activity}</p>
+                    {it.lastError && (
+                      <p className="text-[11px] text-amber-500 flex items-start gap-1">
+                        <AlertCircle size={12} className="shrink-0 mt-0.5" /> <span>A reforzar: {it.lastError}</span>
+                      </p>
+                    )}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3 text-[11px] text-muted">
                         <span className="inline-flex items-center gap-1"><Clock size={12} /> ~{it.reviewDuration} min</span>
@@ -791,7 +797,19 @@ export function StudySystemClient({
               })}
             </div>
           )}
-          {subjects.length > 0 && <NewBlock subjects={subjects} onCreated={(b) => { setBlocks((p) => [...p, b]); router.refresh(); }} />}
+          {subjects.length > 0 && (
+            <>
+              <IngestMaterial subjects={subjects} onCreated={(bs) => { setBlocks((p) => [...p, ...bs]); router.refresh(); }} />
+              <details className="group">
+                <summary className="cursor-pointer text-xs font-medium text-muted hover:text-foreground list-none flex items-center gap-1">
+                  <Plus size={13} /> …o cargar un bloque a mano
+                </summary>
+                <div className="mt-2">
+                  <NewBlock subjects={subjects} onCreated={(b) => { setBlocks((p) => [...p, b]); router.refresh(); }} />
+                </div>
+              </details>
+            </>
+          )}
         </div>
       )}
 
@@ -809,6 +827,7 @@ export function StudySystemClient({
                     <th className="px-3 py-2 text-left font-semibold">Código</th>
                     <th className="px-3 py-2 text-left font-semibold">Tema</th>
                     <th className="px-3 py-2 text-left font-semibold">Nivel</th>
+                    <th className="px-3 py-2 text-left font-semibold">A reforzar</th>
                     <th className="px-3 py-2 text-left font-semibold">Etapa</th>
                     <th className="px-3 py-2 text-left font-semibold">Próx. repaso</th>
                     <th className="px-3 py-2"></th>
@@ -818,8 +837,18 @@ export function StudySystemClient({
                   {blocks.map((b) => (
                     <tr key={b.id} className="hover:bg-surface-2/20">
                       <td className="px-3 py-2 font-mono text-[11px] text-muted whitespace-nowrap">{b.code}</td>
-                      <td className="px-3 py-2 text-foreground max-w-[180px] truncate">{b.topic}</td>
+                      <td className="px-3 py-2 text-foreground max-w-[160px] truncate">{b.topic}</td>
                       <td className="px-3 py-2"><MasteryBadge level={b.masteryLevel} /></td>
+                      <td className="px-3 py-2 max-w-[180px]">
+                        {b.lastError ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-amber-500" title={b.lastError}>
+                            <AlertCircle size={11} className="shrink-0" />
+                            <span className="truncate">{b.lastError}</span>
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-muted">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-[11px] text-muted whitespace-nowrap">{STAGE_LABEL[b.reviewStage] ?? b.reviewStage}</td>
                       <td className="px-3 py-2 text-[11px] text-muted whitespace-nowrap">{fmtDate(b.nextReviewDate)}</td>
                       <td className="px-3 py-2 text-right">

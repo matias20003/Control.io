@@ -46,6 +46,7 @@ export type BlockDTO = {
   successCount: number;
   errorCount: number;
   status: string;
+  lastError: string | null; // error a reforzar (del último cierre con error)
 };
 
 export type PlanItem = BlockDTO & {
@@ -128,6 +129,7 @@ function toBlockDTO(b: {
     successCount: b.successCount,
     errorCount: b.errorCount,
     status: b.status,
+    lastError: null,
   };
 }
 
@@ -141,15 +143,31 @@ async function nextBlockCode(userId: string, subjectCode: string, parcial: numbe
 }
 
 export async function listBlocks(userId: string): Promise<BlockDTO[]> {
-  const [blocks, subjects] = await Promise.all([
+  const [blocks, subjects, errorSessions] = await Promise.all([
     prisma.studyBlock.findMany({
       where: { userId, status: { not: "ARCHIVADO" } },
       orderBy: [{ nextReviewDate: "asc" }, { createdAt: "asc" }],
     }),
     prisma.studySubject.findMany({ where: { userId }, select: { id: true, code: true } }),
+    prisma.studySession.findMany({
+      where: { userId, errorCategory: { not: null } },
+      orderBy: { createdAt: "desc" },
+      select: { blockId: true, errorCategory: true, errorDescription: true },
+    }),
   ]);
   const codeMap = new Map(subjects.map((s) => [s.id, s.code]));
-  return blocks.map((b) => toBlockDTO(b, codeMap.get(b.subjectId) ?? "?"));
+  // último error por bloque (errorSessions viene ordenado desc, nos quedamos con el primero)
+  const lastErrByBlock = new Map<string, string>();
+  for (const s of errorSessions) {
+    if (lastErrByBlock.has(s.blockId)) continue;
+    const desc = decrypt(s.errorDescription);
+    lastErrByBlock.set(s.blockId, desc ? `${s.errorCategory}: ${desc}` : (s.errorCategory ?? ""));
+  }
+  return blocks.map((b) => {
+    const dto = toBlockDTO(b, codeMap.get(b.subjectId) ?? "?");
+    dto.lastError = lastErrByBlock.get(b.id) ?? null;
+    return dto;
+  });
 }
 
 export async function createBlock(
@@ -211,6 +229,82 @@ async function upcomingExamDaysBySubject(userId: string, now: Date): Promise<Map
   return map;
 }
 
+/**
+ * Crea varios bloques de una vez y reparte su PRIMER estudio (D0) en los próximos
+ * días disponibles sin sobrecargar ninguno (respeta la capacidad diaria y saltea
+ * descansos). Devuelve los bloques creados con su fecha asignada.
+ */
+export async function createBlocksDistributed(
+  userId: string,
+  subjectId: string,
+  parcial: number,
+  proposals: Array<{
+    topic: string; unit?: string | null; summary?: string | null; prerequisites?: string | null;
+    source?: string | null; difficulty?: number; importance?: number; estMinutes?: number;
+  }>,
+  now = new Date()
+): Promise<BlockDTO[]> {
+  const subject = await prisma.studySubject.findFirst({ where: { id: subjectId, userId }, select: { id: true, code: true } });
+  if (!subject) throw new Error("Materia no encontrada");
+  if (proposals.length === 0) return [];
+
+  const availability = await getAvailabilityMap(userId);
+  const startOfToday = startOfTodayArg();
+  const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+
+  // carga ya comprometida por día (bloques activos con repaso futuro)
+  const future = await prisma.studyBlock.findMany({
+    where: { userId, status: "ACTIVO", nextReviewDate: { gte: startOfToday } },
+    select: { nextReviewDate: true, reviewDuration: true },
+  });
+  const usedByDay = new Map<string, number>();
+  for (const f of future) if (f.nextReviewDate) usedByDay.set(dayKey(f.nextReviewDate), (usedByDay.get(dayKey(f.nextReviewDate)) ?? 0) + f.reviewDuration);
+
+  // día candidato para una duración dada (primer día con capacidad desde hoy)
+  const pickDay = (dur: number): Date => {
+    let cursor = new Date(startOfToday.getTime() + 15 * 3600 * 1000); // ~12:00 ARG
+    for (let i = 0; i < 90; i++) {
+      const cap = availability[cursor.getDay()] ?? 0;
+      const used = usedByDay.get(dayKey(cursor)) ?? 0;
+      if (cap > 0 && used + dur <= cap) return cursor;
+      cursor = new Date(cursor.getTime() + 86_400_000);
+      cursor.setHours(12, 0, 0, 0);
+    }
+    // fallback: primer día con cualquier capacidad, o hoy
+    let c = new Date(startOfToday.getTime() + 15 * 3600 * 1000);
+    for (let i = 0; i < 14; i++) {
+      if ((availability[c.getDay()] ?? 0) > 0) return c;
+      c = new Date(c.getTime() + 86_400_000); c.setHours(12, 0, 0, 0);
+    }
+    return new Date(startOfToday.getTime() + 15 * 3600 * 1000);
+  };
+
+  const prefix = `${subject.code.toUpperCase()}-P${parcial}-`;
+  let n = await prisma.studyBlock.count({ where: { userId, code: { startsWith: prefix } } });
+
+  const created: BlockDTO[] = [];
+  for (const p of proposals) {
+    const dur = Math.max(15, Math.min(45, p.estMinutes ?? 30));
+    const day = pickDay(dur);
+    usedByDay.set(dayKey(day), (usedByDay.get(dayKey(day)) ?? 0) + dur);
+    n += 1;
+    const code = `${prefix}${String(n).padStart(2, "0")}`;
+    const source = p.prerequisites ? `${p.source ?? ""}${p.source ? " · " : ""}Prereq: ${p.prerequisites}`.slice(0, 200) : p.source ?? null;
+    const b = await prisma.studyBlock.create({
+      data: {
+        userId, subjectId: subject.id, code,
+        unit: p.unit ?? null, topic: p.topic,
+        summary: encrypt(p.summary ?? null), source,
+        importance: p.importance ?? 2, difficulty: p.difficulty ?? 2,
+        masteryLevel: "ROJO", reviewStage: "D0", reviewDuration: dur,
+        incorporationDate: now, nextReviewDate: day,
+      },
+    });
+    created.push(toBlockDTO(b, subject.code));
+  }
+  return created;
+}
+
 // ─────────────────────────────────────────────
 // Plan de hoy (Sección 36) — bloques con repaso vencido/para hoy, priorizados
 // según dominio + atraso + importancia + errores + examen cercano.
@@ -228,18 +322,30 @@ export async function getTodayPlan(
   const todayMinutes = budgetMin ?? availability[weekday] ?? 0;
   const rest = todayMinutes <= 0;
 
-  const [blocks, subjects, examDays] = await Promise.all([
+  const [blocks, subjects, examDays, errorSessions] = await Promise.all([
     prisma.studyBlock.findMany({
       where: { userId, status: "ACTIVO", nextReviewDate: { lte: endOfToday } },
     }),
     prisma.studySubject.findMany({ where: { userId }, select: { id: true, code: true } }),
     upcomingExamDaysBySubject(userId, now),
+    prisma.studySession.findMany({
+      where: { userId, errorCategory: { not: null } },
+      orderBy: { createdAt: "desc" },
+      select: { blockId: true, errorCategory: true, errorDescription: true },
+    }),
   ]);
   const codeMap = new Map(subjects.map((s) => [s.id, s.code]));
+  const lastErrByBlock = new Map<string, string>();
+  for (const s of errorSessions) {
+    if (lastErrByBlock.has(s.blockId)) continue;
+    const desc = decrypt(s.errorDescription);
+    lastErrByBlock.set(s.blockId, desc ? `${s.errorCategory}: ${desc}` : (s.errorCategory ?? ""));
+  }
 
   const scored = blocks
     .map((b) => {
       const dto = toBlockDTO(b, codeMap.get(b.subjectId) ?? "?");
+      dto.lastError = lastErrByBlock.get(b.id) ?? null;
       const overdueDays = b.nextReviewDate
         ? Math.max(0, Math.floor((now.getTime() - b.nextReviewDate.getTime()) / 86_400_000))
         : 0;

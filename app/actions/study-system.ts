@@ -17,6 +17,7 @@ import {
   toggleExercise,
   deleteExercise,
   reprogramarVencidos,
+  createBlocksDistributed,
 } from "@/lib/db/study-system";
 import { MASTERY } from "@/lib/study/spaced";
 
@@ -237,6 +238,55 @@ export async function summarizeForBlockAction(input: { text: string; hintSubject
     return { success: true, topic: r.title, summary: r.summary };
   } catch {
     return { error: "No se pudo generar el resumen" };
+  }
+}
+
+// ─────────── Analizar material → bloques propuestos (no guarda) ───────────
+export async function analyzeMaterialAction(input: { text: string; hintSubject?: string }) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const text = (input.text ?? "").trim();
+  if (text.length < 40) return { error: "Pegá un poco más de contenido para dividir en bloques" };
+  try {
+    const { analyzeTextToBlocks } = await import("@/lib/study/analyze");
+    const result = await analyzeTextToBlocks(text.slice(0, 45000), input.hintSubject);
+    if (!result.blocks.length) return { error: "No pude dividir el material. Probá con más texto o revisá que sea legible." };
+    return { success: true, unit: result.unit, blocks: result.blocks };
+  } catch {
+    return { error: "No se pudo analizar el material" };
+  }
+}
+
+// ─────────── Crear varios bloques de una carga (distribuidos en el calendario) ───────────
+const bulkSchema = z.object({
+  subjectId: z.string().min(1),
+  parcial: z.number().int().min(1).max(4),
+  blocks: z.array(z.object({
+    topic: z.string().trim().min(1).max(160),
+    unit: z.string().trim().max(80).nullish(),
+    summary: z.string().max(6000).nullish(),
+    prerequisites: z.string().trim().max(200).nullish(),
+    difficulty: z.number().int().min(1).max(4).optional(),
+    importance: z.number().int().min(1).max(4).optional(),
+    estMinutes: z.number().int().min(5).max(120).optional(),
+  })).min(1).max(20),
+  source: z.string().trim().max(200).optional(),
+});
+
+export async function createBlocksBulkAction(input: z.infer<typeof bulkSchema>) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const parsed = bulkSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  try {
+    const created = await createBlocksDistributed(
+      userId, parsed.data.subjectId, parsed.data.parcial,
+      parsed.data.blocks.map((b) => ({ ...b, source: parsed.data.source ?? null })),
+    );
+    revalidatePath("/estudio");
+    return { success: true, created };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "No se pudieron crear los bloques" };
   }
 }
 
