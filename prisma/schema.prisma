@@ -654,14 +654,15 @@ model StudyReview {
 // próxima fecha activa; el motor la recalcula según el resultado.
 // ─────────────────────────────────────────────
 model StudySubject {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  name      String
-  code      String // AM2, FIS2, ASI, PDP, SO…
-  type      String   @default("cuatrimestral") // anual | cuatrimestral
-  color     String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  name          String
+  code          String // AM2, FIS2, ASI, PDP, SO…
+  type          String   @default("cuatrimestral") // anual | cuatrimestral
+  color         String?
+  active        Boolean  @default(true)
+  notebookPages Int      @default(0) @map("notebook_pages") // páginas ya procesadas del cuaderno PDF
+  createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([userId, active])
   @@map("study_subjects")

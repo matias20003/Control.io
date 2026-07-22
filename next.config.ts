@@ -35,7 +35,12 @@ const nextConfig: NextConfig = {
   // sueltos en carpetas padre (C:\Users\yoris\, ...\Finanzas Personales\) hacen
   // que Turbopack infiera la raíz equivocada y no resuelva Tailwind/módulos.
   turbopack: { root: __dirname },
-  serverExternalPackages: ["web-push", "resend", "@prisma/client", "pg", "imapflow", "pdf-parse"],
+  serverExternalPackages: ["web-push", "resend", "@prisma/client", "pg", "imapflow", "pdf-parse", "mupdf"],
+  // Aseguramos que el .wasm de mupdf viaje al bundle serverless del route que
+  // rasteriza PDFs (el file tracing a veces no incluye los .wasm solo).
+  outputFileTracingIncludes: {
+    "/api/estudio/analyze": ["./node_modules/mupdf/dist/*.wasm"],
+  },
   experimental: {
     // Cachea en el navegador las páginas ya visitadas: volver a una pantalla
     // reciente es instantáneo (sin re-fetch). Las acciones hacen revalidatePath,

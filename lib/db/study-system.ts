@@ -457,6 +457,15 @@ export async function updateBlockStatus(userId: string, blockId: string, status:
   await prisma.studyBlock.updateMany({ where: { id: blockId, userId }, data: { status } });
 }
 
+/** Avanza el puntero de páginas procesadas del cuaderno (nunca retrocede). */
+export async function advanceNotebookPointer(userId: string, subjectId: string, toPage: number): Promise<void> {
+  const s = await prisma.studySubject.findFirst({ where: { id: subjectId, userId }, select: { notebookPages: true } });
+  if (!s) return;
+  if (toPage > s.notebookPages) {
+    await prisma.studySubject.updateMany({ where: { id: subjectId, userId }, data: { notebookPages: toPage } });
+  }
+}
+
 // ─────────────────────────────────────────────
 // Estadísticas rápidas para el dashboard (Sección 32).
 // ─────────────────────────────────────────────

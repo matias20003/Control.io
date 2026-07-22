@@ -271,6 +271,8 @@ const bulkSchema = z.object({
     estMinutes: z.number().int().min(5).max(120).optional(),
   })).min(1).max(20),
   source: z.string().trim().max(200).optional(),
+  // avance del puntero del cuaderno (modo "solo lo nuevo")
+  notebookTo: z.number().int().min(0).optional(),
 });
 
 export async function createBlocksBulkAction(input: z.infer<typeof bulkSchema>) {
@@ -283,6 +285,11 @@ export async function createBlocksBulkAction(input: z.infer<typeof bulkSchema>) 
       userId, parsed.data.subjectId, parsed.data.parcial,
       parsed.data.blocks.map((b) => ({ ...b, source: parsed.data.source ?? null })),
     );
+    // Avanzar el puntero del cuaderno solo si aumenta (no retroceder).
+    if (typeof parsed.data.notebookTo === "number") {
+      const { advanceNotebookPointer } = await import("@/lib/db/study-system");
+      await advanceNotebookPointer(userId, parsed.data.subjectId, parsed.data.notebookTo);
+    }
     revalidatePath("/estudio");
     return { success: true, created };
   } catch (e) {

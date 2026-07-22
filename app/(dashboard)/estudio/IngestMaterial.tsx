@@ -2,7 +2,7 @@
 
 import { useState, useRef, useTransition } from "react";
 import { toast } from "sonner";
-import { Sparkles, Loader2, FileText, Wand2, Check, X } from "lucide-react";
+import { Sparkles, Loader2, FileText, Wand2, Check, X, BookOpen, FastForward } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createBlocksBulkAction } from "@/app/actions/study-system";
 import type { SubjectDTO, BlockDTO } from "@/lib/db/study-system";
@@ -11,6 +11,7 @@ type Proposed = {
   topic: string; unit: string | null; summary: string; prerequisites: string | null;
   difficulty: number; importance: number; estMinutes: number; external: boolean;
 };
+type NotebookInfo = { to: number; remaining: number; subjectId: string };
 
 const IMP = ["", "Baja", "Media", "Alta", "Muy alta"];
 const DIF = ["", "Fácil", "Media", "Difícil", "Muy difícil"];
@@ -30,27 +31,44 @@ export function IngestMaterial({
   const [include, setInclude] = useState<boolean[]>([]);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [creating, startCreate] = useTransition();
+  const [notebookMode, setNotebookMode] = useState(false);
+  const [notebookInfo, setNotebookInfo] = useState<NotebookInfo | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const lastFile = useRef<File | null>(null); // el cuaderno, para "procesar siguientes"
 
   const subjectCode = subjects.find((s) => s.id === subjectId)?.code;
 
-  const analyze = async (files?: File[]) => {
+  const analyze = async (files?: File[], opts?: { notebook?: boolean; skip?: boolean }) => {
     if (!subjectId) { toast.error("Elegí la materia primero"); return; }
-    if ((!files || files.length === 0) && text.trim().length < 40) { toast.error("Pegá el apunte o subí un PDF/foto"); return; }
+    const useNotebook = opts?.notebook ?? notebookMode;
+    if ((!files || files.length === 0) && !opts?.skip && text.trim().length < 40) { toast.error("Pegá el apunte o subí un PDF/foto"); return; }
+    if (useNotebook && files && files[0]) lastFile.current = files[0];
     setAnalyzing(true);
     try {
       const fd = new FormData();
-      for (const f of files ?? []) fd.append("file", f);
-      if (text.trim()) fd.append("text", text.trim());
+      const send = files ?? (useNotebook && lastFile.current ? [lastFile.current] : []);
+      for (const f of send) fd.append("file", f);
+      if (!useNotebook && text.trim()) fd.append("text", text.trim());
       if (subjectCode) fd.append("subject", subjectCode);
+      if (useNotebook) { fd.append("notebook", "1"); fd.append("subjectId", subjectId); }
+      if (opts?.skip) fd.append("skip", "1");
+
       const res = await fetch("/api/estudio/analyze", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error");
+
+      // Respuestas del modo cuaderno
+      if (data.notebook?.skipped) { toast.success(`Listo — arranco a leer desde acá (${data.notebook.total} hojas marcadas como vistas).`); return; }
+      if (data.notebook?.noNew) { toast.success("No hay hojas nuevas en el cuaderno 👌"); return; }
+
       const blocks: Proposed[] = data.blocks ?? [];
+      if (!blocks.length) { toast.error("No pude dividir el material."); return; }
       setProposed(blocks);
       setUnit(data.unit ?? "");
       setInclude(blocks.map(() => true));
-      toast.success(`La IA propuso ${blocks.length} bloque(s). Revisalos y creá.`);
+      setNotebookInfo(data.notebook ? { to: data.notebook.to, remaining: data.notebook.remaining, subjectId: data.notebook.subjectId } : null);
+      const extra = data.notebook ? ` (hojas nuevas; quedan ${data.notebook.remaining})` : "";
+      toast.success(`La IA propuso ${blocks.length} bloque(s)${extra}. Revisalos y creá.`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error");
     } finally {
@@ -70,12 +88,22 @@ export function IngestMaterial({
           topic: b.topic, unit: b.unit ?? (unit || null), summary: b.summary || null,
           prerequisites: b.prerequisites ?? null, difficulty: b.difficulty, importance: b.importance, estMinutes: b.estMinutes,
         })),
+        ...(notebookInfo ? { notebookTo: notebookInfo.to } : {}),
       });
       if (res.error) { toast.error(res.error); return; }
       if (res.success && res.created) {
         onCreated(res.created);
+        const info = notebookInfo;
         setProposed(null); setText(""); setInclude([]); setUnit("");
-        toast.success(`${res.created.length} bloque(s) creados y repartidos en tu calendario 📅`);
+        toast.success(`${res.created.length} bloque(s) creados y repartidos 📅`);
+        // Backlog del cuaderno: si quedan hojas, procesamos el siguiente tramo.
+        if (info && info.remaining > 0 && lastFile.current) {
+          toast.message(`Quedan ${info.remaining} hojas del cuaderno — sigo con el próximo tramo…`);
+          setNotebookInfo(null);
+          analyze(undefined, { notebook: true });
+        } else {
+          setNotebookInfo(null);
+        }
       }
     });
   };
@@ -88,7 +116,7 @@ export function IngestMaterial({
         <Wand2 size={16} className="text-primary" />
         <p className="text-sm font-semibold text-foreground">Cargar material — la IA lo divide en bloques</p>
       </div>
-      <p className="text-[11px] text-muted -mt-1">Pegá un apunte/clase/guía o subí un PDF / <b>varias fotos juntas</b> (las páginas de la clase). Te lo parto en bloques con resumen y te los reparto en el calendario sin sobrecargar días.</p>
+      <p className="text-[11px] text-muted -mt-1">Pegá un apunte/clase/guía o subí un PDF / <b>varias fotos juntas</b>. Te lo parto en bloques con resumen y te los reparto en el calendario sin sobrecargar días.</p>
 
       <div className="grid grid-cols-2 gap-2">
         <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground">
@@ -100,27 +128,45 @@ export function IngestMaterial({
         </select>
       </div>
 
+      {/* Modo cuaderno */}
+      <label className="flex items-start gap-2 rounded-lg border border-border bg-surface/60 p-2.5 cursor-pointer">
+        <input type="checkbox" checked={notebookMode} onChange={(e) => setNotebookMode(e.target.checked)} className="mt-0.5 h-4 w-4 accent-primary" />
+        <span className="text-[11px] text-foreground">
+          <b className="flex items-center gap-1"><BookOpen size={12} /> Es mi cuaderno completo (proceso solo lo nuevo)</b>
+          <span className="text-muted">Subís el PDF entero de la materia y solo leo las hojas que agregaste desde la última vez. Ideal para Samsung Notes.</span>
+        </span>
+      </label>
+
       {!proposed && (
         <>
-          <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Pegá el contenido del apunte/clase…" rows={3} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground resize-y" />
+          {!notebookMode && (
+            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Pegá el contenido del apunte/clase…" rows={3} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground resize-y" />
+          )}
           <div className="flex flex-wrap items-center gap-2">
-            <input ref={fileRef} type="file" accept="application/pdf,image/*" multiple className="hidden" onChange={(e) => { const fs = Array.from(e.target.files ?? []); if (fs.length) analyze(fs); }} />
+            <input ref={fileRef} type="file" accept={notebookMode ? "application/pdf" : "application/pdf,image/*"} multiple={!notebookMode} className="hidden" onChange={(e) => { const fs = Array.from(e.target.files ?? []); if (fs.length) analyze(fs); }} />
             <button onClick={() => fileRef.current?.click()} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:border-primary/50 disabled:opacity-50">
-              <FileText size={15} /> PDF o fotos
+              <FileText size={15} /> {notebookMode ? "Subir cuaderno (PDF)" : "PDF o fotos"}
             </button>
-            <button onClick={() => analyze()} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-              {analyzing ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-              {analyzing ? "Analizando…" : "Dividir en bloques"}
-            </button>
+            {notebookMode ? (
+              <button onClick={() => { if (!fileRef.current?.files?.length && !lastFile.current) { toast.error("Subí el PDF del cuaderno primero"); return; } analyze(undefined, { notebook: true, skip: true }); }} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50" title="Marca todo lo actual como visto y arranca a leer desde las próximas hojas">
+                <FastForward size={14} /> Empezar desde acá
+              </button>
+            ) : (
+              <button onClick={() => analyze()} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                {analyzing ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+                {analyzing ? "Analizando…" : "Dividir en bloques"}
+              </button>
+            )}
           </div>
+          {notebookMode && <p className="text-[11px] text-muted">La primera vez, si tenés muchas hojas viejas, tocá <b>“Empezar desde acá”</b> (subí el PDF y no reproceso el backlog). De ahí en más, subís el cuaderno y solo leo lo nuevo.</p>}
         </>
       )}
 
       {proposed && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-xs text-muted">{unit && <>Unidad: <b className="text-foreground">{unit}</b> · </>}{include.filter(Boolean).length}/{proposed.length} seleccionados</p>
-            <button onClick={() => { setProposed(null); setInclude([]); }} className="text-[11px] text-muted hover:text-foreground inline-flex items-center gap-1"><X size={12} /> Descartar</button>
+            <p className="text-xs text-muted">{unit && <>Unidad: <b className="text-foreground">{unit}</b> · </>}{include.filter(Boolean).length}/{proposed.length} seleccionados{notebookInfo && <> · <span className="text-primary">cuaderno: quedan {notebookInfo.remaining}</span></>}</p>
+            <button onClick={() => { setProposed(null); setInclude([]); setNotebookInfo(null); }} className="text-[11px] text-muted hover:text-foreground inline-flex items-center gap-1"><X size={12} /> Descartar</button>
           </div>
           <div className="space-y-1.5 max-h-80 overflow-y-auto">
             {proposed.map((b, i) => (

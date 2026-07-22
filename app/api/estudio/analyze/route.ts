@@ -1,12 +1,18 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import { analyzeTextToBlocks, analyzeImagesToBlocks } from "@/lib/study/analyze";
 import { extractPdfText } from "@/lib/study/ingest";
+import { pdfPageCount, renderPdfPages } from "@/lib/study/pdfpages";
 
 // Solo dueño: sube material (texto, PDF o foto) y la IA lo DIVIDE en bloques
 // propuestos (no los guarda; el cliente los revisa y confirma).
 export const runtime = "nodejs";
 export const maxDuration = 120;
+
+// Cuántas páginas nuevas del cuaderno procesamos por subida (para no pasar el
+// límite de tiempo del server). El día a día suele ser menos que esto.
+const NOTEBOOK_PAGES_PER_RUN = 6;
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -20,6 +26,46 @@ export async function POST(req: NextRequest) {
     const hint = (form.get("subject") as string) || undefined;
     const files = form.getAll("file").filter((f): f is File => typeof f !== "string");
     const text = (form.get("text") as string) || "";
+    const notebook = form.get("notebook") === "1";
+    const skipBacklog = form.get("skip") === "1";
+    const subjectId = (form.get("subjectId") as string) || "";
+
+    // ── MODO CUADERNO: PDF manuscrito completo, procesar SOLO páginas nuevas ──
+    if (notebook && subjectId && files.length) {
+      const subject = await prisma.studySubject.findFirst({
+        where: { id: subjectId, userId: user.id },
+        select: { id: true, code: true, notebookPages: true },
+      });
+      if (!subject) return Response.json({ error: "Materia no encontrada" }, { status: 404 });
+
+      const buf = Buffer.from(await files[0].arrayBuffer());
+      let total: number;
+      try {
+        total = await pdfPageCount(buf);
+      } catch {
+        return Response.json({ error: "No pude abrir el PDF" }, { status: 400 });
+      }
+
+      // "Empezar desde acá": marca todo lo actual como ya procesado, sin leer.
+      if (skipBacklog) {
+        await prisma.studySubject.update({ where: { id: subject.id }, data: { notebookPages: total } });
+        return Response.json({ ok: true, notebook: { skipped: true, total } });
+      }
+
+      const from = Math.min(subject.notebookPages, total);
+      if (from >= total) {
+        return Response.json({ ok: true, notebook: { noNew: true, total, processed: from }, blocks: [] });
+      }
+      const to = Math.min(from + NOTEBOOK_PAGES_PER_RUN, total);
+      const dataUrls = await renderPdfPages(buf, from, to);
+      const r = await analyzeImagesToBlocks(dataUrls, subject.code);
+      return Response.json({
+        ok: true,
+        unit: r.unit,
+        blocks: r.blocks,
+        notebook: { from, to, total, remaining: total - to, subjectId: subject.id },
+      });
+    }
 
     if (files.length) {
       const images = files.filter((f) => (f.type || "").startsWith("image/")).slice(0, 10);
