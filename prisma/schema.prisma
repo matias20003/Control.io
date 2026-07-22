@@ -756,8 +756,12 @@ model StudySettings {
   planMinute    Int      @default(0) @map("plan_minute")
   notifyEnabled Boolean  @default(true) @map("notify_enabled")
   lastPlanSent  String?  @map("last_plan_sent") // "YYYY-MM-DD" ARG del último envío
+  notionToken   String?  @map("notion_token") // cifrado
+  notionDbId    String?  @map("notion_db_id")
+  icsToken      String?  @map("ics_token") // secreto para la URL del calendario
   updatedAt     DateTime @updatedAt @map("updated_at")
 
+  @@index([icsToken])
   @@map("study_settings")
 }
 

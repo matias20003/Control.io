@@ -303,6 +303,62 @@ export async function reprogramarAction() {
   }
 }
 
+// ─────────── Notion (importar) ───────────
+export async function connectNotionAction(input: { token: string; dbId: string }) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const token = (input.token ?? "").trim();
+  if (!/^(secret_|ntn_)/.test(token) || token.length < 20) return { error: "Ese no parece un token de integración de Notion (empieza con secret_ o ntn_)" };
+  const { normalizeNotionDbId, setNotionConfig, readNotionProposals } = await import("@/lib/study/notion");
+  const dbId = normalizeNotionDbId((input.dbId ?? "").trim());
+  if (!dbId) return { error: "No pude leer el ID de la base. Pegá la URL o el ID de la base de datos de Notion." };
+  try {
+    await setNotionConfig(userId, token, dbId);
+    // prueba de conexión inmediata
+    const test = await readNotionProposals(userId);
+    if (!test.ok) return { error: test.error ?? "No pude leer la base" };
+    revalidatePath("/estudio");
+    return { success: true, count: test.proposals.length };
+  } catch {
+    return { error: "No se pudo conectar con Notion" };
+  }
+}
+
+export async function importFromNotionAction(input: { subjectId: string; parcial: number }) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  if (!input.subjectId) return { error: "Elegí la materia destino" };
+  const parcial = Math.max(1, Math.min(4, Math.round(input.parcial)));
+  try {
+    const { importFromNotion } = await import("@/lib/study/notion");
+    const r = await importFromNotion(userId, input.subjectId, parcial);
+    if (!r.ok) return { error: r.error ?? "No se pudo importar" };
+    revalidatePath("/estudio");
+    return { success: true, imported: r.imported };
+  } catch {
+    return { error: "No se pudo importar de Notion" };
+  }
+}
+
+export async function disconnectNotionAction() {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const { disconnectNotion } = await import("@/lib/study/notion");
+  await disconnectNotion(userId);
+  revalidatePath("/estudio");
+  return { success: true };
+}
+
+// ─────────── Calendario ICS ───────────
+export async function getIcsUrlAction() {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const { getOrCreateIcsToken } = await import("@/lib/study/notion");
+  const token = await getOrCreateIcsToken(userId);
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://controlio.site";
+  return { success: true, url: `${base}/api/estudio/calendar?t=${token}` };
+}
+
 // ─────────── Aviso diario (hora + on/off) ───────────
 const notifySchema = z.object({
   planHour: z.number().int().min(0).max(23),

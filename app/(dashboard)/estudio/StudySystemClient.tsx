@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   CalendarClock, BookOpen, Table2, Sparkles, Plus, Loader2, X,
   Clock, Target, ChevronRight, CheckCircle2, AlertCircle, Settings2,
-  GraduationCap, ListChecks, RefreshCw, Trash2, CalendarDays,
+  GraduationCap, ListChecks, RefreshCw, Trash2, CalendarDays, Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -21,6 +21,7 @@ import type {
 } from "@/lib/db/study-system";
 import { EstudioClient } from "./EstudioClient";
 import { IngestMaterial } from "./IngestMaterial";
+import { NotionCalendar } from "./NotionCalendar";
 import type { StudyNoteView, ReviewView } from "@/lib/db/study";
 
 type Tab = "hoy" | "materias" | "tabla" | "parciales" | "pendientes" | "apuntes";
@@ -640,7 +641,7 @@ function PendientesTab({
 // ─────────────────────────────────────────────
 export function StudySystemClient({
   initialSubjects, initialBlocks, initialPlan, stats, notes, reviews,
-  initialExams, initialExercises, initialErrors, availability, settings,
+  initialExams, initialExercises, initialErrors, availability, settings, notion,
 }: {
   initialSubjects: SubjectDTO[];
   initialBlocks: BlockDTO[];
@@ -653,6 +654,7 @@ export function StudySystemClient({
   initialErrors: ErrorLogDTO[];
   availability: AvailabilityDTO[];
   settings: { planHour: number; planMinute: number; notifyEnabled: boolean; lastPlanSent: string | null };
+  notion: { connected: boolean; dbId: string | null; hasIcs: boolean };
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("hoy");
@@ -847,6 +849,14 @@ export function StudySystemClient({
                 </summary>
                 <div className="mt-2">
                   <NewBlock subjects={subjects} onCreated={(b) => { setBlocks((p) => [...p, b]); router.refresh(); }} />
+                </div>
+              </details>
+              <details className="group">
+                <summary className="cursor-pointer text-xs font-medium text-muted hover:text-foreground list-none flex items-center gap-1">
+                  <Database size={13} /> Notion y calendario (importar / suscribir)
+                </summary>
+                <div className="mt-2">
+                  <NotionCalendar subjects={subjects} notion={notion} onImported={(bs) => { setBlocks((p) => [...p, ...bs]); router.refresh(); }} />
                 </div>
               </details>
             </>
