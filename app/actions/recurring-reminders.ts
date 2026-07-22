@@ -11,6 +11,7 @@ import {
 
 const createSchema = z.object({
   text: z.string().trim().min(1).max(200),
+  link: z.string().trim().max(500).optional(),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1),
   hour: z.number().int().min(0).max(23),
   minute: z.number().int().min(0).max(59),
@@ -26,6 +27,7 @@ async function requireUser() {
 
 export async function createRecurringReminderAction(input: {
   text: string;
+  link?: string;
   daysOfWeek: number[];
   hour: number;
   minute: number;

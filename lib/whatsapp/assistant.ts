@@ -80,6 +80,7 @@ interface Action {
   remindAt?: string;  // create_reminder: fecha/hora exacta ARG "YYYY-MM-DDTHH:mm"
   daysOfWeek?: number[]; // create_recurring_reminder: días 0=Dom..6=Sáb (lun-vie = [1,2,3,4,5])
   atTime?: string;       // create_recurring_reminder: hora ARG "HH:mm"
+  link?: string;         // create_recurring_reminder: link opcional que se manda con el aviso
   eventStart?: string; // agendar_evento / editar_evento: inicio ARG "YYYY-MM-DDTHH:mm"
   durationMin?: number; // agendar_evento / editar_evento: duración en minutos (default 60)
   eventRef?: number; // borrar_evento / editar_evento: [#N] de AGENDA
@@ -455,7 +456,8 @@ ${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, du
 - "complete_task": { taskRef, title }   // marcar una tarea como HECHA ("marcá comprar pan como hecha", "ya entregué el TP", "listo lo de las pilas"). Pasá taskRef = [#N] de TUS TAREAS PENDIENTES, Y TAMBIÉN title = el texto de la tarea (ej: "comprar pan"). Siempre mandá title.
 - "delete_task": { taskRef }   // borrar/cancelar una tarea. taskRef = [#N] de TUS TAREAS PENDIENTES.` : ``}
 ${hasFeature("recordatorios", { isTester: c.isTester }) ? `- "create_reminder": { title, inMinutes, remindAt }   // recordatorio CON HORA que te aviso UNA SOLA VEZ ("haceme acordar en 5 min de sacar la comida", "recordame mañana a las 9 llamar al banco"). title = qué recordar. Para "en X minutos/horas" usá inMinutes (5, 120). Para una hora/fecha puntual usá remindAt "YYYY-MM-DDTHH:mm" en hora Argentina (calculada desde AHORA). Es distinto de create_task: el recordatorio DISPARA un aviso a una hora exacta.
-- "create_recurring_reminder": { title, daysOfWeek, atTime }   // recordatorio que SE REPITE ("recordame todos los lunes a viernes a las 17:00 sacar la basura", "todos los días a las 21 cargá tus gastos", "cada lunes a las 9 pagar el alquiler"). title = qué recordar. daysOfWeek = array de días donde 0=Domingo,1=Lunes,2=Martes,3=Miércoles,4=Jueves,5=Viernes,6=Sábado (ej: lunes a viernes = [1,2,3,4,5]; todos los días = [0,1,2,3,4,5,6]; fin de semana = [0,6]). atTime = hora ARG "HH:mm" (ej "17:00"). Usalo SIEMPRE que el pedido tenga una repetición ("todos", "cada", "los lunes", "de lunes a viernes"). Distinto de create_reminder (que es una sola vez).` : ``}
+- "create_recurring_reminder": { title, daysOfWeek, atTime, link }   // recordatorio que SE REPITE ("recordame todos los lunes a viernes a las 17:00 sacar la basura", "todos los días a las 21 cargá tus gastos", "cada lunes a las 9 pagar el alquiler"). title = qué recordar. daysOfWeek = array de días donde 0=Domingo,1=Lunes,2=Martes,3=Miércoles,4=Jueves,5=Viernes,6=Sábado (ej: lunes a viernes = [1,2,3,4,5]; todos los días = [0,1,2,3,4,5,6]; fin de semana = [0,6]). atTime = hora ARG "HH:mm" (ej "17:00"). link = URL opcional que se manda JUNTO al aviso (ej: link de asistencia de la facultad). Usalo SIEMPRE que el pedido tenga una repetición ("todos", "cada", "los lunes", "de lunes a viernes"). Distinto de create_reminder (que es una sola vez).
+  ⚠️ LINK: si el usuario quiere adjuntar un link pero TODAVÍA NO lo pasó ("quiero dejar un link", "con un link"), NO crees el recordatorio aún: respondé intent "chat" pidiéndoselo ("Dale, pasame el link y lo dejo listo 👍"). En el PRÓXIMO mensaje (lo vas a ver en el HISTORIAL con los datos del recordatorio pendiente) creá el recordatorio con ese "link". Si el usuario ya incluyó el link en el mismo mensaje, ponelo directo en "link".` : ``}
 ${hasFeature("google", { isTester: c.isTester }) && c.googleConnected ? `- "agendar_evento": { title, eventStart, durationMin }   // crea un EVENTO en Google Calendar ("agendá turno médico el jueves 10hs", "reunión mañana 15hs", "cumple de Ana el 20"). title = qué. eventStart = "YYYY-MM-DDTHH:mm" en hora Argentina (relativo a HOY). durationMin opcional (default 60). Usalo para citas/eventos con fecha y hora; create_task es para to-dos sin hora.
 - "borrar_evento": { eventRef }   // borra un evento del calendario ("borrá la reunión del lunes", "cancelá el turno"). eventRef = [#N] de AGENDA.
 - "editar_evento": { eventRef, title, eventStart, durationMin }   // reprograma o renombra un evento ("movélo a las 16", "cambialo para el martes 11hs"). eventRef = [#N] de AGENDA. Mandá solo lo que cambia (title y/o eventStart).` : ``}
@@ -830,7 +832,7 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       const hour = Math.min(23, Math.max(0, parseInt(m[1], 10)));
       const minute = Math.min(59, Math.max(0, parseInt(m[2], 10)));
 
-      await createRecurringReminder(userId, { text: a.title, daysOfWeek: days, hour, minute });
+      await createRecurringReminder(userId, { text: a.title, daysOfWeek: days, hour, minute, link: a.link });
       const DÍAS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
       const dl =
         days.length === 7 ? "todos los días"

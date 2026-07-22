@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Repeat, Plus, Trash2, Clock } from "lucide-react";
+import { Repeat, Plus, Trash2, Clock, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,6 +49,7 @@ export function RecurringReminders({
 }) {
   const [items, setItems] = useState<SerializedRecurringReminder[]>(initial);
   const [text, setText] = useState("");
+  const [link, setLink] = useState("");
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [time, setTime] = useState("09:00");
   const [isPending, start] = useTransition();
@@ -70,6 +71,7 @@ export function RecurringReminders({
     start(async () => {
       const res = await createRecurringReminderAction({
         text: t,
+        link: link.trim() || undefined,
         daysOfWeek: days,
         hour: hh,
         minute: mm,
@@ -78,6 +80,7 @@ export function RecurringReminders({
       else if (res.success && res.reminder) {
         setItems((prev) => [...prev, res.reminder!]);
         setText("");
+        setLink("");
         toast.success("Recordatorio recurrente creado");
       }
     });
@@ -124,6 +127,18 @@ export function RecurringReminders({
             placeholder="Mensaje del recordatorio…"
             maxLength={200}
           />
+
+          {/* Link opcional — se manda junto al recordatorio, tocable en WhatsApp */}
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 h-11">
+            <Link2 size={15} className="text-muted shrink-0" />
+            <input
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              placeholder="Link opcional (ej. asistencia)… se manda en el recordatorio"
+              inputMode="url"
+              className="w-full bg-transparent text-sm text-foreground placeholder:text-muted outline-none"
+            />
+          </div>
 
           {/* Presets */}
           <div className="flex flex-wrap gap-1.5">
@@ -204,6 +219,11 @@ export function RecurringReminders({
                   </p>
                   <p className="text-[11px] text-muted">
                     {daysLabel(r.daysOfWeek)} · {fmtTime(r.hour, r.minute)}
+                    {r.link && (
+                      <span className="inline-flex items-center gap-0.5 ml-1.5 text-primary">
+                        <Link2 size={11} /> con link
+                      </span>
+                    )}
                   </p>
                 </div>
                 <label className="shrink-0 cursor-pointer" title={r.isActive ? "Activo" : "Pausado"}>

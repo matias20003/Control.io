@@ -402,6 +402,7 @@ model RecurringReminder {
   userId      String
   user        Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
   text        String
+  link        String?   // link opcional que se manda junto al recordatorio (cifrado)
   daysOfWeek  Int[]     // 0=Domingo … 6=Sábado (JS getDay). Lun-Vie = [1,2,3,4,5]
   hour        Int       // 0–23 (hora ARG)
   minute      Int       // 0–59 (hora ARG)

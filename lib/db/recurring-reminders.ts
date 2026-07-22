@@ -7,6 +7,7 @@ import { sendText } from "@/lib/whatsapp/kapso";
 export type SerializedRecurringReminder = {
   id: string;
   text: string;
+  link: string | null;
   daysOfWeek: number[];
   hour: number;
   minute: number;
@@ -27,6 +28,7 @@ function todayArgDate(): Date {
 function serialize(row: {
   id: string;
   text: string;
+  link: string | null;
   daysOfWeek: number[];
   hour: number;
   minute: number;
@@ -35,6 +37,7 @@ function serialize(row: {
   return {
     id: row.id,
     text: decrypt(row.text) ?? row.text,
+    link: row.link ? decrypt(row.link) ?? row.link : null,
     daysOfWeek: row.daysOfWeek,
     hour: row.hour,
     minute: row.minute,
@@ -54,12 +57,14 @@ export async function listRecurringReminders(
 
 export async function createRecurringReminder(
   userId: string,
-  data: { text: string; daysOfWeek: number[]; hour: number; minute: number }
+  data: { text: string; daysOfWeek: number[]; hour: number; minute: number; link?: string | null }
 ): Promise<SerializedRecurringReminder> {
+  const link = data.link?.trim() || null;
   const row = await prisma.recurringReminder.create({
     data: {
       userId,
       text: encrypt(data.text) ?? data.text,
+      link: link ? encrypt(link) : null,
       daysOfWeek: clampDays(data.daysOfWeek),
       hour: Math.min(23, Math.max(0, Math.trunc(data.hour))),
       minute: Math.min(59, Math.max(0, Math.trunc(data.minute))),
@@ -71,12 +76,13 @@ export async function createRecurringReminder(
 export async function updateRecurringReminder(
   userId: string,
   id: string,
-  data: { text?: string; daysOfWeek?: number[]; hour?: number; minute?: number; isActive?: boolean }
+  data: { text?: string; daysOfWeek?: number[]; hour?: number; minute?: number; isActive?: boolean; link?: string | null }
 ): Promise<void> {
   await prisma.recurringReminder.updateMany({
     where: { id, userId },
     data: {
       ...(data.text !== undefined ? { text: encrypt(data.text) ?? data.text } : {}),
+      ...(data.link !== undefined ? { link: data.link?.trim() ? encrypt(data.link.trim()) : null } : {}),
       ...(data.daysOfWeek !== undefined ? { daysOfWeek: clampDays(data.daysOfWeek) } : {}),
       ...(data.hour !== undefined ? { hour: Math.min(23, Math.max(0, Math.trunc(data.hour))) } : {}),
       ...(data.minute !== undefined ? { minute: Math.min(59, Math.max(0, Math.trunc(data.minute))) } : {}),
@@ -112,6 +118,8 @@ export async function fireDueRecurringReminders(): Promise<{ fired: number }> {
   let fired = 0;
   for (const r of due) {
     const text = decrypt(r.text) ?? r.text;
+    const link = r.link ? decrypt(r.link) ?? r.link : null;
+    const isUrl = !!link && /^https?:\/\//i.test(link);
 
     // Marcamos disparado ANTES de entregar para no arriesgar duplicados si el
     // cron se solapa. Si la entrega falla, se reintenta recién al día siguiente.
@@ -122,7 +130,8 @@ export async function fireDueRecurringReminders(): Promise<{ fired: number }> {
     let delivered = false;
     if (r.user.whatsappNumber) {
       try {
-        await sendText(r.user.whatsappNumber, `⏰ *Recordatorio:* ${text}`);
+        // El link va en su propia línea para que WhatsApp lo haga tocable.
+        await sendText(r.user.whatsappNumber, `⏰ *Recordatorio:* ${text}` + (link ? `\n\n${link}` : ""));
         delivered = true;
       } catch {
         // fuera de la ventana de 24h de Meta → cae a push
@@ -132,7 +141,7 @@ export async function fireDueRecurringReminders(): Promise<{ fired: number }> {
       await sendPushToUser(r.userId, {
         title: "⏰ Recordatorio",
         body: text,
-        url: "/dashboard",
+        url: isUrl ? link : "/dashboard",
       }).catch(() => {});
     }
     fired++;
