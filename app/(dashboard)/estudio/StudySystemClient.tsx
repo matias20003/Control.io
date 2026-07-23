@@ -14,7 +14,7 @@ import {
   createExamAction, toggleExamAction, deleteExamAction,
   createExerciseAction, toggleExerciseAction, deleteExerciseAction,
   setAvailabilityAction, reprogramarAction, summarizeForBlockAction,
-  setStudyNotifyAction, postponeBlockAction, deleteBlocksAction,
+  setStudyNotifyAction, postponeBlockAction, postponeTodayAction, deleteBlocksAction,
 } from "@/app/actions/study-system";
 import type {
   SubjectDTO, BlockDTO, PlanItem, ExamDTO, ExerciseDTO, ErrorLogDTO, AvailabilityDTO,
@@ -727,6 +727,15 @@ export function StudySystemClient({
     });
   };
 
+  const postponeToday = () => {
+    startReprogram(async () => {
+      const res = await postponeTodayAction();
+      if (res.error) { toast.error(res.error); return; }
+      toast.success(res.moved ? `Pasé ${res.moved} bloque(s) a los próximos días` : "No había nada para hoy");
+      router.refresh();
+    });
+  };
+
   const planItems = initialPlan.items;
 
   const TABS: { id: Tab; label: string; icon: typeof CalendarClock }[] = [
@@ -808,13 +817,16 @@ export function StudySystemClient({
             <>
               <div className="flex items-center justify-between px-1">
                 <p className="text-xs text-muted">{planItems.length} bloque(s) · ~{initialPlan.totalMin}/{initialPlan.budgetMin} min</p>
-                {stats.overdue > 0 ? (
-                  <button onClick={reprogramar} disabled={reprogramming} className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline disabled:opacity-50">
-                    {reprogramming ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />} Reorganizar atrasados
+                <div className="flex items-center gap-3">
+                  {stats.overdue > 0 && (
+                    <button onClick={reprogramar} disabled={reprogramming} className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline disabled:opacity-50">
+                      {reprogramming ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />} Reorganizar atrasados
+                    </button>
+                  )}
+                  <button onClick={postponeToday} disabled={reprogramming} className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted hover:text-foreground disabled:opacity-50" title="Pasa todo lo de hoy a los próximos días">
+                    {reprogramming ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />} Pasar lo de hoy a otro día
                   </button>
-                ) : (
-                  <p className="text-[11px] text-muted">Ordenado por prioridad</p>
-                )}
+                </div>
               </div>
               {planItems.map((it) => {
                 const m = MASTERY_META[it.masteryLevel] ?? MASTERY_META.ROJO;

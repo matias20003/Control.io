@@ -464,6 +464,28 @@ export async function updateBlockStatus(userId: string, blockId: string, status:
   await prisma.studyBlock.updateMany({ where: { id: blockId, userId }, data: { status } });
 }
 
+/**
+ * Pasa TODO lo que vence hoy (o antes) a partir de mañana y lo reparte en los
+ * próximos días hábiles respetando la capacidad. Útil cuando no llegaste a
+ * estudiar y no querés que se acumule todo hoy.
+ */
+export async function postponeTodayForward(userId: string): Promise<number> {
+  const endOfToday = endOfTodayArg();
+  const startOfToday = startOfTodayArg();
+  const tomorrow = new Date(startOfToday.getTime() + 86_400_000);
+  tomorrow.setHours(12, 0, 0, 0);
+
+  const due = await prisma.studyBlock.count({ where: { userId, status: "ACTIVO", nextReviewDate: { lte: endOfToday } } });
+  if (due === 0) return 0;
+
+  await prisma.studyBlock.updateMany({
+    where: { userId, status: "ACTIVO", nextReviewDate: { lte: endOfToday } },
+    data: { nextReviewDate: tomorrow },
+  });
+  await balanceUpcoming(userId).catch(() => {});
+  return due;
+}
+
 /** Elimina definitivamente uno o varios bloques (y sus sesiones; desvincula ejercicios). */
 export async function deleteBlocks(userId: string, ids: string[]): Promise<number> {
   if (!ids.length) return 0;

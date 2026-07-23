@@ -10,6 +10,7 @@ import {
   closeSession,
   updateBlockStatus,
   postponeBlock,
+  postponeTodayForward,
   deleteBlocks,
   setAvailability,
   createExam,
@@ -114,6 +115,18 @@ export async function closeSessionAction(input: z.infer<typeof closeSchema>) {
     return { success: true, block };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "No se pudo cerrar la sesión" };
+  }
+}
+
+export async function postponeTodayAction() {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  try {
+    const moved = await postponeTodayForward(userId);
+    revalidatePath("/estudio");
+    return { success: true, moved };
+  } catch {
+    return { error: "No se pudo reacomodar" };
   }
 }
 
