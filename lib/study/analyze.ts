@@ -64,7 +64,9 @@ function coerce(raw: unknown, hintUnit?: string): AnalyzeResult {
 
 // ─── Google Gemini (nivel GRATUITO con visión). Preferido si hay GEMINI_API_KEY. ───
 function geminiModel(): string {
-  return process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+  // gemini-flash-latest tiene cupo en el free tier de proyectos nuevos;
+  // gemini-2.0-flash suele venir con limit:0 para keys recién creadas.
+  return process.env.GEMINI_MODEL ?? "gemini-flash-latest";
 }
 function dataUrlToInline(url: string): { inline_data: { mime_type: string; data: string } } | null {
   const m = url.match(/^data:([^;]+);base64,(.*)$/);
