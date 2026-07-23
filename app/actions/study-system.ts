@@ -242,6 +242,109 @@ export async function summarizeForBlockAction(input: { text: string; hintSubject
   }
 }
 
+// ─────────── Subida grande vía Storage (evita el límite de 4.5MB de Vercel) ───────────
+const STUDY_BUCKET = "study-uploads";
+const NOTEBOOK_PAGES_PER_RUN = 6;
+
+export async function createStudyUploadUrlAction() {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const crypto = await import("node:crypto");
+  const admin = createAdminClient();
+  const path = `${userId}/${crypto.randomUUID()}`;
+  const { data, error } = await admin.storage.from(STUDY_BUCKET).createSignedUploadUrl(path);
+  if (error || !data) return { error: "No pude preparar la subida" };
+  return { success: true, bucket: STUDY_BUCKET, path: data.path, token: data.token };
+}
+
+const analyzeUpSchema = z.object({
+  files: z.array(z.object({ path: z.string().min(1), type: z.string().default("") })).max(20).optional(),
+  text: z.string().max(45000).optional(),
+  subjectId: z.string().optional(),
+  hintSubject: z.string().optional(),
+  notebook: z.boolean().optional(),
+  fromPage: z.number().int().min(1).optional(),
+  skip: z.boolean().optional(),
+});
+
+export async function analyzeUploadedAction(input: z.infer<typeof analyzeUpSchema>) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const parsed = analyzeUpSchema.safeParse(input);
+  if (!parsed.success) return { error: "Datos inválidos" };
+  const { files = [], text, subjectId, hintSubject, notebook, fromPage, skip } = parsed.data;
+
+  // Seguridad: cada path debe pertenecer al usuario.
+  for (const f of files) if (!f.path.startsWith(`${userId}/`)) return { error: "Ruta inválida" };
+
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const admin = createAdminClient();
+  const cleanup = async () => { if (files.length) await admin.storage.from(STUDY_BUCKET).remove(files.map((f) => f.path)).catch(() => {}); };
+  const download = async (p: string): Promise<Buffer> => {
+    const { data, error } = await admin.storage.from(STUDY_BUCKET).download(p);
+    if (error || !data) throw new Error("No pude leer el archivo subido");
+    return Buffer.from(await data.arrayBuffer());
+  };
+
+  try {
+    const { analyzeTextToBlocks, analyzeImagesToBlocks } = await import("@/lib/study/analyze");
+
+    // ── MODO CUADERNO: PDF completo, solo páginas nuevas ──
+    if (notebook && subjectId && files.length) {
+      const { prisma } = await import("@/lib/prisma");
+      const { pdfPageCount, renderPdfPages } = await import("@/lib/study/pdfpages");
+      const subject = await prisma.studySubject.findFirst({ where: { id: subjectId, userId }, select: { id: true, code: true, notebookPages: true } });
+      if (!subject) return { error: "Materia no encontrada" };
+      const buf = await download(files[0].path);
+      let total: number;
+      try { total = await pdfPageCount(buf); } catch { return { error: "No pude abrir el PDF" }; }
+
+      if (skip) {
+        await prisma.studySubject.update({ where: { id: subject.id }, data: { notebookPages: total } });
+        return { success: true, notebook: { skipped: true, total } };
+      }
+      const manualFrom = typeof fromPage === "number" ? fromPage - 1 : null;
+      const from = manualFrom != null ? Math.min(manualFrom, total) : Math.min(subject.notebookPages, total);
+      if (from >= total) return { success: true, notebook: { noNew: true, total }, blocks: [] };
+      const to = Math.min(from + NOTEBOOK_PAGES_PER_RUN, total);
+      const dataUrls = await renderPdfPages(buf, from, to);
+      const r = await analyzeImagesToBlocks(dataUrls, subject.code);
+      return { success: true, unit: r.unit, blocks: r.blocks, notebook: { from, to, total, remaining: total - to, subjectId: subject.id } };
+    }
+
+    if (files.length) {
+      const images = files.filter((f) => (f.type || "").startsWith("image/"));
+      if (images.length) {
+        const dataUrls = await Promise.all(images.map(async (f) => `data:${f.type};base64,${(await download(f.path)).toString("base64")}`));
+        const r = await analyzeImagesToBlocks(dataUrls, hintSubject);
+        if (!r.blocks.length) return { error: "No pude leer las imágenes. Probá con fotos más nítidas." };
+        return { success: true, unit: r.unit, blocks: r.blocks };
+      }
+      const { extractPdfText } = await import("@/lib/study/ingest");
+      const buf = await download(files[0].path);
+      const pdfText = await extractPdfText(buf).catch(() => "");
+      if (pdfText.trim().length >= 40) {
+        const r = await analyzeTextToBlocks(pdfText, hintSubject);
+        if (!r.blocks.length) return { error: "No pude dividir el PDF." };
+        return { success: true, unit: r.unit, blocks: r.blocks };
+      }
+      return { error: "Ese PDF es manuscrito (imagen). Tildá “cuaderno” o subí las hojas como imágenes 📸" };
+    }
+
+    if ((text ?? "").trim().length >= 40) {
+      const r = await analyzeTextToBlocks(text!.trim(), hintSubject);
+      if (!r.blocks.length) return { error: "No pude dividir el material." };
+      return { success: true, unit: r.unit, blocks: r.blocks };
+    }
+    return { error: "Subí el material o pegá el texto." };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Error procesando el material" };
+  } finally {
+    await cleanup();
+  }
+}
+
 // ─────────── Analizar material → bloques propuestos (no guarda) ───────────
 export async function analyzeMaterialAction(input: { text: string; hintSubject?: string }) {
   const userId = await requireOwner();

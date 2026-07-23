@@ -4,7 +4,8 @@ import { useState, useRef, useTransition } from "react";
 import { toast } from "sonner";
 import { Sparkles, Loader2, FileText, Wand2, Check, X, BookOpen, FastForward } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createBlocksBulkAction } from "@/app/actions/study-system";
+import { createClient } from "@/lib/supabase/client";
+import { createBlocksBulkAction, createStudyUploadUrlAction, analyzeUploadedAction } from "@/app/actions/study-system";
 import type { SubjectDTO, BlockDTO } from "@/lib/db/study-system";
 
 type Proposed = {
@@ -46,19 +47,33 @@ export function IngestMaterial({
     if (useNotebook && files && files[0]) lastFile.current = files[0];
     setAnalyzing(true);
     try {
-      const fd = new FormData();
       const send = files ?? (useNotebook && lastFile.current ? [lastFile.current] : []);
-      for (const f of send) fd.append("file", f);
-      if (!useNotebook && text.trim()) fd.append("text", text.trim());
-      if (subjectCode) fd.append("subject", subjectCode);
-      if (useNotebook) { fd.append("notebook", "1"); fd.append("subjectId", subjectId); }
-      // "Desde la página X" solo en la primera pasada (después sigue por el puntero).
-      if (useNotebook && !opts?.skip && files && fromPage.trim()) fd.append("fromPage", fromPage.trim());
-      if (opts?.skip) fd.append("skip", "1");
+      // Subimos cada archivo directo a Storage (evita el límite de 4.5MB de Vercel).
+      const uploaded: { path: string; type: string }[] = [];
+      if (send.length) {
+        const supabase = createClient();
+        for (const f of send) {
+          const su = await createStudyUploadUrlAction();
+          if (!su.success || !su.path) throw new Error(su.error ?? "No pude preparar la subida");
+          const { error } = await supabase.storage.from(su.bucket).uploadToSignedUrl(su.path, su.token, f);
+          if (error) throw new Error("No pude subir el archivo (¿muy pesado o sin conexión?)");
+          uploaded.push({ path: su.path, type: f.type });
+        }
+      }
 
-      const res = await fetch("/api/estudio/analyze", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Error");
+      const data = (await analyzeUploadedAction({
+        files: uploaded.length ? uploaded : undefined,
+        text: !useNotebook && text.trim() ? text.trim() : undefined,
+        subjectId,
+        hintSubject: subjectCode,
+        notebook: useNotebook || undefined,
+        fromPage: useNotebook && !opts?.skip && files && fromPage.trim() ? Number(fromPage) : undefined,
+        skip: opts?.skip || undefined,
+      })) as {
+        error?: string; success?: boolean; unit?: string; blocks?: Proposed[];
+        notebook?: { skipped?: boolean; noNew?: boolean; to?: number; remaining?: number; subjectId?: string; total?: number };
+      };
+      if (data.error) throw new Error(data.error);
 
       // Respuestas del modo cuaderno
       if (data.notebook?.skipped) { toast.success(`Listo — arranco a leer desde acá (${data.notebook.total} hojas marcadas como vistas).`); return; }
@@ -69,8 +84,12 @@ export function IngestMaterial({
       setProposed(blocks);
       setUnit(data.unit ?? "");
       setInclude(blocks.map(() => true));
-      setNotebookInfo(data.notebook ? { to: data.notebook.to, remaining: data.notebook.remaining, subjectId: data.notebook.subjectId } : null);
-      const extra = data.notebook ? ` (hojas nuevas; quedan ${data.notebook.remaining})` : "";
+      setNotebookInfo(
+        data.notebook && typeof data.notebook.to === "number"
+          ? { to: data.notebook.to, remaining: data.notebook.remaining ?? 0, subjectId: data.notebook.subjectId ?? subjectId }
+          : null
+      );
+      const extra = data.notebook ? ` (hojas nuevas; quedan ${data.notebook.remaining ?? 0})` : "";
       toast.success(`La IA propuso ${blocks.length} bloque(s)${extra}. Revisalos y creá.`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error");
