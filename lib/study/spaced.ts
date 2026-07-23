@@ -110,6 +110,11 @@ export function examBoost(daysToExam: number | null): number {
   return 5;
 }
 
+/** Peso extra por tipo de materia: las anuales pesan más que las cuatrimestrales. */
+export function subjectTypeBoost(type: string | undefined): number {
+  return type === "anual" ? 18 : 0;
+}
+
 /** ¿Este día de la semana es de descanso? (0 min disponibles) */
 export function isRestDay(dayOfWeek: number, availability: Record<number, number>): boolean {
   return (availability[dayOfWeek] ?? 0) <= 0;

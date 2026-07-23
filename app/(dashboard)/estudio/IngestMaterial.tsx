@@ -196,7 +196,7 @@ export function IngestMaterial({
       {proposed && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-xs text-muted">{unit && <>Unidad: <b className="text-foreground">{unit}</b> · </>}{include.filter(Boolean).length}/{proposed.length} seleccionados{notebookInfo && <> · <span className="text-primary">cuaderno: quedan {notebookInfo.remaining}</span></>}</p>
+            <p className="text-xs text-muted">{unit && <>Unidad: <b className="text-foreground">{unit}</b> · </>}{include.filter(Boolean).length}/{proposed.length} seleccionados{notebookInfo && notebookInfo.remaining > 0 && <> · <span className="text-primary">quedan {notebookInfo.remaining} hojas (sigue solo al crear)</span></>}</p>
             <button onClick={() => { setProposed(null); setInclude([]); setNotebookInfo(null); }} className="text-[11px] text-muted hover:text-foreground inline-flex items-center gap-1"><X size={12} /> Descartar</button>
           </div>
           <div className="space-y-1.5 max-h-80 overflow-y-auto">

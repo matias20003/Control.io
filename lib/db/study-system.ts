@@ -6,6 +6,7 @@ import {
   priorityScore,
   suggestedActivity,
   examBoost,
+  subjectTypeBoost,
   DEFAULT_AVAILABILITY,
   type Mastery,
   type Stage,
@@ -329,7 +330,7 @@ export async function getTodayPlan(
     prisma.studyBlock.findMany({
       where: { userId, status: "ACTIVO", nextReviewDate: { lte: endOfToday } },
     }),
-    prisma.studySubject.findMany({ where: { userId }, select: { id: true, code: true } }),
+    prisma.studySubject.findMany({ where: { userId }, select: { id: true, code: true, type: true } }),
     upcomingExamDaysBySubject(userId, now),
     prisma.studySession.findMany({
       where: { userId, errorCategory: { not: null } },
@@ -338,6 +339,7 @@ export async function getTodayPlan(
     }),
   ]);
   const codeMap = new Map(subjects.map((s) => [s.id, s.code]));
+  const typeMap = new Map(subjects.map((s) => [s.id, s.type]));
   const lastErrByBlock = new Map<string, string>();
   for (const s of errorSessions) {
     if (lastErrByBlock.has(s.blockId)) continue;
@@ -356,7 +358,7 @@ export async function getTodayPlan(
         { masteryLevel: b.masteryLevel, nextReviewDate: b.nextReviewDate, importance: b.importance, errorCount: b.errorCount, incorporationDate: b.incorporationDate },
         now
       );
-      const boost = examBoost(examDays.get(b.subjectId) ?? null);
+      const boost = examBoost(examDays.get(b.subjectId) ?? null) + subjectTypeBoost(typeMap.get(b.subjectId));
       return { ...dto, score: base + boost, activity: suggestedActivity(b.reviewStage as Stage), overdueDays };
     })
     .sort((a, b) => b.score - a.score);
@@ -479,10 +481,14 @@ export async function balanceUpcoming(userId: string, now = new Date()): Promise
   });
   if (blocks.length < 2) return 0;
 
-  const examDays = await upcomingExamDaysBySubject(userId, now);
+  const [examDays, subjectsT] = await Promise.all([
+    upcomingExamDaysBySubject(userId, now),
+    prisma.studySubject.findMany({ where: { userId }, select: { id: true, type: true } }),
+  ]);
+  const typeMap = new Map(subjectsT.map((s) => [s.id, s.type]));
   const scoreOf = (b: (typeof blocks)[number]) =>
     priorityScore({ masteryLevel: b.masteryLevel, nextReviewDate: b.nextReviewDate, importance: b.importance, errorCount: b.errorCount, incorporationDate: b.incorporationDate }, now) +
-    examBoost(examDays.get(b.subjectId) ?? null);
+    examBoost(examDays.get(b.subjectId) ?? null) + subjectTypeBoost(typeMap.get(b.subjectId));
 
   // Por fecha ascendente; a igual día, mayor prioridad conserva el lugar temprano.
   blocks.sort((a, b) => {
@@ -735,14 +741,14 @@ export async function reprogramarVencidos(userId: string, now = new Date()): Pro
     prisma.studyBlock.findMany({
       where: { userId, status: "ACTIVO", nextReviewDate: { lt: startOfToday } },
     }),
-    prisma.studySubject.findMany({ where: { userId }, select: { id: true } }),
+    prisma.studySubject.findMany({ where: { userId }, select: { id: true, type: true } }),
     // carga ya comprometida en días futuros (no vencida) para no sobrepasar capacidad
     prisma.studyBlock.findMany({
       where: { userId, status: "ACTIVO", nextReviewDate: { gte: startOfToday } },
       select: { nextReviewDate: true, reviewDuration: true },
     }),
   ]);
-  void subjects;
+  const typeMap = new Map(subjects.map((s) => [s.id, s.type]));
   if (overdue.length === 0) return 0;
 
   const examDays = await upcomingExamDaysBySubject(userId, now);
@@ -759,8 +765,8 @@ export async function reprogramarVencidos(userId: string, now = new Date()): Pro
 
   // ordenar vencidos por prioridad (más atrasado / más importante primero)
   const ordered = overdue.sort((a, b) => {
-    const sa = priorityScore({ masteryLevel: a.masteryLevel, nextReviewDate: a.nextReviewDate, importance: a.importance, errorCount: a.errorCount, incorporationDate: a.incorporationDate }, now) + examBoost(examDays.get(a.subjectId) ?? null);
-    const sb = priorityScore({ masteryLevel: b.masteryLevel, nextReviewDate: b.nextReviewDate, importance: b.importance, errorCount: b.errorCount, incorporationDate: b.incorporationDate }, now) + examBoost(examDays.get(b.subjectId) ?? null);
+    const sa = priorityScore({ masteryLevel: a.masteryLevel, nextReviewDate: a.nextReviewDate, importance: a.importance, errorCount: a.errorCount, incorporationDate: a.incorporationDate }, now) + examBoost(examDays.get(a.subjectId) ?? null) + subjectTypeBoost(typeMap.get(a.subjectId));
+    const sb = priorityScore({ masteryLevel: b.masteryLevel, nextReviewDate: b.nextReviewDate, importance: b.importance, errorCount: b.errorCount, incorporationDate: b.incorporationDate }, now) + examBoost(examDays.get(b.subjectId) ?? null) + subjectTypeBoost(typeMap.get(b.subjectId));
     return sb - sa;
   });
 
