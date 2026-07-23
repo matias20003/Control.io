@@ -12,7 +12,7 @@ type Proposed = {
   topic: string; unit: string | null; summary: string; prerequisites: string | null;
   difficulty: number; importance: number; estMinutes: number; external: boolean;
 };
-type NotebookInfo = { to: number; remaining: number; subjectId: string };
+type NotebookInfo = { to: number; remaining: number; subjectId: string; manual: boolean };
 
 const IMP = ["", "Baja", "Media", "Alta", "Muy alta"];
 const DIF = ["", "Fácil", "Media", "Difícil", "Muy difícil"];
@@ -40,7 +40,7 @@ export function IngestMaterial({
 
   const subjectCode = subjects.find((s) => s.id === subjectId)?.code;
 
-  const analyze = async (files?: File[], opts?: { notebook?: boolean; skip?: boolean }) => {
+  const analyze = async (files?: File[], opts?: { notebook?: boolean; skip?: boolean; continueFrom?: number }) => {
     if (!subjectId) { toast.error("Elegí la materia primero"); return; }
     const useNotebook = opts?.notebook ?? notebookMode;
     if ((!files || files.length === 0) && !opts?.skip && text.trim().length < 40) { toast.error("Pegá el apunte o subí un PDF/foto"); return; }
@@ -67,11 +67,11 @@ export function IngestMaterial({
         subjectId,
         hintSubject: subjectCode,
         notebook: useNotebook || undefined,
-        fromPage: useNotebook && !opts?.skip && files && fromPage.trim() ? Number(fromPage) : undefined,
+        fromPage: opts?.continueFrom ?? (useNotebook && !opts?.skip && files && fromPage.trim() ? Number(fromPage) : undefined),
         skip: opts?.skip || undefined,
       })) as {
         error?: string; success?: boolean; unit?: string; blocks?: Proposed[];
-        notebook?: { skipped?: boolean; noNew?: boolean; to?: number; remaining?: number; subjectId?: string; total?: number };
+        notebook?: { skipped?: boolean; noNew?: boolean; to?: number; remaining?: number; subjectId?: string; total?: number; manual?: boolean };
       };
       if (data.error) throw new Error(data.error);
 
@@ -86,7 +86,7 @@ export function IngestMaterial({
       setInclude(blocks.map(() => true));
       setNotebookInfo(
         data.notebook && typeof data.notebook.to === "number"
-          ? { to: data.notebook.to, remaining: data.notebook.remaining ?? 0, subjectId: data.notebook.subjectId ?? subjectId }
+          ? { to: data.notebook.to, remaining: data.notebook.remaining ?? 0, subjectId: data.notebook.subjectId ?? subjectId, manual: !!data.notebook.manual }
           : null
       );
       const extra = data.notebook ? ` (hojas nuevas; quedan ${data.notebook.remaining ?? 0})` : "";
@@ -110,7 +110,8 @@ export function IngestMaterial({
           topic: b.topic, unit: b.unit ?? (unit || null), summary: b.summary || null,
           prerequisites: b.prerequisites ?? null, difficulty: b.difficulty, importance: b.importance, estMinutes: b.estMinutes,
         })),
-        ...(notebookInfo ? { notebookTo: notebookInfo.to } : {}),
+        // Solo avanzamos el puntero del cuaderno en modo AUTO (no en rango manual).
+        ...(notebookInfo && !notebookInfo.manual ? { notebookTo: notebookInfo.to } : {}),
       });
       if (res.error) { toast.error(res.error); return; }
       if (res.success && res.created) {
@@ -118,11 +119,12 @@ export function IngestMaterial({
         const info = notebookInfo;
         setProposed(null); setText(""); setInclude([]); setUnit("");
         toast.success(`${res.created.length} bloque(s) creados y repartidos 📅`);
-        // Backlog del cuaderno: si quedan hojas, procesamos el siguiente tramo.
+        // Si quedan hojas, procesamos el próximo tramo. En manual seguimos por
+        // rango explícito (no toca el puntero); en auto, por el puntero.
         if (info && info.remaining > 0 && lastFile.current) {
-          toast.message(`Quedan ${info.remaining} hojas del cuaderno — sigo con el próximo tramo…`);
+          toast.message(`Quedan ${info.remaining} hojas — sigo con el próximo tramo…`);
           setNotebookInfo(null);
-          analyze(undefined, { notebook: true });
+          analyze(undefined, info.manual ? { notebook: true, continueFrom: info.to + 1 } : { notebook: true });
         } else {
           setNotebookInfo(null);
         }
@@ -154,8 +156,8 @@ export function IngestMaterial({
       <label className="flex items-start gap-2 rounded-lg border border-border bg-surface/60 p-2.5 cursor-pointer">
         <input type="checkbox" checked={notebookMode} onChange={(e) => setNotebookMode(e.target.checked)} className="mt-0.5 h-4 w-4 accent-primary" />
         <span className="text-[11px] text-foreground">
-          <b className="flex items-center gap-1"><BookOpen size={12} /> Es un PDF de cuaderno (elijo el rango de hojas)</b>
-          <span className="text-muted">Subís el PDF de la materia y le decís desde qué hoja leer (ej. de la 15 a la última). Si no ponés nada, sigue desde donde quedó la última vez.</span>
+          <b className="flex items-center gap-1"><BookOpen size={12} /> PDF manuscrito o anotado (lo leo como imagen)</b>
+          <span className="text-muted">Para apuntes a mano (Samsung Notes) o PDF de la profe con TUS anotaciones encima: lo leo como imagen y capto lo impreso y lo escrito a mano. Decile desde qué hoja (ej. 15) o dejá “auto” para seguir tu cuaderno desde donde quedó.</span>
         </span>
       </label>
       {notebookMode && (

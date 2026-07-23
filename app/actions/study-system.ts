@@ -310,7 +310,9 @@ export async function analyzeUploadedAction(input: z.infer<typeof analyzeUpSchem
       const to = Math.min(from + NOTEBOOK_PAGES_PER_RUN, total);
       const dataUrls = await renderPdfPages(buf, from, to);
       const r = await analyzeImagesToBlocks(dataUrls, subject.code);
-      return { success: true, unit: r.unit, blocks: r.blocks, notebook: { from, to, total, remaining: total - to, subjectId: subject.id } };
+      // manual = rango elegido a mano (no toca el puntero del cuaderno; sirve
+      // para procesar cualquier PDF/anotado sin romper el "solo lo nuevo").
+      return { success: true, unit: r.unit, blocks: r.blocks, notebook: { from, to, total, remaining: total - to, subjectId: subject.id, manual: manualFrom != null } };
     }
 
     if (files.length) {
