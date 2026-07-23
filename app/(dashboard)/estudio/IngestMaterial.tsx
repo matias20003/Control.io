@@ -34,14 +34,15 @@ export function IngestMaterial({
   const [creating, startCreate] = useTransition();
   const [notebookMode, setNotebookMode] = useState(false);
   const [fromPage, setFromPage] = useState("");
-  const [pendingFile, setPendingFile] = useState<File | null>(null); // cuaderno elegido, aún sin procesar
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]); // cola de PDF elegidos, sin procesar
   const [notebookInfo, setNotebookInfo] = useState<NotebookInfo | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const lastFile = useRef<File | null>(null); // el cuaderno, para "procesar siguientes"
+  const lastFile = useRef<File | null>(null); // PDF en curso, para "procesar siguientes tramos"
+  const queue = useRef<File[]>([]); // PDF que faltan procesar (para 'analizar varios en fila')
 
   const subjectCode = subjects.find((s) => s.id === subjectId)?.code;
 
-  const analyze = async (files?: File[], opts?: { notebook?: boolean; skip?: boolean; continueFrom?: number }) => {
+  const analyze = async (files?: File[], opts?: { notebook?: boolean; skip?: boolean; continueFrom?: number; startPage?: number }) => {
     if (!subjectId) { toast.error("Elegí la materia primero"); return; }
     const useNotebook = opts?.notebook ?? notebookMode;
     if ((!files || files.length === 0) && !opts?.skip && text.trim().length < 40) { toast.error("Pegá el apunte o subí un PDF/foto"); return; }
@@ -68,7 +69,7 @@ export function IngestMaterial({
         subjectId,
         hintSubject: subjectCode,
         notebook: useNotebook || undefined,
-        fromPage: opts?.continueFrom ?? (useNotebook && !opts?.skip && files && fromPage.trim() ? Number(fromPage) : undefined),
+        fromPage: opts?.continueFrom ?? opts?.startPage ?? (useNotebook && !opts?.skip && files && fromPage.trim() ? Number(fromPage) : undefined),
         skip: opts?.skip || undefined,
       })) as {
         error?: string; success?: boolean; unit?: string; blocks?: Proposed[];
@@ -123,12 +124,23 @@ export function IngestMaterial({
         // Si quedan hojas, procesamos el próximo tramo. En manual seguimos por
         // rango explícito (no toca el puntero); en auto, por el puntero.
         if (info && info.remaining > 0 && lastFile.current) {
+          // Mismo PDF: sigue con el próximo tramo de hojas.
           toast.message(`Quedan ${info.remaining} hojas — sigo con el próximo tramo…`);
           setNotebookInfo(null);
           analyze(undefined, info.manual ? { notebook: true, continueFrom: info.to + 1 } : { notebook: true });
         } else {
           setNotebookInfo(null);
-          setPendingFile(null); // terminó este cuaderno
+          // Terminó este PDF. Si hay más en la cola, paso al siguiente (desde pág. 1).
+          queue.current = queue.current.slice(1);
+          setPendingFiles([...queue.current]);
+          const next = queue.current[0];
+          if (next) {
+            lastFile.current = next;
+            toast.message(`Siguiente PDF: ${next.name} (${queue.current.length} en cola)`);
+            analyze([next], { notebook: true, startPage: 1 });
+          } else {
+            lastFile.current = null;
+          }
         }
       }
     });
@@ -176,17 +188,17 @@ export function IngestMaterial({
             <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Pegá el contenido del apunte/clase…" rows={3} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground resize-y" />
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <input ref={fileRef} type="file" accept={notebookMode ? "application/pdf" : "application/pdf,image/*"} multiple={!notebookMode} className="hidden"
+            <input ref={fileRef} type="file" accept={notebookMode ? "application/pdf" : "application/pdf,image/*"} multiple className="hidden"
               onChange={(e) => {
                 const fs = Array.from(e.target.files ?? []);
                 if (!fs.length) return;
-                // En modo cuaderno NO procesamos al elegir: guardamos el archivo y
-                // esperamos a que pongas la página y toques "Analizar".
-                if (notebookMode) { setPendingFile(fs[0]); lastFile.current = fs[0]; }
+                // En modo cuaderno NO procesamos al elegir: encolamos y esperamos
+                // a que pongas la página y toques "Analizar". Podés elegir VARIOS PDF.
+                if (notebookMode) { queue.current = fs; setPendingFiles(fs); lastFile.current = fs[0]; }
                 else analyze(fs);
               }} />
             <button onClick={() => fileRef.current?.click()} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground hover:border-primary/50 disabled:opacity-50">
-              <FileText size={15} /> {notebookMode ? (pendingFile ? "Cambiar PDF" : "Elegir cuaderno (PDF)") : "PDF o fotos"}
+              <FileText size={15} /> {notebookMode ? (pendingFiles.length ? "Cambiar PDF(s)" : "Elegir PDF(s)") : "PDF o fotos"}
             </button>
             {!notebookMode && (
               <button onClick={() => analyze()} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
@@ -194,20 +206,23 @@ export function IngestMaterial({
                 {analyzing ? "Analizando…" : "Dividir en bloques"}
               </button>
             )}
-            {notebookMode && pendingFile && (
+            {notebookMode && pendingFiles.length > 0 && (
               <>
-                <button onClick={() => analyze([pendingFile])} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                <button onClick={() => analyze([pendingFiles[0]], pendingFiles.length > 1 ? { notebook: true, startPage: 1 } : { notebook: true })} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                   {analyzing ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-                  {analyzing ? "Analizando…" : `Analizar ${fromPage.trim() ? `desde pág. ${fromPage}` : "(auto)"}`}
+                  {analyzing ? "Analizando…" : pendingFiles.length > 1 ? `Analizar ${pendingFiles.length} PDF (uno por uno)` : `Analizar ${fromPage.trim() ? `desde pág. ${fromPage}` : "(auto)"}`}
                 </button>
-                <button onClick={() => analyze(undefined, { notebook: true, skip: true })} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50" title="Marca todo el PDF como visto sin leerlo">
-                  <FastForward size={14} /> Empezar desde acá
-                </button>
+                {pendingFiles.length === 1 && (
+                  <button onClick={() => analyze(undefined, { notebook: true, skip: true })} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50" title="Marca todo el PDF como visto sin leerlo">
+                    <FastForward size={14} /> Empezar desde acá
+                  </button>
+                )}
               </>
             )}
           </div>
-          {notebookMode && pendingFile && <p className="text-[11px] text-emerald-500">📄 {pendingFile.name} — poné la página de arriba y tocá <b>Analizar</b>.</p>}
-          {notebookMode && !pendingFile && <p className="text-[11px] text-muted">1) Elegí el PDF. 2) Poné desde qué hoja leer (o dejá “auto”). 3) Tocá <b>Analizar</b>. Leo de a 6 hojas y sigo solo. <b>“Empezar desde acá”</b> marca el PDF como visto sin leerlo.</p>}
+          {notebookMode && pendingFiles.length === 1 && <p className="text-[11px] text-emerald-500">📄 {pendingFiles[0].name} — poné la página de arriba y tocá <b>Analizar</b>.</p>}
+          {notebookMode && pendingFiles.length > 1 && <p className="text-[11px] text-emerald-500">📚 {pendingFiles.length} PDF en cola. Los proceso <b>uno por uno</b> desde la página 1; revisás y confirmás cada uno.</p>}
+          {notebookMode && pendingFiles.length === 0 && <p className="text-[11px] text-muted">1) Elegí el/los PDF (podés varios). 2) Para uno solo, poné desde qué hoja (o “auto”). 3) Tocá <b>Analizar</b>. Leo de a 6 hojas y sigo solo.</p>}
         </>
       )}
 
