@@ -14,7 +14,7 @@ import {
   createExamAction, toggleExamAction, deleteExamAction,
   createExerciseAction, toggleExerciseAction, deleteExerciseAction,
   setAvailabilityAction, reprogramarAction, summarizeForBlockAction,
-  setStudyNotifyAction,
+  setStudyNotifyAction, postponeBlockAction,
 } from "@/app/actions/study-system";
 import type {
   SubjectDTO, BlockDTO, PlanItem, ExamDTO, ExerciseDTO, ErrorLogDTO, AvailabilityDTO,
@@ -80,6 +80,18 @@ function CloseSessionModal({
   const [isPending, start] = useTransition();
 
   const failing = result === "ROJO" || result === "AMARILLO";
+
+  const postpone = () => {
+    start(async () => {
+      const res = await postponeBlockAction(block.id);
+      if (res.error) { toast.error(res.error); return; }
+      if (res.success && res.block) {
+        onDone(res.block);
+        toast.success(`Lo pasé para ${res.block.nextReviewDate ? fmtDate(res.block.nextReviewDate) : "el próximo día"} — sin marcar resultado`);
+        onClose();
+      }
+    });
+  };
 
   const save = () => {
     if (!result) { toast.error("Elegí cómo te fue (es obligatorio para cerrar)"); return; }
@@ -185,6 +197,12 @@ function CloseSessionModal({
         >
           {isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
           Cerrar sesión y agendar próximo repaso
+        </button>
+        <button
+          onClick={postpone} disabled={isPending}
+          className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted hover:text-foreground disabled:opacity-50"
+        >
+          No llegué a verlo → pasarlo a otro día
         </button>
       </div>
     </div>
@@ -368,7 +386,7 @@ function AvailabilityModal({
     setSavingDay(null);
     if (res.error) { toast.error(res.error); return; }
     onSaved(day, minutes);
-    toast.success(`${DAY_NAME[day]}: ${hours || 0} h`);
+    toast.success(`${DAY_NAME[day]}: ${hours || 0} h${res.moved ? ` · reacomodé ${res.moved} repaso(s)` : ""}`);
   };
 
   const total = DAY_ORDER.reduce((acc, d) => acc + (parseFloat(values[d] || "0") || 0), 0);

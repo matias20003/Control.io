@@ -465,6 +465,34 @@ export async function updateBlockStatus(userId: string, blockId: string, status:
 }
 
 /**
+ * "No lo vi": posterga el bloque al próximo día hábil sin registrar resultado
+ * (no cambia nivel ni etapa). Después rebalancea para no sobrecargar ese día.
+ */
+export async function postponeBlock(userId: string, blockId: string): Promise<BlockDTO | null> {
+  const block = await prisma.studyBlock.findFirst({ where: { id: blockId, userId } });
+  if (!block) return null;
+
+  const availability = await getAvailabilityMap(userId);
+  const startOfToday = startOfTodayArg();
+  const cursor = new Date(startOfToday.getTime() + 86_400_000);
+  cursor.setHours(12, 0, 0, 0); // mañana ~9 ARG
+  let safety = 0;
+  while ((availability[cursor.getDay()] ?? 0) <= 0 && safety < 14) {
+    cursor.setDate(cursor.getDate() + 1);
+    cursor.setHours(12, 0, 0, 0);
+    safety++;
+  }
+  await prisma.studyBlock.update({ where: { id: block.id }, data: { nextReviewDate: new Date(cursor) } });
+  await balanceUpcoming(userId).catch(() => {});
+
+  const [updated, subject] = await Promise.all([
+    prisma.studyBlock.findFirst({ where: { id: block.id } }),
+    prisma.studySubject.findFirst({ where: { id: block.subjectId }, select: { code: true } }),
+  ]);
+  return updated ? toBlockDTO(updated, subject?.code ?? "?") : null;
+}
+
+/**
  * Rebalancea los repasos FUTUROS para que ningún día supere tu capacidad.
  * Recorre los bloques por fecha; si un día se llena, empuja el sobrante al
  * próximo día hábil con lugar. Nunca adelanta un repaso (respeta el espaciado

@@ -9,6 +9,7 @@ import {
   createBlock,
   closeSession,
   updateBlockStatus,
+  postponeBlock,
   setAvailability,
   createExam,
   toggleExam,
@@ -115,6 +116,19 @@ export async function closeSessionAction(input: z.infer<typeof closeSchema>) {
   }
 }
 
+export async function postponeBlockAction(blockId: string) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  try {
+    const block = await postponeBlock(userId, blockId);
+    if (!block) return { error: "Bloque no encontrado" };
+    revalidatePath("/estudio");
+    return { success: true, block };
+  } catch {
+    return { error: "No se pudo posponer" };
+  }
+}
+
 export async function archiveBlockAction(blockId: string) {
   const userId = await requireOwner();
   if (!userId) return { error: "No autorizado" };
@@ -135,8 +149,12 @@ export async function setAvailabilityAction(dayOfWeek: number, minutes: number) 
   const m = Math.max(0, Math.min(1440, Math.round(minutes)));
   try {
     await setAvailability(userId, dayOfWeek, m);
+    // Reacomoda los repasos futuros a la nueva disponibilidad: si un día quedó
+    // sobrecargado, empuja el sobrante al próximo día hábil. Nunca adelanta ni
+    // reordena lo que ya entraba bien.
+    const moved = await balanceUpcoming(userId).catch(() => 0);
     revalidatePath("/estudio");
-    return { success: true };
+    return { success: true, moved };
   } catch {
     return { error: "No se pudo guardar la disponibilidad" };
   }
