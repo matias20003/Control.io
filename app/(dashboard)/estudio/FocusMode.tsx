@@ -11,11 +11,11 @@ import { closeSessionAction } from "@/app/actions/study-system";
 import type { PlanItem, BlockDTO } from "@/lib/db/study-system";
 
 // Música de enfoque CURADA: solo instrumental / sin voz, pensada para concentrar.
-// Mezcla de la radio en vivo de Lofi Girl (embebible) + mixes largos (1-10h) que
-// no cortan en una sesión. No se puede elegir otra cosa.
+// TODOS son videos permanentes (NO en vivo) de 1-10h → no dependen de un stream
+// y no cortan en una sesión. No se puede elegir otra cosa.
 const TRACKS = [
-  { id: "jfKfPfyJRdk", label: "Lofi radio", tag: "beats en vivo" },
   { id: "AznRJvAPtwM", label: "Lofi estudio", tag: "beats para concentrar" },
+  { id: "vWjl07A3rZg", label: "Lofi relax", tag: "beats suaves" },
   { id: "oiGmGFxsJi8", label: "Piano", tag: "piano tranquilo" },
   { id: "8WVXk0Gz66E", label: "Piano · guitarra", tag: "calma (10 h)" },
 ];
