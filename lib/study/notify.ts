@@ -61,7 +61,7 @@ export async function getTodayPlanText(userId: string): Promise<string> {
 export async function sendDailyStudyPlan(
   userId: string,
   whatsappNumber?: string | null
-): Promise<{ items: number; totalMin: number; restDay: boolean; pushed: number; whatsapp: boolean; reprogrammed: number }> {
+): Promise<{ items: number; totalMin: number; restDay: boolean; pushed: number; whatsapp: boolean; waError: string | null; reprogrammed: number }> {
   const reprogrammed = await reprogramarVencidos(userId).catch(() => 0);
   const plan = await getTodayPlan(userId);
 
