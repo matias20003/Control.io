@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  CalendarClock, BookOpen, Table2, Sparkles, Plus, Loader2, X,
+  CalendarClock, BookOpen, Table2, Sparkles, Plus, Loader2, X, Timer,
   Clock, Target, ChevronRight, CheckCircle2, AlertCircle, Settings2,
   GraduationCap, ListChecks, RefreshCw, Trash2, CalendarDays, Database,
 } from "lucide-react";
@@ -23,6 +23,7 @@ import { EstudioClient } from "./EstudioClient";
 import { IngestMaterial } from "./IngestMaterial";
 import { NotionCalendar } from "./NotionCalendar";
 import { StudyCalendar } from "./StudyCalendar";
+import { FocusMode } from "./FocusMode";
 import type { StudyNoteView, ReviewView } from "@/lib/db/study";
 
 type Tab = "hoy" | "materias" | "tabla" | "parciales" | "pendientes" | "apuntes";
@@ -684,6 +685,7 @@ export function StudySystemClient({
   const [exercises, setExercises] = useState(initialExercises);
   const [avail, setAvail] = useState(availability);
   const [closing, setClosing] = useState<PlanItem | BlockDTO | null>(null);
+  const [focusBlock, setFocusBlock] = useState<PlanItem | BlockDTO | null>(null);
   const [showAvail, setShowAvail] = useState(false);
   const [tablaView, setTablaView] = useState<"lista" | "calendario">("lista");
   const [tablaSubject, setTablaSubject] = useState<string>(""); // "" = todas
@@ -851,9 +853,14 @@ export function StudySystemClient({
                         <span>{STAGE_LABEL[it.reviewStage] ?? it.reviewStage}</span>
                         {it.overdueDays > 0 && <span className="text-danger font-semibold">atrasado {it.overdueDays}d</span>}
                       </div>
-                      <button onClick={() => setClosing(it)} className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white">
-                        Cerrar sesión <ChevronRight size={13} />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => setClosing(it)} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted hover:text-foreground">
+                          Cerrar directo
+                        </button>
+                        <button onClick={() => setFocusBlock(it)} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white">
+                          <Timer size={13} /> Enfoque
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1027,6 +1034,7 @@ export function StudySystemClient({
       {tab === "apuntes" && <EstudioClient notes={notes} reviews={reviews} />}
 
       {closing && <CloseSessionModal block={closing} onClose={() => setClosing(null)} onDone={applyClosed} />}
+      {focusBlock && <FocusMode block={focusBlock} onClose={() => setFocusBlock(null)} onDone={applyClosed} />}
       {showAvail && (
         <AvailabilityModal
           availability={avail}

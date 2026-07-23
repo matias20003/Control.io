@@ -25,6 +25,8 @@ const securityHeaders = [
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://us.i.posthog.com https://us-assets.i.posthog.com https://*.sentry.io https://*.ingest.sentry.io https://*.ingest.us.sentry.io",
       // Session replay de PostHog usa web workers (blob)
       "worker-src 'self' blob:",
+      // Música de enfoque embebida (YouTube) en el Modo Enfoque de /estudio
+      "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com",
       "frame-ancestors 'self'",
     ].join("; "),
   },
