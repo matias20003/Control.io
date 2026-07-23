@@ -62,8 +62,43 @@ function coerce(raw: unknown, hintUnit?: string): AnalyzeResult {
   return { unit, blocks };
 }
 
-/** Divide texto en bloques (OpenRouter). */
+// ─── Google Gemini (nivel GRATUITO con visión). Preferido si hay GEMINI_API_KEY. ───
+function geminiModel(): string {
+  return process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+}
+function dataUrlToInline(url: string): { inline_data: { mime_type: string; data: string } } | null {
+  const m = url.match(/^data:([^;]+);base64,(.*)$/);
+  return m ? { inline_data: { mime_type: m[1], data: m[2] } } : null;
+}
+async function geminiJson(parts: unknown[]): Promise<unknown> {
+  const key = process.env.GEMINI_API_KEY!;
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel()}:generateContent?key=${key}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contents: [{ parts }], generationConfig: { temperature: 0.2, responseMimeType: "application/json" } }),
+  });
+  if (!res.ok) {
+    const b = await res.text().catch(() => "");
+    if (res.status === 429) throw new Error("La IA (Gemini) está sin cupo por ahora (429). Probá en unos minutos.");
+    if (res.status === 400 && /API key/i.test(b)) throw new Error("La clave de Gemini no es válida. Revisá GEMINI_API_KEY.");
+    console.error("[analyze] gemini error", res.status, b.slice(0, 300));
+    throw new Error(`IA (Gemini) falló (${res.status}). ${b.slice(0, 120)}`);
+  }
+  const j = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+  const txt = (j.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("") || "{}";
+  return JSON.parse(txt);
+}
+
+/** Divide texto en bloques (Gemini gratis si hay key; si no, OpenRouter). */
 export async function analyzeTextToBlocks(rawText: string, hintSubject?: string): Promise<AnalyzeResult> {
+  if (process.env.GEMINI_API_KEY) {
+    const text = rawText.slice(0, 45000);
+    return coerce(await geminiJson([{ text: SYSTEM + (hintSubject ? `\nLa materia es: ${hintSubject}.` : "") + "\n\nCONTENIDO:\n" + text }]));
+  }
+  return analyzeTextToBlocksOpenRouter(rawText, hintSubject);
+}
+
+async function analyzeTextToBlocksOpenRouter(rawText: string, hintSubject?: string): Promise<AnalyzeResult> {
   const key = process.env.OPENROUTER_API_KEY;
   const model = process.env.OPENROUTER_MODEL?.split(",")[0]?.trim() || "openai/gpt-4o-mini";
   const text = rawText.slice(0, 45000);
@@ -87,8 +122,19 @@ export async function analyzeTextToBlocks(rawText: string, hintSubject?: string)
   return coerce(JSON.parse(j.choices?.[0]?.message?.content ?? "{}"));
 }
 
-/** Divide imágenes (apuntes, incluso manuscritos) en bloques (visión OpenAI). */
+/** Divide imágenes en bloques. Gemini gratis si hay key; si no, visión OpenAI. */
 export async function analyzeImagesToBlocks(imageDataUrls: string[], hintSubject?: string): Promise<AnalyzeResult> {
+  if (!imageDataUrls.length) return { unit: "General", blocks: [] };
+
+  // Gemini (gratuito) preferido si está configurado.
+  if (process.env.GEMINI_API_KEY) {
+    const parts: unknown[] = [
+      { text: SYSTEM + `\nLas imágenes son apuntes (posiblemente MANUSCRITOS): transcribí la letra a mano y los diagramas.` + (hintSubject ? ` La materia es: ${hintSubject}.` : "") },
+      ...imageDataUrls.map(dataUrlToInline).filter((x): x is NonNullable<typeof x> => x !== null),
+    ];
+    return coerce(await geminiJson(parts));
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   const model = process.env.CHAT_MODEL ?? "gpt-4o-mini";
   const baseUrl = (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/+$/, "");
@@ -112,7 +158,13 @@ export async function analyzeImagesToBlocks(imageDataUrls: string[], hintSubject
       ],
     }),
   });
-  if (!res.ok) throw new Error("vision");
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    if (res.status === 429) throw new Error("La IA está sin cupo o saturada ahora (429). Probá en unos minutos.");
+    if (res.status === 401) throw new Error("La clave de IA no es válida (401). Avisá para revisar la config.");
+    console.error("[analyze] vision error", res.status, body.slice(0, 300));
+    throw new Error(`IA de visión falló (${res.status}). ${body.slice(0, 120)}`);
+  }
   const j = await res.json();
   return coerce(JSON.parse(j.choices?.[0]?.message?.content ?? "{}"));
 }
