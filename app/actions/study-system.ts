@@ -17,6 +17,7 @@ import {
   toggleExercise,
   deleteExercise,
   reprogramarVencidos,
+  balanceUpcoming,
   createBlocksDistributed,
 } from "@/lib/db/study-system";
 import { MASTERY } from "@/lib/study/spaced";
@@ -303,8 +304,9 @@ export async function reprogramarAction() {
   if (!userId) return { error: "No autorizado" };
   try {
     const n = await reprogramarVencidos(userId);
+    const balanced = await balanceUpcoming(userId);
     revalidatePath("/estudio");
-    return { success: true, reprogrammed: n };
+    return { success: true, reprogrammed: n + balanced };
   } catch {
     return { error: "No se pudo reprogramar" };
   }

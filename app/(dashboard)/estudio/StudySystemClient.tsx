@@ -22,6 +22,7 @@ import type {
 import { EstudioClient } from "./EstudioClient";
 import { IngestMaterial } from "./IngestMaterial";
 import { NotionCalendar } from "./NotionCalendar";
+import { StudyCalendar } from "./StudyCalendar";
 import type { StudyNoteView, ReviewView } from "@/lib/db/study";
 
 type Tab = "hoy" | "materias" | "tabla" | "parciales" | "pendientes" | "apuntes";
@@ -666,6 +667,7 @@ export function StudySystemClient({
   const [avail, setAvail] = useState(availability);
   const [closing, setClosing] = useState<PlanItem | BlockDTO | null>(null);
   const [showAvail, setShowAvail] = useState(false);
+  const [tablaView, setTablaView] = useState<"lista" | "calendario">("lista");
   const [reprogramming, startReprogram] = useTransition();
 
   const applyClosed = (b: BlockDTO) => {
@@ -868,8 +870,22 @@ export function StudySystemClient({
       {/* TABLA MAESTRA */}
       {tab === "tabla" && (
         <div className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">Tabla maestra · {blocks.length} bloques</h2>
-          {blocks.length === 0 ? (
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">Tabla maestra · {blocks.length} bloques</h2>
+            {/* Toggle Lista / Calendario: la misma info en grilla mensual */}
+            <div className="flex gap-1 rounded-lg border border-border bg-surface p-0.5">
+              <button onClick={() => setTablaView("lista")} className={cn("inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors", tablaView === "lista" ? "bg-primary text-white" : "text-muted hover:text-foreground")}>
+                <Table2 size={12} /> Lista
+              </button>
+              <button onClick={() => setTablaView("calendario")} className={cn("inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors", tablaView === "calendario" ? "bg-primary text-white" : "text-muted hover:text-foreground")}>
+                <CalendarDays size={12} /> Calendario
+              </button>
+            </div>
+          </div>
+
+          {tablaView === "calendario" ? (
+            <StudyCalendar blocks={blocks} exams={exams} onReviewClick={(b) => setClosing(b)} />
+          ) : blocks.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted">Todavía no cargaste bloques.</div>
           ) : (
             <div className="overflow-x-auto rounded-2xl border border-border">

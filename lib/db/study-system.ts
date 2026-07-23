@@ -211,6 +211,7 @@ export async function createBlock(
       nextReviewDate: now, // el D0 es hoy: entra al plan de una
     },
   });
+  await balanceUpcoming(userId).catch(() => {});
   return toBlockDTO(b, subject.code);
 }
 
@@ -302,6 +303,8 @@ export async function createBlocksDistributed(
     });
     created.push(toBlockDTO(b, subject.code));
   }
+  // Rebalanceo global: reacomoda los repasos futuros sin sobrecargar días.
+  await balanceUpcoming(userId).catch(() => {});
   return created;
 }
 
@@ -450,11 +453,76 @@ export async function closeSession(
     where: { id: block.subjectId },
     select: { code: true },
   });
+  // Tras recalcular la próxima fecha, rebalanceamos para no sobrecargar días.
+  await balanceUpcoming(userId).catch(() => {});
   return toBlockDTO(updated, subject?.code ?? "?");
 }
 
 export async function updateBlockStatus(userId: string, blockId: string, status: string): Promise<void> {
   await prisma.studyBlock.updateMany({ where: { id: blockId, userId }, data: { status } });
+}
+
+/**
+ * Rebalancea los repasos FUTUROS para que ningún día supere tu capacidad.
+ * Recorre los bloques por fecha; si un día se llena, empuja el sobrante al
+ * próximo día hábil con lugar. Nunca adelanta un repaso (respeta el espaciado
+ * mínimo), solo lo corre hacia adelante cuando el día está sobrecargado.
+ * Se llama solo al agregar bloques o cerrar sesiones. Devuelve cuántos movió.
+ */
+export async function balanceUpcoming(userId: string, now = new Date()): Promise<number> {
+  const startOfToday = startOfTodayArg();
+  const availability = await getAvailabilityMap(userId);
+  if (!Object.values(availability).some((m) => m > 0)) return 0;
+
+  const blocks = await prisma.studyBlock.findMany({
+    where: { userId, status: "ACTIVO", nextReviewDate: { gte: startOfToday } },
+  });
+  if (blocks.length < 2) return 0;
+
+  const examDays = await upcomingExamDaysBySubject(userId, now);
+  const scoreOf = (b: (typeof blocks)[number]) =>
+    priorityScore({ masteryLevel: b.masteryLevel, nextReviewDate: b.nextReviewDate, importance: b.importance, errorCount: b.errorCount, incorporationDate: b.incorporationDate }, now) +
+    examBoost(examDays.get(b.subjectId) ?? null);
+
+  // Por fecha ascendente; a igual día, mayor prioridad conserva el lugar temprano.
+  blocks.sort((a, b) => {
+    const da = a.nextReviewDate!.getTime(), db = b.nextReviewDate!.getTime();
+    return da !== db ? da - db : scoreOf(b) - scoreOf(a);
+  });
+
+  const key = (d: Date) => d.toISOString().slice(0, 10);
+  const todayNoon = new Date(startOfToday.getTime() + 15 * 3600 * 1000);
+  const usedByDay = new Map<string, number>();
+  let moved = 0;
+
+  for (const block of blocks) {
+    const dur = block.reviewDuration;
+    let cursor = new Date(block.nextReviewDate!);
+    cursor.setHours(12, 0, 0, 0);
+    if (cursor < todayNoon) cursor = new Date(todayNoon);
+
+    let safety = 0;
+    let placed = false;
+    while (safety < 120) {
+      const cap = availability[cursor.getDay()] ?? 0;
+      const used = usedByDay.get(key(cursor)) ?? 0;
+      if (cap > 0 && used + dur <= cap) {
+        if (key(cursor) !== key(block.nextReviewDate!)) {
+          await prisma.studyBlock.update({ where: { id: block.id }, data: { nextReviewDate: new Date(cursor) } });
+          moved++;
+        }
+        usedByDay.set(key(cursor), used + dur);
+        placed = true;
+        break;
+      }
+      cursor = new Date(cursor.getTime() + 86_400_000);
+      cursor.setHours(12, 0, 0, 0);
+      safety++;
+    }
+    // Si no entró en ningún lado (bloque más largo que cualquier día), lo dejamos.
+    if (!placed) usedByDay.set(key(new Date(block.nextReviewDate!)), (usedByDay.get(key(new Date(block.nextReviewDate!))) ?? 0) + dur);
+  }
+  return moved;
 }
 
 /** Avanza el puntero de páginas procesadas del cuaderno (nunca retrocede). */
