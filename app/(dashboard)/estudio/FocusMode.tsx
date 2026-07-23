@@ -7,7 +7,7 @@ import {
   CheckCircle2, Loader2, BrainCircuit,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { closeSessionAction } from "@/app/actions/study-system";
+import { closeSessionAction, addFocusNoteAction } from "@/app/actions/study-system";
 import type { PlanItem, BlockDTO } from "@/lib/db/study-system";
 
 // Música de enfoque CURADA: solo instrumental / sin voz, pensada para concentrar.
@@ -67,13 +67,29 @@ export function FocusMode({
   const [leftSec, setLeftSec] = useState(initialSec);
   const [running, setRunning] = useState(false);
   const [focusedSec, setFocusedSec] = useState(0);
-  const [notes, setNotes] = useState("");
+  const [draft, setDraft] = useState("");
+  const [sessionNotes, setSessionNotes] = useState<{ id: string; text: string }[]>([]);
+  const [savingNote, setSavingNote] = useState(false);
   const [track, setTrack] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const [phase, setPhase] = useState<"focus" | "finish">("focus");
   const [result, setResult] = useState("");
   const [isPending, start] = useTransition();
   const doneRef = useRef(false);
+
+  // Guarda UNA nota (Enter): se persiste vinculada al bloque y entra a la caja.
+  const saveQuickNote = async () => {
+    const t = draft.trim();
+    if (!t || savingNote) return;
+    setSavingNote(true);
+    const res = await addFocusNoteAction({ subjectCode: block.subjectCode, blockCode: block.code, topic: block.topic, text: t }).catch(() => ({ error: "error" as const }));
+    setSavingNote(false);
+    if ("error" in res && res.error) { toast.error(res.error); return; }
+    const id = "id" in res && res.id ? res.id : `tmp-${Date.now()}`;
+    setSessionNotes((prev) => [{ id, text: t }, ...prev]);
+    setDraft("");
+  };
+  const closeAll = () => { if (draft.trim()) void saveQuickNote(); onClose(); };
 
   // Reloj: descuenta mientras corre y acumula el tiempo enfocado real.
   useEffect(() => {
@@ -102,12 +118,14 @@ export function FocusMode({
 
   const finish = () => {
     if (!result) { toast.error("Elegí cómo te fue para cerrar"); return; }
+    if (draft.trim()) void saveQuickNote(); // no perder lo que quedó tipeado
+    const sessionSummary = sessionNotes.map((n) => n.text).reverse().join("\n");
     start(async () => {
       const res = await closeSessionAction({
         blockId: block.id,
         result,
         actualDuration: Math.max(1, Math.round(focusedSec / 60)),
-        notes: notes.trim() || undefined,
+        notes: sessionSummary || undefined,
       });
       if (res.error) { toast.error(res.error); return; }
       if (res.success && res.block) {
@@ -137,7 +155,7 @@ export function FocusMode({
             </p>
             <h1 className="mt-0.5 text-lg font-bold text-foreground leading-tight">{block.topic}</h1>
           </div>
-          <button onClick={onClose} className="rounded-xl border border-border p-2 text-muted hover:text-foreground">
+          <button onClick={closeAll} className="rounded-xl border border-border p-2 text-muted hover:text-foreground" title="Salir (guarda tus notas)">
             <X size={18} />
           </button>
         </div>
@@ -182,19 +200,40 @@ export function FocusMode({
 
           {/* ── Panel derecho: notas + música ── */}
           <div className="space-y-4">
-            {/* Notas */}
+            {/* Notas rápidas: escribís y Enter la guarda (vinculada a este bloque) */}
             <div className="rounded-2xl border border-border bg-surface p-4">
               <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-foreground">
                 <BrainCircuit size={14} className="text-primary" /> Vaciá la cabeza
               </p>
               <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Anotá lo que se te cruce (dudas, ideas, pendientes) para sacarlo de la cabeza y seguir enfocado…"
-                rows={7}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void saveQuickNote(); }
+                }}
+                placeholder="Escribí una nota y tocá Enter para guardarla y sacarla de la cabeza…"
+                rows={3}
                 className="w-full resize-y rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/60"
               />
-              <p className="mt-1.5 text-[11px] text-muted">Se guardan con la sesión al cerrar.</p>
+              <p className="mt-1.5 text-[11px] text-muted">
+                <b>Enter</b> guarda la nota (Shift+Enter = salto de línea). Queda vinculada a <span className="text-foreground/70">{block.code}</span> y en tus Apuntes.
+              </p>
+
+              {/* Caja de notas de esta sesión */}
+              {sessionNotes.length > 0 && (
+                <div className="mt-3 space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Notas guardadas · {sessionNotes.length}</p>
+                  <div className="max-h-52 space-y-1.5 overflow-y-auto">
+                    {sessionNotes.map((n) => (
+                      <div key={n.id} className="rounded-lg border border-border bg-surface-2/30 px-2.5 py-1.5">
+                        <p className="text-xs text-foreground whitespace-pre-wrap">{n.text}</p>
+                        <p className="mt-0.5 text-[10px] text-muted">🔖 {block.code} · {block.subjectCode}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {savingNote && <p className="mt-1.5 flex items-center gap-1 text-[11px] text-primary"><Loader2 size={11} className="animate-spin" /> Guardando…</p>}
             </div>
 
             {/* Música */}

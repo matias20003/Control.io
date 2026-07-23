@@ -23,6 +23,7 @@ import {
   balanceUpcoming,
   createBlocksDistributed,
 } from "@/lib/db/study-system";
+import { createFocusNote } from "@/lib/db/study";
 import { MASTERY } from "@/lib/study/spaced";
 
 async function requireOwner(): Promise<string | null> {
@@ -33,6 +34,47 @@ async function requireOwner(): Promise<string | null> {
   if (!user) return null;
   if (!(await isStudyOwner(user.id))) return null;
   return user.id;
+}
+
+/** Guarda una nota del Modo Enfoque ("vaciar la cabeza"). Aparece en Apuntes. */
+export async function saveFocusNoteAction(input: { subject: string; topic: string; text: string }) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const text = (input.text ?? "").trim();
+  if (!text) return { error: "Nota vacía" };
+  try {
+    await createFocusNote(userId, {
+      subject: (input.subject || "Enfoque").slice(0, 40),
+      title: `Enfoque · ${(input.topic || "").slice(0, 100)}`,
+      text: text.slice(0, 4000),
+    });
+    revalidatePath("/estudio");
+    return { success: true };
+  } catch {
+    return { error: "No se pudo guardar la nota" };
+  }
+}
+
+/**
+ * Guarda UNA nota rápida del enfoque (Enter = una nota), vinculada al bloque.
+ * Devuelve la nota creada para mostrarla al toque en la caja de notas.
+ */
+export async function addFocusNoteAction(input: { subjectCode: string; blockCode: string; topic: string; text: string }) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const text = (input.text ?? "").trim();
+  if (!text) return { error: "Nota vacía" };
+  try {
+    const r = await createFocusNote(userId, {
+      subject: (input.subjectCode || "Enfoque").slice(0, 40),
+      title: `${(input.blockCode || "").slice(0, 20)} · ${(input.topic || "").slice(0, 80)}`.replace(/^ · /, "").trim() || "Nota",
+      text: text.slice(0, 4000),
+    });
+    revalidatePath("/estudio");
+    return { success: true, id: r.id };
+  } catch {
+    return { error: "No se pudo guardar la nota" };
+  }
 }
 
 const subjectSchema = z.object({

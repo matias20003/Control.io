@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -24,6 +24,7 @@ import { IngestMaterial } from "./IngestMaterial";
 import { NotionCalendar } from "./NotionCalendar";
 import { StudyCalendar } from "./StudyCalendar";
 import { FocusMode } from "./FocusMode";
+import { StudyChat } from "./StudyChat";
 import type { StudyNoteView, ReviewView } from "@/lib/db/study";
 
 type Tab = "hoy" | "materias" | "tabla" | "parciales" | "pendientes" | "apuntes";
@@ -738,6 +739,33 @@ export function StudySystemClient({
     });
   };
 
+  // "No lo vi" de un toque: posterga el bloque sin registrar resultado.
+  const noLoVi = (block: PlanItem) => {
+    startReprogram(async () => {
+      const res = await postponeBlockAction(block.id);
+      if (res.error) { toast.error(res.error); return; }
+      toast.success("Lo pasé para otro día — no cuenta como visto");
+      router.refresh();
+    });
+  };
+
+  // Reorganización AUTOMÁTICA al entrar: si quedaron bloques atrasados de días
+  // anteriores, los reprograma solos (una vez por carga) para que no se acumulen.
+  const autoReorgRef = useRef(false);
+  useEffect(() => {
+    if (autoReorgRef.current) return;
+    if (stats.overdue > 0) {
+      autoReorgRef.current = true;
+      startReprogram(async () => {
+        const res = await reprogramarAction();
+        if (res.success && res.reprogrammed) {
+          toast.success(`Reorganicé ${res.reprogrammed} tema(s) atrasado(s) en tu plan`);
+          router.refresh();
+        }
+      });
+    }
+  }, [stats.overdue, router]);
+
   const planItems = initialPlan.items;
 
   const TABS: { id: Tab; label: string; icon: typeof CalendarClock }[] = [
@@ -853,8 +881,11 @@ export function StudySystemClient({
                         <span>{STAGE_LABEL[it.reviewStage] ?? it.reviewStage}</span>
                         {it.overdueDays > 0 && <span className="text-danger font-semibold">atrasado {it.overdueDays}d</span>}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => setClosing(it)} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted hover:text-foreground">
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => noLoVi(it)} disabled={reprogramming} className="inline-flex items-center rounded-lg border border-border px-2 py-1.5 text-[11px] font-medium text-muted hover:text-foreground disabled:opacity-50" title="Pasarlo a otro día sin marcar resultado">
+                          No lo vi
+                        </button>
+                        <button onClick={() => setClosing(it)} className="inline-flex items-center rounded-lg border border-border px-2 py-1.5 text-[11px] font-medium text-muted hover:text-foreground">
                           Cerrar directo
                         </button>
                         <button onClick={() => setFocusBlock(it)} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white">
@@ -1035,6 +1066,7 @@ export function StudySystemClient({
 
       {closing && <CloseSessionModal block={closing} onClose={() => setClosing(null)} onDone={applyClosed} />}
       {focusBlock && <FocusMode block={focusBlock} onClose={() => setFocusBlock(null)} onDone={applyClosed} />}
+      <StudyChat />
       {showAvail && (
         <AvailabilityModal
           availability={avail}

@@ -170,6 +170,27 @@ export async function createStudyNote(
   return { id: note.id, subject: data.subject, title: data.title, reviewDates };
 }
 
+/**
+ * Nota rápida del Modo Enfoque ("vaciar la cabeza"). A diferencia de
+ * createStudyNote, NO programa repasos: son pensamientos sueltos para tener a
+ * mano, no material a repasar. Se ven en Apuntes (source "enfoque").
+ */
+export async function createFocusNote(
+  userId: string,
+  data: { subject: string; title: string; text: string }
+): Promise<{ id: string }> {
+  const note = await prisma.studyNote.create({
+    data: {
+      userId,
+      subject: data.subject,
+      title: data.title,
+      summary: encrypt(data.text) ?? data.text,
+      source: "enfoque",
+    },
+  });
+  return { id: note.id };
+}
+
 export async function getStudyNotes(userId: string, take = 100): Promise<StudyNoteView[]> {
   const rows = await prisma.studyNote.findMany({
     where: { userId },
