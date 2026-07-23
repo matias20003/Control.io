@@ -464,6 +464,15 @@ export async function updateBlockStatus(userId: string, blockId: string, status:
   await prisma.studyBlock.updateMany({ where: { id: blockId, userId }, data: { status } });
 }
 
+/** Elimina definitivamente uno o varios bloques (y sus sesiones; desvincula ejercicios). */
+export async function deleteBlocks(userId: string, ids: string[]): Promise<number> {
+  if (!ids.length) return 0;
+  await prisma.studySession.deleteMany({ where: { userId, blockId: { in: ids } } });
+  await prisma.studyExercise.updateMany({ where: { userId, blockId: { in: ids } }, data: { blockId: null } });
+  const res = await prisma.studyBlock.deleteMany({ where: { userId, id: { in: ids } } });
+  return res.count;
+}
+
 /**
  * "No lo vi": posterga el bloque al próximo día hábil sin registrar resultado
  * (no cambia nivel ni etapa). Después rebalancea para no sobrecargar ese día.

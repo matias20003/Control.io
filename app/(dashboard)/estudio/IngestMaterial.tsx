@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Sparkles, Loader2, FileText, Wand2, Check, X, BookOpen, FastForward } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { createBlocksBulkAction, createStudyUploadUrlAction, analyzeUploadedAction } from "@/app/actions/study-system";
+import { createBlocksBulkAction, createStudyUploadUrlAction, analyzeUploadedAction, cleanupStudyUploadsAction } from "@/app/actions/study-system";
 import type { SubjectDTO, BlockDTO } from "@/lib/db/study-system";
 
 type Proposed = {
@@ -27,6 +27,7 @@ export function IngestMaterial({
   const [parcial, setParcial] = useState("1");
   const [text, setText] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
+  const [progress, setProgress] = useState("");
   const [proposed, setProposed] = useState<Proposed[] | null>(null);
   const [unit, setUnit] = useState("");
   const [include, setInclude] = useState<boolean[]>([]);
@@ -101,48 +102,89 @@ export function IngestMaterial({
     }
   };
 
+  /** Lee un PDF ENTERO: por dentro va por tandas de 6 hojas (sin colgar el
+   *  server) pero acumula todo y recién al final te muestra todos los bloques. */
+  const analyzeWholePdf = async (file: File, advancePointer: boolean, startFrom?: number) => {
+    if (!subjectId) { toast.error("Elegí la materia primero"); return; }
+    lastFile.current = file;
+    setAnalyzing(true);
+    setProgress("Subiendo el PDF…");
+    let path: string | null = null;
+    try {
+      const supabase = createClient();
+      const su = await createStudyUploadUrlAction();
+      if (!su.success || !su.path) throw new Error(su.error ?? "No pude preparar la subida");
+      const up = await supabase.storage.from(su.bucket).uploadToSignedUrl(su.path, su.token, file);
+      if (up.error) throw new Error("No pude subir el archivo (¿muy pesado o sin conexión?)");
+      path = su.path;
+      const type = file.type;
+
+      const all: Proposed[] = [];
+      let unitName = "";
+      let total = 0;
+      let cursor = startFrom ?? (fromPage.trim() ? Number(fromPage) : 1);
+      let guard = 0;
+      while (guard < 80) {
+        setProgress(total ? `Leyendo hojas… ${Math.min(cursor - 1, total)}/${total} · ${all.length} bloques` : "Leyendo el PDF…");
+        const data = (await analyzeUploadedAction({
+          files: [{ path, type }], subjectId, hintSubject: subjectCode,
+          notebook: true, fromPage: cursor, keep: true,
+        })) as { error?: string; unit?: string; blocks?: Proposed[]; notebook?: { to?: number; remaining?: number; total?: number; noNew?: boolean } };
+        if (data.error) throw new Error(data.error);
+        if (data.notebook?.noNew) break;
+        all.push(...(data.blocks ?? []));
+        if (data.unit && !unitName) unitName = data.unit;
+        total = data.notebook?.total ?? total;
+        const to = data.notebook?.to ?? cursor + 5;
+        if ((data.notebook?.remaining ?? 0) > 0) { cursor = to + 1; guard++; } else break;
+      }
+      if (!all.length) { toast.error("No pude leer el PDF (¿hojas en blanco o ilegibles?)"); return; }
+      setProposed(all);
+      setUnit(unitName);
+      setInclude(all.map(() => true));
+      setNotebookInfo({ to: total, remaining: 0, subjectId, manual: !advancePointer });
+      toast.success(`Listo: ${all.length} bloques de todo el PDF. Revisalos y creá.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error");
+    } finally {
+      if (path) cleanupStudyUploadsAction([path]).catch(() => {});
+      setAnalyzing(false);
+      setProgress("");
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
   const create = () => {
     if (!proposed) return;
     const chosen = proposed.filter((_, i) => include[i]);
     if (chosen.length === 0) { toast.error("Elegí al menos un bloque"); return; }
     startCreate(async () => {
-      const res = await createBlocksBulkAction({
-        subjectId, parcial: Number(parcial),
-        blocks: chosen.map((b) => ({
-          topic: b.topic, unit: b.unit ?? (unit || null), summary: b.summary || null,
-          prerequisites: b.prerequisites ?? null, difficulty: b.difficulty, importance: b.importance, estMinutes: b.estMinutes,
-        })),
-        // Solo avanzamos el puntero del cuaderno en modo AUTO (no en rango manual).
-        ...(notebookInfo && !notebookInfo.manual ? { notebookTo: notebookInfo.to } : {}),
-      });
-      if (res.error) { toast.error(res.error); return; }
-      if (res.success && res.created) {
-        onCreated(res.created);
-        const info = notebookInfo;
-        setProposed(null); setText(""); setInclude([]); setUnit("");
-        toast.success(`${res.created.length} bloque(s) creados y repartidos 📅`);
-        // Si quedan hojas, procesamos el próximo tramo. En manual seguimos por
-        // rango explícito (no toca el puntero); en auto, por el puntero.
-        if (info && info.remaining > 0 && lastFile.current) {
-          // Mismo PDF: sigue con el próximo tramo de hojas.
-          toast.message(`Quedan ${info.remaining} hojas — sigo con el próximo tramo…`);
-          setNotebookInfo(null);
-          analyze(undefined, info.manual ? { notebook: true, continueFrom: info.to + 1 } : { notebook: true });
-        } else {
-          setNotebookInfo(null);
-          // Terminó este PDF. Si hay más en la cola, paso al siguiente (desde pág. 1).
-          queue.current = queue.current.slice(1);
-          setPendingFiles([...queue.current]);
-          const next = queue.current[0];
-          if (next) {
-            lastFile.current = next;
-            toast.message(`Siguiente PDF: ${next.name} (${queue.current.length} en cola)`);
-            analyze([next], { notebook: true, startPage: 1 });
-          } else {
-            lastFile.current = null;
-          }
-        }
+      const payload = chosen.map((b) => ({
+        topic: b.topic, unit: b.unit ?? (unit || null), summary: b.summary || null,
+        prerequisites: b.prerequisites ?? null, difficulty: b.difficulty, importance: b.importance, estMinutes: b.estMinutes,
+      }));
+      // La action acepta hasta 20 por llamada: si hay más, creamos en tandas.
+      const batches: (typeof payload)[] = [];
+      for (let i = 0; i < payload.length; i += 20) batches.push(payload.slice(i, i + 20));
+      const created: BlockDTO[] = [];
+      for (let bi = 0; bi < batches.length; bi++) {
+        const isLast = bi === batches.length - 1;
+        const res = await createBlocksBulkAction({
+          subjectId, parcial: Number(parcial), blocks: batches[bi],
+          ...(isLast && notebookInfo && !notebookInfo.manual ? { notebookTo: notebookInfo.to } : {}),
+        });
+        if (res.error) { toast.error(res.error); return; }
+        if (res.success && res.created) created.push(...res.created);
       }
+      onCreated(created);
+      setProposed(null); setText(""); setInclude([]); setUnit(""); setNotebookInfo(null);
+      toast.success(`${created.length} bloque(s) creados y repartidos 📅`);
+      // Si hay más PDF en la cola, paso al siguiente (entero, desde la página 1).
+      queue.current = queue.current.slice(1);
+      setPendingFiles([...queue.current]);
+      const next = queue.current[0];
+      if (next) { toast.message(`Siguiente PDF: ${next.name} (${queue.current.length} en cola)`); analyzeWholePdf(next, false, 1); }
+      else lastFile.current = null;
     });
   };
 
@@ -208,21 +250,22 @@ export function IngestMaterial({
             )}
             {notebookMode && pendingFiles.length > 0 && (
               <>
-                <button onClick={() => analyze([pendingFiles[0]], pendingFiles.length > 1 ? { notebook: true, startPage: 1 } : { notebook: true })} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                <button onClick={() => analyzeWholePdf(pendingFiles[0], pendingFiles.length === 1, pendingFiles.length > 1 ? 1 : undefined)} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                   {analyzing ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-                  {analyzing ? "Analizando…" : pendingFiles.length > 1 ? `Analizar ${pendingFiles.length} PDF (uno por uno)` : `Analizar ${fromPage.trim() ? `desde pág. ${fromPage}` : "(auto)"}`}
+                  {analyzing ? "Analizando…" : pendingFiles.length > 1 ? `Analizar ${pendingFiles.length} PDF enteros` : `Analizar PDF entero ${fromPage.trim() ? `(desde pág. ${fromPage})` : ""}`}
                 </button>
                 {pendingFiles.length === 1 && (
                   <button onClick={() => analyze(undefined, { notebook: true, skip: true })} disabled={analyzing} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:text-foreground disabled:opacity-50" title="Marca todo el PDF como visto sin leerlo">
-                    <FastForward size={14} /> Empezar desde acá
+                    <FastForward size={14} /> Marcar como visto
                   </button>
                 )}
               </>
             )}
           </div>
-          {notebookMode && pendingFiles.length === 1 && <p className="text-[11px] text-emerald-500">📄 {pendingFiles[0].name} — poné la página de arriba y tocá <b>Analizar</b>.</p>}
-          {notebookMode && pendingFiles.length > 1 && <p className="text-[11px] text-emerald-500">📚 {pendingFiles.length} PDF en cola. Los proceso <b>uno por uno</b> desde la página 1; revisás y confirmás cada uno.</p>}
-          {notebookMode && pendingFiles.length === 0 && <p className="text-[11px] text-muted">1) Elegí el/los PDF (podés varios). 2) Para uno solo, poné desde qué hoja (o “auto”). 3) Tocá <b>Analizar</b>. Leo de a 6 hojas y sigo solo.</p>}
+          {analyzing && progress && <p className="text-[11px] text-primary flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> {progress}</p>}
+          {notebookMode && !analyzing && pendingFiles.length === 1 && <p className="text-[11px] text-emerald-500">📄 {pendingFiles[0].name} — tocá <b>Analizar PDF entero</b> (lee todas las hojas y te muestra todo junto al final).</p>}
+          {notebookMode && !analyzing && pendingFiles.length > 1 && <p className="text-[11px] text-emerald-500">📚 {pendingFiles.length} PDF en cola. Leo cada uno <b>entero</b> y te muestro sus bloques; confirmás y paso al siguiente.</p>}
+          {notebookMode && !analyzing && pendingFiles.length === 0 && <p className="text-[11px] text-muted">1) Elegí el/los PDF (podés varios). 2) Opcional: desde qué hoja. 3) <b>Analizar PDF entero</b>: lee todo solo (por dentro va por tandas) y al final te muestra todos los bloques juntos.</p>}
         </>
       )}
 

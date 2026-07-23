@@ -10,6 +10,7 @@ import {
   closeSession,
   updateBlockStatus,
   postponeBlock,
+  deleteBlocks,
   setAvailability,
   createExam,
   toggleExam,
@@ -126,6 +127,19 @@ export async function postponeBlockAction(blockId: string) {
     return { success: true, block };
   } catch {
     return { error: "No se pudo posponer" };
+  }
+}
+
+export async function deleteBlocksAction(ids: string[]) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  if (!Array.isArray(ids) || !ids.length) return { error: "Nada seleccionado" };
+  try {
+    const deleted = await deleteBlocks(userId, ids.slice(0, 500));
+    revalidatePath("/estudio");
+    return { success: true, deleted };
+  } catch {
+    return { error: "No se pudieron eliminar" };
   }
 }
 
@@ -284,21 +298,33 @@ const analyzeUpSchema = z.object({
   notebook: z.boolean().optional(),
   fromPage: z.number().int().min(1).optional(),
   skip: z.boolean().optional(),
+  keep: z.boolean().optional(), // no borrar el archivo (para leer el PDF por tandas)
 });
+
+/** Borra archivos subidos (tras leer un PDF completo por tandas). */
+export async function cleanupStudyUploadsAction(paths: string[]) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const safe = (paths ?? []).filter((p) => p.startsWith(`${userId}/`));
+  if (!safe.length) return { success: true };
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  await createAdminClient().storage.from(STUDY_BUCKET).remove(safe).catch(() => {});
+  return { success: true };
+}
 
 export async function analyzeUploadedAction(input: z.infer<typeof analyzeUpSchema>) {
   const userId = await requireOwner();
   if (!userId) return { error: "No autorizado" };
   const parsed = analyzeUpSchema.safeParse(input);
   if (!parsed.success) return { error: "Datos inválidos" };
-  const { files = [], text, subjectId, hintSubject, notebook, fromPage, skip } = parsed.data;
+  const { files = [], text, subjectId, hintSubject, notebook, fromPage, skip, keep } = parsed.data;
 
   // Seguridad: cada path debe pertenecer al usuario.
   for (const f of files) if (!f.path.startsWith(`${userId}/`)) return { error: "Ruta inválida" };
 
   const { createAdminClient } = await import("@/lib/supabase/admin");
   const admin = createAdminClient();
-  const cleanup = async () => { if (files.length) await admin.storage.from(STUDY_BUCKET).remove(files.map((f) => f.path)).catch(() => {}); };
+  const cleanup = async () => { if (!keep && files.length) await admin.storage.from(STUDY_BUCKET).remove(files.map((f) => f.path)).catch(() => {}); };
   const download = async (p: string): Promise<Buffer> => {
     const { data, error } = await admin.storage.from(STUDY_BUCKET).download(p);
     if (error || !data) throw new Error("No pude leer el archivo subido");

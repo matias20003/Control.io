@@ -14,7 +14,7 @@ import {
   createExamAction, toggleExamAction, deleteExamAction,
   createExerciseAction, toggleExerciseAction, deleteExerciseAction,
   setAvailabilityAction, reprogramarAction, summarizeForBlockAction,
-  setStudyNotifyAction, postponeBlockAction,
+  setStudyNotifyAction, postponeBlockAction, deleteBlocksAction,
 } from "@/app/actions/study-system";
 import type {
   SubjectDTO, BlockDTO, PlanItem, ExamDTO, ExerciseDTO, ErrorLogDTO, AvailabilityDTO,
@@ -686,7 +686,32 @@ export function StudySystemClient({
   const [closing, setClosing] = useState<PlanItem | BlockDTO | null>(null);
   const [showAvail, setShowAvail] = useState(false);
   const [tablaView, setTablaView] = useState<"lista" | "calendario">("lista");
+  const [tablaSubject, setTablaSubject] = useState<string>(""); // "" = todas
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reprogramming, startReprogram] = useTransition();
+  const [deleting, startDelete] = useTransition();
+
+  const filteredBlocks = tablaSubject ? blocks.filter((b) => b.subjectId === tablaSubject) : blocks;
+  const toggleSel = (id: string) => setSelectedIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const allFilteredSelected = filteredBlocks.length > 0 && filteredBlocks.every((b) => selectedIds.has(b.id));
+  const toggleSelAll = () => setSelectedIds((prev) => {
+    const n = new Set(prev);
+    if (allFilteredSelected) filteredBlocks.forEach((b) => n.delete(b.id));
+    else filteredBlocks.forEach((b) => n.add(b.id));
+    return n;
+  });
+  const deleteBlocks = (ids: string[]) => {
+    if (!ids.length) return;
+    startDelete(async () => {
+      const res = await deleteBlocksAction(ids);
+      if (res.error) { toast.error(res.error); return; }
+      const idSet = new Set(ids);
+      setBlocks((prev) => prev.filter((b) => !idSet.has(b.id)));
+      setSelectedIds((prev) => { const n = new Set(prev); ids.forEach((i) => n.delete(i)); return n; });
+      toast.success(`${res.deleted} bloque(s) eliminados`);
+      router.refresh();
+    });
+  };
 
   const applyClosed = (b: BlockDTO) => {
     setBlocks((prev) => prev.map((x) => (x.id === b.id ? b : x)));
@@ -906,45 +931,74 @@ export function StudySystemClient({
           ) : blocks.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted">Todavía no cargaste bloques.</div>
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-border">
-              <table className="w-full text-sm">
-                <thead className="bg-surface-2/40 text-[11px] uppercase tracking-wide text-muted">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-semibold">Código</th>
-                    <th className="px-3 py-2 text-left font-semibold">Tema</th>
-                    <th className="px-3 py-2 text-left font-semibold">Nivel</th>
-                    <th className="px-3 py-2 text-left font-semibold">A reforzar</th>
-                    <th className="px-3 py-2 text-left font-semibold">Etapa</th>
-                    <th className="px-3 py-2 text-left font-semibold">Próx. repaso</th>
-                    <th className="px-3 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {blocks.map((b) => (
-                    <tr key={b.id} className="hover:bg-surface-2/20">
-                      <td className="px-3 py-2 font-mono text-[11px] text-muted whitespace-nowrap">{b.code}</td>
-                      <td className="px-3 py-2 text-foreground max-w-[160px] truncate">{b.topic}</td>
-                      <td className="px-3 py-2"><MasteryBadge level={b.masteryLevel} /></td>
-                      <td className="px-3 py-2 max-w-[180px]">
-                        {b.lastError ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-amber-500" title={b.lastError}>
-                            <AlertCircle size={11} className="shrink-0" />
-                            <span className="truncate">{b.lastError}</span>
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-muted">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-[11px] text-muted whitespace-nowrap">{STAGE_LABEL[b.reviewStage] ?? b.reviewStage}</td>
-                      <td className="px-3 py-2 text-[11px] text-muted whitespace-nowrap">{fmtDate(b.nextReviewDate)}</td>
-                      <td className="px-3 py-2 text-right">
-                        <button onClick={() => setClosing(b)} className="text-xs font-semibold text-primary hover:underline whitespace-nowrap">Cerrar sesión</button>
-                      </td>
+            <>
+              {/* Filtro por materia */}
+              <div className="flex flex-wrap gap-1.5">
+                <button onClick={() => setTablaSubject("")} className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", !tablaSubject ? "bg-primary text-white" : "bg-surface-2 text-muted hover:text-foreground")}>
+                  Todas ({blocks.length})
+                </button>
+                {subjects.map((s) => {
+                  const n = blocks.filter((b) => b.subjectId === s.id).length;
+                  if (n === 0) return null;
+                  return (
+                    <button key={s.id} onClick={() => setTablaSubject(s.id)} className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors", tablaSubject === s.id ? "bg-primary text-white" : "bg-surface-2 text-muted hover:text-foreground")}>
+                      {s.code} ({n})
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Barra de selección */}
+              {selectedIds.size > 0 && (
+                <div className="flex items-center justify-between rounded-lg border border-danger/40 bg-danger/5 px-3 py-2">
+                  <span className="text-xs text-foreground">{selectedIds.size} seleccionado(s)</span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setSelectedIds(new Set())} className="text-xs text-muted hover:text-foreground">Limpiar</button>
+                    <button onClick={() => deleteBlocks([...selectedIds])} disabled={deleting} className="inline-flex items-center gap-1 rounded-lg bg-danger px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+                      {deleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Eliminar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="overflow-x-auto rounded-2xl border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-surface-2/40 text-[11px] uppercase tracking-wide text-muted">
+                    <tr>
+                      <th className="px-2 py-2 w-8"><input type="checkbox" checked={allFilteredSelected} onChange={toggleSelAll} className="h-3.5 w-3.5 accent-primary" aria-label="Seleccionar todos" /></th>
+                      <th className="px-3 py-2 text-left font-semibold">Código</th>
+                      <th className="px-3 py-2 text-left font-semibold">Tema</th>
+                      <th className="px-3 py-2 text-left font-semibold">Nivel</th>
+                      <th className="px-3 py-2 text-left font-semibold">A reforzar</th>
+                      <th className="px-3 py-2 text-left font-semibold">Próx. repaso</th>
+                      <th className="px-3 py-2"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filteredBlocks.map((b) => (
+                      <tr key={b.id} className={cn("hover:bg-surface-2/20", selectedIds.has(b.id) && "bg-primary/5")}>
+                        <td className="px-2 py-2"><input type="checkbox" checked={selectedIds.has(b.id)} onChange={() => toggleSel(b.id)} className="h-3.5 w-3.5 accent-primary" /></td>
+                        <td className="px-3 py-2 font-mono text-[11px] text-muted whitespace-nowrap">{b.code}</td>
+                        <td className="px-3 py-2 text-foreground max-w-[150px] truncate" title={b.topic}>{b.topic}</td>
+                        <td className="px-3 py-2"><MasteryBadge level={b.masteryLevel} /></td>
+                        <td className="px-3 py-2 max-w-[160px]">
+                          {b.lastError ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-amber-500" title={b.lastError}>
+                              <AlertCircle size={11} className="shrink-0" /><span className="truncate">{b.lastError}</span>
+                            </span>
+                          ) : <span className="text-[11px] text-muted">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-[11px] text-muted whitespace-nowrap">{fmtDate(b.nextReviewDate)}</td>
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                          <button onClick={() => setClosing(b)} className="text-xs font-semibold text-primary hover:underline mr-2">Cerrar</button>
+                          <button onClick={() => deleteBlocks([b.id])} disabled={deleting} className="text-muted hover:text-danger" aria-label="Eliminar bloque"><Trash2 size={13} /></button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       )}
