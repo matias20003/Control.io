@@ -12,6 +12,8 @@ import { getReactivationFollowup } from "@/lib/db/reactivation-followup";
 import { ReactivationFollowup } from "./ReactivationFollowup";
 import { getBusinessMetrics } from "@/lib/db/business-metrics";
 import { CommandCenter } from "./CommandCenter";
+import { getUsersOverview } from "@/lib/db/admin-users";
+import { UsersPanel } from "./UsersPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -187,12 +189,13 @@ export default async function AdminPage() {
     redirect("/dashboard");
   }
 
-  const [s, analytics, domainStatus, followup, business] = await Promise.all([
+  const [s, analytics, domainStatus, followup, business, users] = await Promise.all([
     getStats(),
     getAdminAnalytics(),
     getResendDomainStatus(),
     getReactivationFollowup(),
     getBusinessMetrics(),
+    getUsersOverview(),
   ]);
   const feedback = await prisma.feedback
     .findMany({ orderBy: { createdAt: "desc" }, take: 50 })
@@ -228,6 +231,9 @@ export default async function AdminPage() {
 
         {/* ── NEGOCIO: North Star, embudo, cohortes, adopción, churn, monetización ── */}
         <CommandCenter m={business} />
+
+        {/* ── USUARIOS: ficha y análisis por usuario (dónde trabaja / dónde se traba) ── */}
+        <UsersPanel users={users} />
 
         {/* ── OPERATIVO ── */}
         <div className="pt-2">
