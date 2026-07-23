@@ -11,12 +11,13 @@ import { closeSessionAction } from "@/app/actions/study-system";
 import type { PlanItem, BlockDTO } from "@/lib/db/study-system";
 
 // Música de enfoque CURADA: solo instrumental / sin voz, pensada para concentrar.
-// Son radios en vivo de YouTube (estables y embebibles). No se puede elegir otra cosa.
+// Mezcla de la radio en vivo de Lofi Girl (embebible) + mixes largos (1-10h) que
+// no cortan en una sesión. No se puede elegir otra cosa.
 const TRACKS = [
-  { id: "jfKfPfyJRdk", label: "Lofi", tag: "beats instrumental" },
-  { id: "4xDzrJKXOOY", label: "Synthwave", tag: "electrónica sin voz" },
-  { id: "5yx6BWlEVcY", label: "Chillhop", tag: "jazz-hop suave" },
-  { id: "lP26UCnoH9s", label: "Café", tag: "lofi de cafetería" },
+  { id: "jfKfPfyJRdk", label: "Lofi radio", tag: "beats en vivo" },
+  { id: "AznRJvAPtwM", label: "Lofi estudio", tag: "beats para concentrar" },
+  { id: "oiGmGFxsJi8", label: "Piano", tag: "piano tranquilo" },
+  { id: "8WVXk0Gz66E", label: "Piano · guitarra", tag: "calma (10 h)" },
 ];
 
 const MASTERY = [
@@ -229,7 +230,7 @@ export function FocusMode({
                     key={track}
                     title="Música de enfoque"
                     width="100%" height="80"
-                    src={`https://www.youtube-nocookie.com/embed/${track}?autoplay=1&loop=1&playlist=${track}`}
+                    src={`https://www.youtube-nocookie.com/embed/${track}?autoplay=1`}
                     allow="autoplay; encrypted-media"
                     className="block w-full"
                   />
