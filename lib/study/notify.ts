@@ -77,14 +77,18 @@ export async function sendDailyStudyPlan(
     url: planUrl(),
   }).catch(() => 0);
 
+  // WhatsApp SIEMPRE (aunque no haya nada, avisa "vas al día"): el usuario quiere
+  // arrancar cada mañana con su mensaje. buildPlanText ya cubre descanso/vacío.
   let whatsapp = false;
-  if (whatsappNumber && !plan.isRestDay && plan.items.length > 0) {
-    await sendText(whatsappNumber, `${buildPlanText(plan)}\n\nAbrir: ${planUrl()}`)
+  let waError: string | null = null;
+  if (whatsappNumber) {
+    const link = plan.items.length > 0 ? `\n\nAbrir: ${planUrl()}` : "";
+    await sendText(whatsappNumber, `${buildPlanText(plan)}${link}`)
       .then(() => { whatsapp = true; })
-      .catch(() => {});
+      .catch((e) => { waError = e instanceof Error ? e.message : "error"; console.error("[study-plan] WhatsApp falló:", e); });
   }
 
-  return { items: plan.items.length, totalMin: plan.totalMin, restDay: plan.isRestDay, pushed: pushed ?? 0, whatsapp, reprogrammed };
+  return { items: plan.items.length, totalMin: plan.totalMin, restDay: plan.isRestDay, pushed: pushed ?? 0, whatsapp, waError, reprogrammed };
 }
 
 /**
