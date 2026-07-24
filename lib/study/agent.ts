@@ -17,7 +17,7 @@ function aiProvider(): { url: string; key: string; model: string; extraHeaders: 
     return {
       url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
       key: gem,
-      model: process.env.STUDY_AGENT_MODEL ?? "gemini-2.5-flash",
+      model: process.env.STUDY_AGENT_MODEL ?? "gemini-flash-latest",
       extraHeaders: {},
     };
   }

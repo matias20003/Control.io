@@ -181,7 +181,7 @@ function aiProvider(): Provider | null {
     return {
       url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
       key: gem,
-      models: [process.env.NEWSLETTER_MODEL_GEMINI ?? "gemini-2.5-flash"],
+      models: [process.env.NEWSLETTER_MODEL_GEMINI ?? "gemini-flash-latest"],
       extraHeaders: {},
     };
   }
