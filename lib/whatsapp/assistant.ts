@@ -38,6 +38,9 @@ import { ARG_TZ } from "@/lib/timezone";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import { format as formatDateFn } from "date-fns";
 import { getChatHistory, saveChatTurn, getMemory, addMemory, type ChatTurn } from "@/lib/whatsapp/memory";
+import { geminiEnabled, geminiChatJson, openaiChatJson, LlmError } from "@/lib/ai/chat";
+import { notifyAdminThrottled, bumpDailyCounter } from "@/lib/alerts";
+import { todayStringArg } from "@/lib/timezone";
 
 type Intent = "action" | "query" | "chat";
 
@@ -360,9 +363,6 @@ async function interpret(
   imageUrl?: string,
   history: ChatTurn[] = []
 ): Promise<AssistantOutput> {
-  const apiKey = process.env.OPENAI_API_KEY ?? fail("OPENAI_API_KEY no configurada");
-  const model = process.env.CHAT_MODEL ?? "gpt-4o-mini";
-
   const expenseCats = c.categories.filter((x) => x.type === "EXPENSE").map((x) => x.name);
   const incomeCats = c.categories.filter((x) => x.type === "INCOME").map((x) => x.name);
 
@@ -531,36 +531,25 @@ FORMATO de "answer" (WhatsApp): ordenado y fácil de escanear.
 - Nada de párrafos largos: máximo ~6 líneas, salvo que pidan más detalle.
 - Un emoji al inicio de un bloque está bien; no abuses ni uses tablas.`;
 
-  // Contenido del usuario: texto, o texto + imagen (multimodal) si hay foto.
-  const userContent: unknown = imageUrl
-    ? [
-        { type: "text", text: message || "Interpretá esta imagen (ticket/recibo/captura) y registrá los gastos o ingresos que veas." },
-        { type: "image_url", image_url: { url: imageUrl } },
-      ]
+  const userText = imageUrl
+    ? (message || "Interpretá esta imagen (ticket/recibo/captura) y registrá los gastos o ingresos que veas.")
     : message;
+  const input = { system, history, userText, imageDataUrl: imageUrl };
 
-  const res = await fetch(`${baseUrl()}/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        ...history.map((h) => ({ role: h.role, content: h.content })),
-        { role: "user", content: userContent },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`LLM falló (${res.status}): ${body}`);
+  // Gemini (gratis) como PRINCIPAL; si se satura/falla, respaldo OpenAI-compatible
+  // (OpenRouter/OpenAI) para que ningún usuario quede sin respuesta.
+  let content: string;
+  if (geminiEnabled()) {
+    try {
+      content = await geminiChatJson(input);
+    } catch (e) {
+      await onGeminiFallback(e).catch(() => {});
+      content = await openaiChatJson(input);
+    }
+  } else {
+    content = await openaiChatJson(input);
   }
 
-  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-  const content = data.choices?.[0]?.message?.content ?? "{}";
   let parsed: AssistantOutput;
   try {
     parsed = JSON.parse(content);
@@ -573,6 +562,20 @@ FORMATO de "answer" (WhatsApp): ordenado y fácil de escanear.
     actions: Array.isArray(parsed.actions) ? parsed.actions : [],
     answer: typeof parsed.answer === "string" ? parsed.answer : "",
   };
+}
+
+/**
+ * Gemini se saturó (429) o falló: registra el evento del día y avisa al admin
+ * (con throttle) que el bot pasó a OpenRouter y conviene cargar créditos.
+ */
+async function onGeminiFallback(e: unknown): Promise<void> {
+  const status = e instanceof LlmError ? e.status : 0;
+  const isQuota = status === 429;
+  const n = await bumpDailyCounter(isQuota ? "gemini_quota" : "gemini_error", todayStringArg()).catch(() => 0);
+  const title = isQuota ? "⚠️ Gemini llegó al límite gratis" : "⚠️ Gemini falló";
+  const body = `El bot pasó a OpenRouter de respaldo para no dejar sin respuesta a los usuarios.${isQuota ? " (Gemini agotó el cupo gratuito de hoy/este minuto)." : ""} Van ${n} veces hoy. Si sigue, cargá créditos.`;
+  // 429 avisa cada 60 min; otros errores cada 30 (para no spamear).
+  await notifyAdminThrottled(isQuota ? "alert_gemini_quota" : "alert_gemini_error", isQuota ? 60 : 30, title, body).catch(() => {});
 }
 
 // ─────────────────────────── Ejecución de acciones ───────────────────────────
