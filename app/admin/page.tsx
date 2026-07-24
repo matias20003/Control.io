@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-import { LogoFull } from "@/components/layout/Logo";
 import { MigrateButton } from "./MigrateButton";
 import { FixDoubleEncryptButton } from "./FixDoubleEncryptButton";
 import { ReactivarDormidosButton } from "./ReactivarDormidosButton";
@@ -14,6 +13,8 @@ import { getBusinessMetrics } from "@/lib/db/business-metrics";
 import { CommandCenter } from "./CommandCenter";
 import { getUsersOverview } from "@/lib/db/admin-users";
 import { UsersPanel } from "./UsersPanel";
+import { AdminShell, type AdminSection } from "./AdminShell";
+import type { SummaryData } from "./DashboardSummary";
 
 export const dynamic = "force-dynamic";
 
@@ -205,50 +206,63 @@ export default async function AdminPage() {
   const waAccent = s.whatsapp.percent >= 80 ? "text-danger" : s.whatsapp.percent >= 60 ? "text-warning" : "text-success";
   const waBar = s.whatsapp.percent >= 80 ? "bg-danger" : s.whatsapp.percent >= 60 ? "bg-warning" : "bg-success";
 
-  return (
-    <div className="min-h-dvh bg-background text-foreground">
-      {/* Header */}
-      <header className="border-b border-border bg-surface/60 backdrop-blur px-4 md:px-6 py-4 flex items-center justify-between gap-3">
-        <LogoFull size="xs" />
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted truncate max-w-[45vw] md:max-w-none">Admin · {user.email}</span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-0.5 text-[10px] font-semibold text-success uppercase tracking-widest">
-            <span className="h-1.5 w-1.5 rounded-full bg-success" />
-            Live
-          </span>
-        </div>
-      </header>
+  // Resumen para la primera pestaña (Dashboard). Solo números ya calculados.
+  const summary: SummaryData = {
+    totalUsers:     business.overview.totalUsers,
+    nsm:            business.overview.nsm,
+    wau:            business.overview.wau,
+    mau:            business.overview.mau,
+    stickiness:     business.overview.stickiness,
+    activationRate: business.overview.activationRate,
+    activatedUsers: business.overview.activatedUsers,
+    signups7d:      business.overview.signups7d,
+    premiumActive:  business.monetization.premiumActive,
+    conversion:     business.monetization.conversion,
+    dormant30plus:  business.dormancy.dormant30plus,
+    neverActivated: business.dormancy.neverActivated,
+    txThisMonth:    s.transactions.thisMonth,
+    txLast30:       s.transactions.last30,
+    waitlistTotal:  s.waitlist.total,
+    waitlistWeek:   s.waitlist.newWeek,
+    whatsappUsers:  s.users.withWhatsapp,
+    whatsappPercent: s.whatsapp.percent,
+    feedbackCount:  feedback.length,
+    updatedAt:      now.toLocaleString("es-AR"),
+  };
 
-      <main className="mx-auto max-w-5xl px-4 md:px-6 py-8 md:py-10 space-y-10">
-
-        {/* Title */}
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold">Centro de comando</h1>
-          <p className="text-sm text-muted">
-            La salud del negocio de un vistazo — actualizado {now.toLocaleString("es-AR")}
-          </p>
-        </div>
-
-        {/* ── NEGOCIO: North Star, embudo, cohortes, adopción, churn, monetización ── */}
-        <CommandCenter m={business} />
-
-        {/* ── USUARIOS: ficha y análisis por usuario (dónde trabaja / dónde se traba) ── */}
-        <UsersPanel users={users} />
-
-        {/* ── OPERATIVO ── */}
-        <div className="pt-2">
-          <h2 className="text-sm font-bold text-foreground border-b border-border pb-2">
-            Operativo &amp; evolución
-          </h2>
-        </div>
-
-        {/* Analítica: evolución histórica, embudo de onboarding, conectados, reactivación */}
-        <AdminAnalytics data={analytics} domainStatus={domainStatus} gmailReady={!!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)} />
-
-        {/* Seguimiento de la campaña de reactivación */}
-        <ReactivationFollowup data={followup} />
-
-        {/* Feedback de testers — lo primero del beta */}
+  // Cada sección se renderiza en el server y se pasa como `node`; AdminShell
+  // (client) solo muestra la de la pestaña activa.
+  const sections: AdminSection[] = [
+    {
+      key: "negocio",
+      label: "Negocio",
+      node: <CommandCenter m={business} />,
+    },
+    {
+      key: "usuarios",
+      label: "Usuarios",
+      node: <UsersPanel users={users} />,
+    },
+    {
+      key: "analitica",
+      label: "Analítica",
+      node: (
+        <AdminAnalytics
+          data={analytics}
+          domainStatus={domainStatus}
+          gmailReady={!!(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)}
+        />
+      ),
+    },
+    {
+      key: "reactivacion",
+      label: "Reactivación",
+      node: <ReactivationFollowup data={followup} />,
+    },
+    {
+      key: "feedback",
+      label: "Feedback",
+      node: (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
             Feedback de testers ({feedback.length})
@@ -272,8 +286,12 @@ export default async function AdminPage() {
             </div>
           )}
         </section>
-
-        {/* Waitlist — primera sección porque es lo que se llena ahora */}
+      ),
+    },
+    {
+      key: "waitlist",
+      label: "Waitlist",
+      node: (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
             Lista de espera (/waitlist)
@@ -307,8 +325,12 @@ export default async function AdminPage() {
             </div>
           )}
         </section>
-
-        {/* Bot de WhatsApp */}
+      ),
+    },
+    {
+      key: "whatsapp",
+      label: "WhatsApp",
+      node: (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
             Bot de WhatsApp — {monthName}
@@ -329,8 +351,12 @@ export default async function AdminPage() {
             </p>
           </div>
         </section>
-
-        {/* Encryption migration */}
+      ),
+    },
+    {
+      key: "herramientas",
+      label: "Herramientas",
+      node: (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
             Herramientas de datos
@@ -366,8 +392,9 @@ export default async function AdminPage() {
             <ReactivarDormidosButton />
           </div>
         </section>
+      ),
+    },
+  ];
 
-      </main>
-    </div>
-  );
+  return <AdminShell summary={summary} sections={sections} userEmail={user.email ?? ""} />;
 }
