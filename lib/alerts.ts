@@ -25,6 +25,31 @@ export async function bumpDailyCounter(prefix: string, day: string): Promise<num
   return Number(rows[0]?.value ?? "1");
 }
 
+/** Avisa al dueño por push + WhatsApp (sin throttle). Para eventos importantes. */
+export async function notifyAdmin(title: string, body: string): Promise<void> {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (!adminEmail) return;
+  const owner = await prisma.profile.findFirst({ where: { email: adminEmail }, select: { id: true, whatsappNumber: true } });
+  if (!owner) return;
+  await sendPushToUser(owner.id, { title, body, url: "/admin" }).catch(() => {});
+  if (owner.whatsappNumber) await sendText(owner.whatsappNumber, `${title}\n${body}`).catch(() => {});
+}
+
+/**
+ * Un usuario pidió soporte que el bot no pudo resolver: avisa al dueño con quién
+ * fue y el problema. Throttle corto por usuario (2 min) para no duplicar.
+ */
+export async function notifySupportRequest(fromUserId: string, motivo: string): Promise<void> {
+  const key = `support_last:${fromUserId}`;
+  const last = Number((await flagGet(key)) ?? "0");
+  if (Date.now() - last < 2 * 60_000) return;
+  await flagSet(key, String(Date.now()));
+
+  const prof = await prisma.profile.findFirst({ where: { id: fromUserId }, select: { name: true, whatsappNumber: true, email: true } });
+  const who = prof?.name || prof?.whatsappNumber || prof?.email || fromUserId.slice(0, 8);
+  await notifyAdmin("🆘 Soporte — un usuario necesita ayuda", `${who}: ${motivo.slice(0, 400)}`);
+}
+
 /**
  * Manda una alerta al dueño por push + WhatsApp, pero NO más de una vez cada
  * `minMinutes` (para no spamear). Devuelve true si la envió.

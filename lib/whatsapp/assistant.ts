@@ -39,7 +39,7 @@ import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import { format as formatDateFn } from "date-fns";
 import { getChatHistory, saveChatTurn, getMemory, addMemory, type ChatTurn } from "@/lib/whatsapp/memory";
 import { geminiEnabled, geminiChatJson, openaiChatJson, LlmError } from "@/lib/ai/chat";
-import { notifyAdminThrottled, bumpDailyCounter } from "@/lib/alerts";
+import { notifyAdminThrottled, bumpDailyCounter, notifySupportRequest } from "@/lib/alerts";
 import { todayStringArg } from "@/lib/timezone";
 
 type Intent = "action" | "query" | "chat";
@@ -88,6 +88,7 @@ interface Action {
   eventStart?: string; // agendar_evento / editar_evento: inicio ARG "YYYY-MM-DDTHH:mm"
   durationMin?: number; // agendar_evento / editar_evento: duración en minutos (default 60)
   eventRef?: number; // borrar_evento / editar_evento: [#N] de AGENDA
+  motivo?: string;   // escalar_soporte: resumen del problema a derivar al equipo
 }
 
 interface AssistantOutput {
@@ -394,6 +395,31 @@ ayudás de verdad primero y, si viene al caso, recién ahí ofrecés lo de la ap
 salud/legal/impositivo específico o algo que no sabés con certeza, das una orientación útil y
 sugerís confirmarlo con un profesional — pero jamás dejás al usuario sin una respuesta que sume.
 
+SOPORTE TÉCNICO DE control.io — TAMBIÉN sos el soporte de la app: si el usuario pregunta CÓMO se usa
+algo, DÓNDE está una función o algo NO le funciona, resolvele la duda con pasos claros y cortos.
+NUNCA lo dejes sin solución: explicá el paso a paso; y si no alcanza (hay un error/bug, algo roto, o
+pide hablar con una persona), emití la acción "escalar_soporte" y avisale que lo derivaste. Conocés la app:
+• QUÉ ES: control.io es un gestor de finanzas personales. Se usa por acá (WhatsApp) y por la web
+  (controlio.site); lo que cargás en un lado aparece en el otro.
+• CARGAR GASTOS/INGRESOS por WhatsApp: escribí el movimiento ("gasté 3000 en el súper"), mandá un
+  AUDIO, o la FOTO de un ticket — se registra solo.
+• VINCULAR WHATSAPP: en la web, en Inicio, tocá "Vincular WhatsApp" (abre este chat con un código;
+  con un toque quedás vinculado). Si un número no está vinculado, no se le puede cargar nada.
+• CUENTAS: en "Cuentas" creás Efectivo, Mercado Pago, banco, etc. Para fijar el saldo real, decí
+  "en Mercado Pago tengo 50.000". Cada gasto/ingreso real necesita una cuenta.
+• MOVIMIENTOS: en "Movimientos" se ve y edita todo lo cargado.
+• PLANIFICÁ: Presupuestos (tope por categoría), Metas (objetivos de ahorro) y Recordatorios
+  recurrentes (avisos que se repiten).
+• ORGANIZACIÓN: Calendario y Tareas; si conecta Google, también su agenda de Google Calendar.
+• DEUDAS y CUOTAS: lo que debés/te deben y las cuotas de tarjeta. GRUPOS: gastos compartidos.
+• ANÁLISIS: Reporte, Tendencias y Gastos hormiga. COTIZACIONES: dólar (oficial/MEP/blue). NEWSLETTER:
+  resumen automático de tus finanzas.
+• NOTIFICACIONES: para recibir avisos/recordatorios, instalá la app (en el navegador → "Agregar a
+  pantalla de inicio") y permití notificaciones.
+• PRIVACIDAD: los datos están cifrados y son privados de cada usuario.
+Si no sabés algo con certeza del sistema o el usuario reporta que algo falla, NO inventes: escalá con
+"escalar_soporte" { motivo } y decile que el equipo lo va a contactar.
+
 HONESTIDAD: nunca inventes NÚMEROS del usuario (usá solo los del sistema de abajo) ni datos que no
 sabés con certeza. Si falta info, pedila corta. Confianza en el tono, cero invento en los hechos.
 Respuestas BREVES (es WhatsApp), claras y útiles.
@@ -494,6 +520,7 @@ TIPOS DE ACCIÓN (campo "type"):
 - "delete_transaction": { ref }                                // ref = número [#N] de la lista
 - "update_transaction": { ref, amount, description, category, account }  // solo los campos a cambiar
 - "remember": { fact }   // guardar un DATO DURABLE del usuario (cómo es su plata/vida: "cobro los días 10", "mi alquiler es 200k"). NO es una tarea.
+- "escalar_soporte": { motivo }   // DERIVAR al equipo humano de soporte cuando NO podés resolver una duda del SISTEMA, el usuario reporta un ERROR/bug o algo roto, o pide hablar con una persona. motivo = resumen corto del problema. Primero SIEMPRE intentá resolverlo vos con los pasos; usá esto solo si de verdad no alcanza. Tras emitirlo, "answer" avisa que se derivó.
 ${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, dueDate }   // un PENDIENTE/recordatorio a HACER ("recordame entregar el TP el martes", "tengo que comprar pilas", "anotá llamar al banco"). dueDate "YYYY-MM-DD" opcional, relativo a HOY. Diferente de "remember": esto es algo PENDIENTE, no un dato.
 - "complete_task": { taskRef, title }   // marcar una tarea como HECHA ("marcá comprar pan como hecha", "ya entregué el TP", "listo lo de las pilas"). Pasá taskRef = [#N] de TUS TAREAS PENDIENTES, Y TAMBIÉN title = el texto de la tarea (ej: "comprar pan"). Siempre mandá title.
 - "delete_task": { taskRef }   // borrar/cancelar una tarea. taskRef = [#N] de TUS TAREAS PENDIENTES.` : ``}
@@ -1000,6 +1027,12 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       if (!r.ok) throw new Error(r.error ?? "no pude editar el evento");
       const cuando = patch.start ? ` — ${formatDateFn(toZonedTime(patch.start, ARG_TZ), "dd/MM 'a las' HH:mm")}` : "";
       return `✏️ Listo, actualicé el evento: ${patch.summary ?? ev.summary}${cuando}`;
+    }
+
+    case "escalar_soporte": {
+      const motivo = (a.motivo || a.description || "consulta de soporte").toString().slice(0, 400);
+      await notifySupportRequest(userId, motivo).catch(() => {});
+      return "🆘 Listo, lo derivé al equipo de soporte de control.io — te van a contactar para resolverlo. Si mientras tanto puedo ayudarte con otra cosa, decime 👍";
     }
 
     default:
