@@ -33,6 +33,10 @@ const DAY_NAME: Record<number, string> = { 0: "Domingo", 1: "Lunes", 2: "Martes"
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 const MASTERY_META: Record<string, { label: string; dot: string; text: string; ring: string }> = {
+  // "Nuevo" no es un valor guardado: es el estado visual de un bloque que
+  // todavía no se estudió (reviewCount === 0). El dato en la base sigue siendo
+  // ROJO para que el motor de repetición no cambie.
+  NUEVO: { label: "Nuevo", dot: "bg-slate-400", text: "text-slate-400", ring: "ring-slate-400/40" },
   ROJO: { label: "Rojo", dot: "bg-red-500", text: "text-red-500", ring: "ring-red-500/40" },
   AMARILLO: { label: "Amarillo", dot: "bg-amber-500", text: "text-amber-500", ring: "ring-amber-500/40" },
   VERDE: { label: "Verde", dot: "bg-emerald-500", text: "text-emerald-500", ring: "ring-emerald-500/40" },
@@ -55,8 +59,13 @@ function fmtDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString("es-AR", { day: "2-digit", month: "short" });
 }
 
-function MasteryBadge({ level }: { level: string }) {
-  const m = MASTERY_META[level] ?? MASTERY_META.ROJO;
+// Un bloque sin estudiar (reviewCount === 0) se muestra como "Nuevo".
+function effectiveLevel(level: string, reviewCount?: number): string {
+  return reviewCount === 0 ? "NUEVO" : level;
+}
+
+function MasteryBadge({ level, reviewCount }: { level: string; reviewCount?: number }) {
+  const m = MASTERY_META[effectiveLevel(level, reviewCount)] ?? MASTERY_META.ROJO;
   return (
     <span className={cn("inline-flex items-center gap-1.5 text-[11px] font-semibold", m.text)}>
       <span className={cn("h-2 w-2 rounded-full", m.dot)} /> {m.label}
@@ -152,7 +161,7 @@ function CloseSessionModal({
             })}
           </div>
           <p className="text-[11px] text-muted mt-1.5">
-            Rojo = no lo entendí · Amarillo = a medias · Verde = lo pude explicar solo · Consolidado = lo domino hace varios repasos
+            Rojo = estudiado, pero no entendido · Amarillo = entendido con ayuda · Verde = resuelto sin ayuda · Consolidado = resuelto correctamente en repasos separados
           </p>
         </div>
 
@@ -859,7 +868,7 @@ export function StudySystemClient({
                 </div>
               </div>
               {planItems.map((it) => {
-                const m = MASTERY_META[it.masteryLevel] ?? MASTERY_META.ROJO;
+                const m = MASTERY_META[effectiveLevel(it.masteryLevel, it.reviewCount)] ?? MASTERY_META.ROJO;
                 return (
                   <div key={it.id} className={cn("rounded-2xl border bg-surface p-4 space-y-2.5", it.overdueDays > 0 ? "border-danger/40" : "border-border")}>
                     <div className="flex items-start justify-between gap-3">
@@ -867,7 +876,7 @@ export function StudySystemClient({
                         <p className="text-[11px] font-mono text-muted">{it.code} · {it.subjectCode}</p>
                         <p className="text-sm font-semibold text-foreground">{it.topic}</p>
                       </div>
-                      <MasteryBadge level={it.masteryLevel} />
+                      <MasteryBadge level={it.masteryLevel} reviewCount={it.reviewCount} />
                     </div>
                     <p className="text-xs text-foreground/80 rounded-lg bg-surface-2/40 px-3 py-2">{it.activity}</p>
                     {it.lastError && (
@@ -1030,7 +1039,7 @@ export function StudySystemClient({
                         <td className="px-2 py-2"><input type="checkbox" checked={selectedIds.has(b.id)} onChange={() => toggleSel(b.id)} className="h-3.5 w-3.5 accent-primary" /></td>
                         <td className="px-3 py-2 font-mono text-[11px] text-muted whitespace-nowrap">{b.code}</td>
                         <td className="px-3 py-2 text-foreground max-w-[150px] truncate" title={b.topic}>{b.topic}</td>
-                        <td className="px-3 py-2"><MasteryBadge level={b.masteryLevel} /></td>
+                        <td className="px-3 py-2"><MasteryBadge level={b.masteryLevel} reviewCount={b.reviewCount} /></td>
                         <td className="px-3 py-2 max-w-[160px]">
                           {b.lastError ? (
                             <span className="inline-flex items-center gap-1 text-[11px] text-amber-500" title={b.lastError}>

@@ -21,10 +21,10 @@ const TRACKS = [
 ];
 
 const MASTERY = [
-  { k: "ROJO", label: "Rojo", hint: "no lo entendí", dot: "bg-red-500", ring: "ring-red-500/50", text: "text-red-500" },
-  { k: "AMARILLO", label: "Amarillo", hint: "a medias", dot: "bg-amber-500", ring: "ring-amber-500/50", text: "text-amber-500" },
-  { k: "VERDE", label: "Verde", hint: "lo expliqué solo", dot: "bg-emerald-500", ring: "ring-emerald-500/50", text: "text-emerald-500" },
-  { k: "CONSOLIDADO", label: "Consolidado", hint: "lo domino", dot: "bg-sky-500", ring: "ring-sky-500/50", text: "text-sky-500" },
+  { k: "ROJO", label: "Rojo", hint: "estudiado, no entendido", dot: "bg-red-500", ring: "ring-red-500/50", text: "text-red-500" },
+  { k: "AMARILLO", label: "Amarillo", hint: "entendido con ayuda", dot: "bg-amber-500", ring: "ring-amber-500/50", text: "text-amber-500" },
+  { k: "VERDE", label: "Verde", hint: "resuelto sin ayuda", dot: "bg-emerald-500", ring: "ring-emerald-500/50", text: "text-emerald-500" },
+  { k: "CONSOLIDADO", label: "Consolidado", hint: "resuelto en repasos separados", dot: "bg-sky-500", ring: "ring-sky-500/50", text: "text-sky-500" },
 ];
 
 function fmt(sec: number): string {
