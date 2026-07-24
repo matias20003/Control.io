@@ -18,6 +18,8 @@ const configSchema = z.object({
   isActive: z.boolean().optional(),
   sendHour: z.number().int().min(0).max(23).optional(),
   notifyOnReady: z.boolean().optional(),
+  notifyPush: z.boolean().optional(),
+  notifyWhatsapp: z.boolean().optional(),
 });
 
 export async function saveNewsletterConfigAction(input: {
@@ -28,6 +30,8 @@ export async function saveNewsletterConfigAction(input: {
   isActive?: boolean;
   sendHour?: number;
   notifyOnReady?: boolean;
+  notifyPush?: boolean;
+  notifyWhatsapp?: boolean;
 }) {
   const supabase = await createClient();
   const {

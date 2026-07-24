@@ -22,6 +22,7 @@ import {
   Bell,
   BadgeCheck,
   ShieldCheck,
+  MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,9 +66,8 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
   const [priority, setPriority] = useState<string[]>(initialConfig.priorityTopics);
   const [isActive, setIsActive] = useState<boolean>(initialConfig.isActive);
   const [sendHour, setSendHour] = useState<number>(initialConfig.sendHour);
-  const [notifyOnReady, setNotifyOnReady] = useState<boolean>(
-    initialConfig.notifyOnReady
-  );
+  const [notifyPush, setNotifyPush] = useState<boolean>(initialConfig.notifyPush);
+  const [notifyWhatsapp, setNotifyWhatsapp] = useState<boolean>(initialConfig.notifyWhatsapp);
   const [topicInput, setTopicInput] = useState("");
 
   const [showConfig, setShowConfig] = useState(initialConfig.topics.length === 0);
@@ -94,8 +94,9 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
       JSON.stringify(priority) !== JSON.stringify(config.priorityTopics) ||
       isActive !== config.isActive ||
       sendHour !== config.sendHour ||
-      notifyOnReady !== config.notifyOnReady,
-    [topics, priority, isActive, sendHour, notifyOnReady, config]
+      notifyPush !== config.notifyPush ||
+      notifyWhatsapp !== config.notifyWhatsapp,
+    [topics, priority, isActive, sendHour, notifyPush, notifyWhatsapp, config]
   );
 
   const addTopic = () => {
@@ -132,7 +133,9 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
         country: config.country,
         isActive,
         sendHour,
-        notifyOnReady,
+        notifyOnReady: notifyPush || notifyWhatsapp,
+        notifyPush,
+        notifyWhatsapp,
       });
       if (res.error) toast.error(res.error);
       else if (res.success && res.config) {
@@ -141,7 +144,8 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
         setPriority(res.config.priorityTopics);
         setIsActive(res.config.isActive);
         setSendHour(res.config.sendHour);
-        setNotifyOnReady(res.config.notifyOnReady);
+        setNotifyPush(res.config.notifyPush);
+        setNotifyWhatsapp(res.config.notifyWhatsapp);
         toast.success("Preferencias guardadas");
       }
     });
@@ -327,33 +331,58 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
               )}
             </div>
 
-            {/* Recordatorio: el aviso que te trae de vuelta a leerla */}
+            {/* Recordatorio: el aviso que te trae de vuelta a leerla (push y WhatsApp por separado) */}
             {isActive && (
               <div className="rounded-xl border border-border bg-surface-2/40 p-3.5 space-y-3">
+                <div>
+                  <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                    <Bell size={13} className="text-primary" /> Avisarme cuando esté lista
+                  </p>
+                  <p className="text-xs text-muted mt-0.5">
+                    Elegí por dónde querés el aviso que te lleva directo a leerla. Podés activar uno, el otro, o los dos.
+                  </p>
+                </div>
+
+                {/* Push */}
                 <label className="flex items-start gap-2.5 text-sm text-foreground cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={notifyOnReady}
-                    onChange={(e) => setNotifyOnReady(e.target.checked)}
+                    checked={notifyPush}
+                    onChange={(e) => setNotifyPush(e.target.checked)}
                     className="h-4 w-4 mt-0.5 accent-primary shrink-0"
                   />
                   <span className="leading-snug">
                     <span className="flex items-center gap-1.5 font-medium">
-                      <Bell size={13} className="text-primary" />
-                      Recordarme con una notificación cuando esté lista
+                      <Bell size={13} className="text-primary" /> Notificación push
                     </span>
                     <span className="text-xs text-muted">
-                      Un push al celular (y WhatsApp si lo tenés vinculado) que te
-                      lleva directo a leerla. Así no te olvidás de entrar.
+                      Un aviso en el celular o el navegador (hay que permitir notificaciones).
                     </span>
                   </span>
                 </label>
-
-                {notifyOnReady && (
+                {notifyPush && (
                   <div className="pl-6">
                     <EnablePushInline />
                   </div>
                 )}
+
+                {/* WhatsApp */}
+                <label className="flex items-start gap-2.5 text-sm text-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notifyWhatsapp}
+                    onChange={(e) => setNotifyWhatsapp(e.target.checked)}
+                    className="h-4 w-4 mt-0.5 accent-primary shrink-0"
+                  />
+                  <span className="leading-snug">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <MessageCircle size={13} className="text-primary" /> WhatsApp
+                    </span>
+                    <span className="text-xs text-muted">
+                      Te llega el resumen por WhatsApp (necesitás tu número vinculado).
+                    </span>
+                  </span>
+                </label>
               </div>
             )}
 

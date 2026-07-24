@@ -10,6 +10,8 @@ export type SerializedConfig = {
   isActive: boolean;
   sendHour: number;
   notifyOnReady: boolean;
+  notifyPush: boolean;
+  notifyWhatsapp: boolean;
 };
 
 export type SerializedEdition = {
@@ -29,6 +31,8 @@ const DEFAULT_CONFIG: SerializedConfig = {
   isActive: true,
   sendHour: 8,
   notifyOnReady: true,
+  notifyPush: true,
+  notifyWhatsapp: true,
 };
 
 export async function getConfig(userId: string): Promise<SerializedConfig> {
@@ -42,6 +46,8 @@ export async function getConfig(userId: string): Promise<SerializedConfig> {
     isActive: row.isActive,
     sendHour: row.sendHour,
     notifyOnReady: row.notifyOnReady,
+    notifyPush: row.notifyPush,
+    notifyWhatsapp: row.notifyWhatsapp,
   };
 }
 
@@ -76,6 +82,8 @@ export async function upsertConfig(
       isActive: data.isActive ?? true,
       sendHour: sendHour ?? 8,
       notifyOnReady: data.notifyOnReady ?? true,
+      notifyPush: data.notifyPush ?? true,
+      notifyWhatsapp: data.notifyWhatsapp ?? true,
     },
     update: {
       ...(data.topics !== undefined ? { topics } : {}),
@@ -89,6 +97,8 @@ export async function upsertConfig(
       ...(data.notifyOnReady !== undefined
         ? { notifyOnReady: data.notifyOnReady }
         : {}),
+      ...(data.notifyPush !== undefined ? { notifyPush: data.notifyPush } : {}),
+      ...(data.notifyWhatsapp !== undefined ? { notifyWhatsapp: data.notifyWhatsapp } : {}),
     },
   });
 
@@ -100,6 +110,8 @@ export async function upsertConfig(
     isActive: row.isActive,
     sendHour: row.sendHour,
     notifyOnReady: row.notifyOnReady,
+    notifyPush: row.notifyPush,
+    notifyWhatsapp: row.notifyWhatsapp,
   };
 }
 
@@ -198,6 +210,8 @@ export type ActiveConfig = {
   country: string;
   sendHour: number;
   notifyOnReady: boolean;
+  notifyPush: boolean;
+  notifyWhatsapp: boolean;
   whatsappNumber: string | null;
 };
 
@@ -213,6 +227,8 @@ export async function getActiveConfigs(): Promise<ActiveConfig[]> {
       country: true,
       sendHour: true,
       notifyOnReady: true,
+      notifyPush: true,
+      notifyWhatsapp: true,
       user: { select: { whatsappNumber: true } },
     },
   });
@@ -226,6 +242,8 @@ export async function getActiveConfigs(): Promise<ActiveConfig[]> {
       country: r.country,
       sendHour: r.sendHour,
       notifyOnReady: r.notifyOnReady,
+      notifyPush: r.notifyPush,
+      notifyWhatsapp: r.notifyWhatsapp,
       whatsappNumber: r.user?.whatsappNumber ?? null,
     }));
 }

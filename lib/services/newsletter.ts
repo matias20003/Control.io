@@ -63,24 +63,27 @@ function buildWhatsappDigest(articles: AnalyzedArticle[], summary: string): stri
   return `📰 *Tu newsletter de hoy*\n\n${summary}${top}\n\nLeelo completo 👉 ${SITE_URL}/newsletter`;
 }
 
-/** Avisa al usuario que su edición está lista (push + WhatsApp, best-effort). */
+/** Avisa al usuario que su edición está lista, según los canales que activó. */
 async function notifyEditionReady(
   userId: string,
   edition: SerializedEdition,
-  whatsappNumber: string | null
+  whatsappNumber: string | null,
+  channels: { push: boolean; whatsapp: boolean }
 ): Promise<void> {
   const bodyShort =
     edition.summary.length > 160
       ? edition.summary.slice(0, 157).trimEnd() + "…"
       : edition.summary;
 
-  await sendPushToUser(userId, {
-    title: "📰 Tu newsletter de hoy",
-    body: bodyShort || "Ya está lista tu edición de noticias del día.",
-    url: "/newsletter",
-  }).catch(() => {});
+  if (channels.push) {
+    await sendPushToUser(userId, {
+      title: "📰 Tu newsletter de hoy",
+      body: bodyShort || "Ya está lista tu edición de noticias del día.",
+      url: "/newsletter",
+    }).catch(() => {});
+  }
 
-  if (whatsappNumber) {
+  if (channels.whatsapp && whatsappNumber) {
     await sendText(
       whatsappNumber,
       buildWhatsappDigest(edition.articles, edition.summary)
@@ -163,8 +166,11 @@ export async function generateEditionsForHour(hour: number): Promise<{
 
       // Avisamos solo la primera vez del día, si hay algo que leer y si el
       // usuario tiene el recordatorio activado.
-      if (cfg.notifyOnReady && !alreadyExisted && result.count > 0) {
-        await notifyEditionReady(cfg.userId, result.edition, cfg.whatsappNumber);
+      if ((cfg.notifyPush || cfg.notifyWhatsapp) && !alreadyExisted && result.count > 0) {
+        await notifyEditionReady(cfg.userId, result.edition, cfg.whatsappNumber, {
+          push: cfg.notifyPush,
+          whatsapp: cfg.notifyWhatsapp,
+        });
         notified++;
       }
     } catch (err) {
