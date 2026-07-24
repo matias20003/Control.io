@@ -16,11 +16,13 @@ type Provider = { url: string; key: string; models: string[]; extraHeaders: Reco
 function aiProvider(): Provider | null {
   const gem = process.env.GEMINI_API_KEY;
   if (gem) {
-    // Primario + fallback: flash-latest tiene cupo bajo en el plan gratis
-    // (10 req/min); flash-lite-latest tiene más margen (15/min, 1000/día).
-    // Si el primero da 429, callChat cae al segundo.
-    const primary = process.env.STUDY_AGENT_MODEL ?? "gemini-flash-latest";
-    const models = [primary, "gemini-flash-lite-latest"].filter((m, i, a) => a.indexOf(m) === i);
+    // Primario = flash-lite: en el plan gratis tiene más cupo (15 req/min,
+    // 1000/día) que flash-latest (10/min, 250/día) y anda igual de bien para
+    // este agente de tool-calling. flash-latest queda de respaldo por si el
+    // primario se satura. El chat dispara varias llamadas por turno, así que el
+    // cupo alto importa más que el modelo "grande".
+    const primary = process.env.STUDY_AGENT_MODEL ?? "gemini-flash-lite-latest";
+    const models = [primary, "gemini-flash-latest"].filter((m, i, a) => a.indexOf(m) === i);
     return {
       url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
       key: gem,

@@ -181,7 +181,13 @@ function aiProvider(): Provider | null {
     return {
       url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
       key: gem,
-      models: [process.env.NEWSLETTER_MODEL_GEMINI ?? "gemini-flash-latest"],
+      // flash-latest primario (mejor criterio editorial; el newsletter corre
+      // 1 vez/día por usuario, así que su cupo alcanza). flash-lite-latest de
+      // respaldo por si flash-latest está saturado (429) → no cae a heurístico.
+      models: [
+        process.env.NEWSLETTER_MODEL_GEMINI ?? "gemini-flash-latest",
+        "gemini-flash-lite-latest",
+      ],
       extraHeaders: {},
     };
   }
