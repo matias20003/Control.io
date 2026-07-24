@@ -39,7 +39,8 @@ import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import { format as formatDateFn } from "date-fns";
 import { getChatHistory, saveChatTurn, getMemory, addMemory, type ChatTurn } from "@/lib/whatsapp/memory";
 import { geminiEnabled, geminiChatJson, openaiChatJson, LlmError } from "@/lib/ai/chat";
-import { notifyAdminThrottled, bumpDailyCounter, notifySupportRequest } from "@/lib/alerts";
+import { notifyAdminThrottled, bumpDailyCounter } from "@/lib/alerts";
+import { escalateSupport } from "@/lib/db/support";
 import { todayStringArg } from "@/lib/timezone";
 
 type Intent = "action" | "query" | "chat";
@@ -1031,7 +1032,7 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
 
     case "escalar_soporte": {
       const motivo = (a.motivo || a.description || "consulta de soporte").toString().slice(0, 400);
-      await notifySupportRequest(userId, motivo).catch(() => {});
+      await escalateSupport(userId, motivo).catch(() => {});
       return "🆘 Listo, lo derivé al equipo de soporte de control.io — te van a contactar para resolverlo. Si mientras tanto puedo ayudarte con otra cosa, decime 👍";
     }
 

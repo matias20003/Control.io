@@ -14,6 +14,8 @@ import { CommandCenter } from "./CommandCenter";
 import { getUsersOverview } from "@/lib/db/admin-users";
 import { UsersPanel } from "./UsersPanel";
 import { AdminShell, type AdminSection } from "./AdminShell";
+import { listSupportTickets } from "@/lib/db/support";
+import { SupportTickets } from "./SupportTickets";
 import type { SummaryData } from "./DashboardSummary";
 
 export const dynamic = "force-dynamic";
@@ -232,7 +234,15 @@ export default async function AdminPage() {
 
   // Cada sección se renderiza en el server y se pasa como `node`; AdminShell
   // (client) solo muestra la de la pestaña activa.
+  const tickets = await listSupportTickets().catch(() => []);
+  const openTickets = tickets.filter((t) => t.status === "abierto").length;
+
   const sections: AdminSection[] = [
+    {
+      key: "soporte",
+      label: openTickets > 0 ? `Soporte (${openTickets})` : "Soporte",
+      node: <SupportTickets initial={tickets} />,
+    },
     {
       key: "negocio",
       label: "Negocio",

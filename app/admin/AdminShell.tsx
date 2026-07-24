@@ -9,7 +9,7 @@
 import { useState, type ReactNode } from "react";
 import {
   LayoutDashboard, TrendingUp, Users, BarChart3, RotateCcw,
-  MessageSquareText, ListChecks, MessageCircle, Wrench,
+  MessageSquareText, ListChecks, MessageCircle, Wrench, LifeBuoy,
 } from "lucide-react";
 import { DashboardSummary, type SummaryData } from "./DashboardSummary";
 
@@ -17,6 +17,7 @@ export type AdminSection = { key: string; label: string; node: ReactNode };
 
 const META: Record<string, { icon: typeof LayoutDashboard; desc: string }> = {
   dashboard:    { icon: LayoutDashboard,    desc: "Resumen general" },
+  soporte:      { icon: LifeBuoy,           desc: "Tickets de soporte del bot" },
   negocio:      { icon: TrendingUp,         desc: "North Star, embudo, cohortes" },
   usuarios:     { icon: Users,              desc: "Ficha y análisis por usuario" },
   analitica:    { icon: BarChart3,          desc: "Evolución, onboarding, conexiones" },

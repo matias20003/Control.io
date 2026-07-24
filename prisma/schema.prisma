@@ -751,6 +751,20 @@ model StudyExam {
   @@map("study_exams")
 }
 
+model SupportTicket {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  fromName    String?   @map("from_name")
+  fromContact String?   @map("from_contact")
+  motivo      String
+  status      String    @default("abierto") // abierto | resuelto
+  createdAt   DateTime  @default(now()) @map("created_at")
+  resolvedAt  DateTime? @map("resolved_at")
+
+  @@index([status, createdAt])
+  @@map("support_tickets")
+}
+
 model StudySettings {
   userId        String   @id @map("user_id")
   planHour      Int      @default(8) @map("plan_hour")
