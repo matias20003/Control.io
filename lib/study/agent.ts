@@ -11,13 +11,20 @@ import { todayStringArg } from "@/lib/timezone";
 
 // Proveedor de IA: preferimos la Gemini API de Google (gratis, endpoint
 // compatible con OpenAI). Si no hay GEMINI_API_KEY, caemos a OpenRouter.
-function aiProvider(): { url: string; key: string; model: string; extraHeaders: Record<string, string> } | null {
+type Provider = { url: string; key: string; models: string[]; extraHeaders: Record<string, string> };
+
+function aiProvider(): Provider | null {
   const gem = process.env.GEMINI_API_KEY;
   if (gem) {
+    // Primario + fallback: flash-latest tiene cupo bajo en el plan gratis
+    // (10 req/min); flash-lite-latest tiene más margen (15/min, 1000/día).
+    // Si el primero da 429, callChat cae al segundo.
+    const primary = process.env.STUDY_AGENT_MODEL ?? "gemini-flash-latest";
+    const models = [primary, "gemini-flash-lite-latest"].filter((m, i, a) => a.indexOf(m) === i);
     return {
       url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
       key: gem,
-      model: process.env.STUDY_AGENT_MODEL ?? "gemini-flash-latest",
+      models,
       extraHeaders: {},
     };
   }
@@ -26,7 +33,7 @@ function aiProvider(): { url: string; key: string; model: string; extraHeaders: 
     return {
       url: "https://openrouter.ai/api/v1/chat/completions",
       key: or,
-      model: process.env.STUDY_AGENT_MODEL ?? "google/gemini-2.5-flash",
+      models: [process.env.STUDY_AGENT_MODEL ?? "google/gemini-2.5-flash"],
       extraHeaders: {
         "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "https://controlio.site",
         "X-Title": "control.io estudio",
@@ -34,6 +41,52 @@ function aiProvider(): { url: string; key: string; model: string; extraHeaders: 
     };
   }
   return null;
+}
+
+// El tool_call trae `extra_content.google.thought_signature`, que Gemini EXIGE
+// que le devolvamos en el siguiente turno. El `& Record<string, unknown>`
+// obliga a conservar esos campos extra al reenviar (si los perdemos → 400).
+type RawToolCall = { id: string; function: { name: string; arguments: string } } & Record<string, unknown>;
+type ChatResponse = { choices?: { message?: { content?: string; tool_calls?: RawToolCall[] } }[] };
+
+const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Llama al chat probando cada modelo con reintentos y backoff. Devuelve la
+// respuesta JSON ya parseada, o el último status de error para mensajería.
+async function callChat(
+  provider: Provider,
+  messages: Record<string, unknown>[],
+): Promise<{ ok: true; data: ChatResponse } | { ok: false; status: number }> {
+  let lastStatus = 0;
+  for (const model of provider.models) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let res: Response;
+      try {
+        res = await fetch(provider.url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${provider.key}`,
+            "Content-Type": "application/json",
+            ...provider.extraHeaders,
+          },
+          body: JSON.stringify({ model, temperature: 0.3, messages, tools: TOOLS, tool_choice: "auto" }),
+        });
+      } catch {
+        lastStatus = 0;
+        break; // error de red: probar el siguiente modelo
+      }
+      if (res.ok) return { ok: true, data: (await res.json()) as ChatResponse };
+      lastStatus = res.status;
+      // 400/401/403 no se arreglan reintentando ni cambiando de modelo con la
+      // misma conversación: cortamos y reportamos.
+      if (!RETRYABLE.has(res.status)) return { ok: false, status: res.status };
+      // 429/5xx: esperamos un poco (deja recuperar la ventana de RPM) y
+      // reintentamos; en la última vuelta se pasa al modelo de fallback.
+      if (attempt < 2) await sleep(700 * (attempt + 1) + 200);
+    }
+  }
+  return { ok: false, status: lastStatus };
 }
 
 export type ChatMsg = { role: "user" | "assistant"; content: string };
@@ -181,32 +234,33 @@ Podés EJECUTAR acciones con las herramientas (crear materias, bloques, exámene
   const actions: string[] = [];
 
   for (let step = 0; step < 6; step++) {
-    let res: Response;
-    try {
-      res = await fetch(provider.url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${provider.key}`,
-          "Content-Type": "application/json",
-          ...provider.extraHeaders,
-        },
-        body: JSON.stringify({ model: provider.model, temperature: 0.3, messages, tools: TOOLS, tool_choice: "auto" }),
-      });
-    } catch {
-      return { reply: "", actions, error: "No pude conectar con la IA. Probá de nuevo." };
+    const r = await callChat(provider, messages);
+    if (!r.ok) {
+      const error =
+        r.status === 429
+          ? "La IA está al límite del uso gratuito por un momento. Esperá unos segundos y probá de nuevo."
+          : r.status === 0
+            ? "No pude conectar con la IA. Probá de nuevo."
+            : "La IA no respondió bien. Probá de nuevo.";
+      // Si ya se ejecutaron acciones antes de cortarse, no las perdemos: las
+      // reportamos igual para que el usuario sepa qué quedó hecho.
+      if (actions.length) {
+        return { reply: `Alcancé a hacer esto: ${actions.join("; ")}. Después la IA se cortó — ${error}`, actions };
+      }
+      return { reply: "", actions, error };
     }
-    if (!res.ok) return { reply: "", actions, error: "La IA no respondió bien. Probá de nuevo." };
 
-    const data = await res.json();
-    const msg = data?.choices?.[0]?.message;
+    const msg = r.data.choices?.[0]?.message;
     if (!msg) return { reply: "", actions, error: "Respuesta vacía de la IA." };
 
-    const toolCalls = msg.tool_calls as { id: string; function: { name: string; arguments: string } }[] | undefined;
+    const toolCalls = msg.tool_calls;
     if (!toolCalls || toolCalls.length === 0) {
       return { reply: (msg.content ?? "").trim() || "Listo.", actions };
     }
 
     // Ejecutar las herramientas pedidas y devolver los resultados al modelo.
+    // OJO: reenviamos `toolCalls` COMPLETO (con extra_content/thought_signature)
+    // o Gemini rechaza el próximo turno con 400.
     messages.push({ role: "assistant", content: msg.content ?? "", tool_calls: toolCalls });
     for (const tc of toolCalls) {
       let args: Record<string, unknown> = {};
