@@ -171,15 +171,44 @@ function buildFromAiItems(
   return analyzed;
 }
 
+type Provider = { url: string; key: string; models: string[]; extraHeaders: Record<string, string> };
+
+// Preferimos la Gemini API de Google (gratis, endpoint compatible con OpenAI).
+// Si no hay GEMINI_API_KEY, caemos a OpenRouter (que puede estar sin crédito).
+function aiProvider(): Provider | null {
+  const gem = process.env.GEMINI_API_KEY;
+  if (gem) {
+    return {
+      url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      key: gem,
+      models: [process.env.NEWSLETTER_MODEL_GEMINI ?? "gemini-2.5-flash"],
+      extraHeaders: {},
+    };
+  }
+  const or = process.env.OPENROUTER_API_KEY;
+  if (or) {
+    return {
+      url: OPENROUTER_URL,
+      key: or,
+      models: MODELS,
+      extraHeaders: {
+        "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "https://control.io",
+        "X-Title": "control.io newsletter",
+      },
+    };
+  }
+  return null;
+}
+
 export async function analyzeNews(
   topics: string[],
   articles: RawArticle[],
   priorityTopics: string[] = [],
   deadlineMs: number = DEFAULT_AI_DEADLINE_MS
 ): Promise<NewsletterAnalysis> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const provider = aiProvider();
 
-  if (!apiKey || articles.length === 0) {
+  if (!provider || articles.length === 0) {
     return heuristicAnalysis(topics, articles, priorityTopics);
   }
 
@@ -220,12 +249,12 @@ Respondé SOLO con JSON válido, sin texto extra, con esta forma exacta:
 
   // Probamos los modelos en orden, acotados a un presupuesto total de tiempo.
   const start = Date.now();
-  for (const model of MODELS) {
+  for (const model of provider.models) {
     const remaining = deadlineMs - (Date.now() - start);
     if (remaining < 5000) break; // sin margen para otra llamada útil
 
     const parsed = await callModel(
-      apiKey,
+      provider,
       model,
       system,
       user,
@@ -261,7 +290,7 @@ type AiParsed = {
 
 /** Una llamada a un modelo. Devuelve el JSON parseado o null si falla. */
 async function callModel(
-  apiKey: string,
+  provider: Provider,
   model: string,
   system: string,
   user: string,
@@ -270,14 +299,13 @@ async function callModel(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(OPENROUTER_URL, {
+    const res = await fetch(provider.url, {
       method: "POST",
       signal: controller.signal,
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${provider.key}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "https://control.io",
-        "X-Title": "control.io newsletter",
+        ...provider.extraHeaders,
       },
       body: JSON.stringify({
         model,
