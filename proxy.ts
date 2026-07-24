@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // hay que dejarlos pasar el proxy o los redirige a /login y nunca corren.
 // /api/estudio/calendar es un feed .ics: los clientes de calendario no mandan
 // cookies, así que debe ser público (se protege con un token secreto en la URL).
-const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/auth", "/presentacion", "/grupos/unirse", "/api/whatsapp", "/api/cron", "/api/qstash", "/api/estudio/calendar", "/privacidad", "/terminos"];
+const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password", "/auth", "/presentacion", "/grupos/unirse", "/api/whatsapp", "/api/cron", "/api/qstash", "/api/estudio/calendar", "/api/diag", "/privacidad", "/terminos"];
 // Rutas públicas con match exacto (para no abrir todo el árbol con startsWith("/")).
 const PUBLIC_EXACT = ["/"];
 
