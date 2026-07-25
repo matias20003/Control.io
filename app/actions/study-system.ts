@@ -22,6 +22,11 @@ import {
   reprogramarVencidos,
   balanceUpcoming,
   createBlocksDistributed,
+  createUnit,
+  renameUnit,
+  deleteUnit,
+  setSubjectGroupLabel,
+  archiveAllBlocks,
 } from "@/lib/db/study-system";
 import { createFocusNote } from "@/lib/db/study";
 import { MASTERY } from "@/lib/study/spaced";
@@ -82,6 +87,7 @@ const subjectSchema = z.object({
   code: z.string().trim().min(1).max(12),
   type: z.enum(["anual", "cuatrimestral"]).optional(),
   color: z.string().trim().max(20).optional(),
+  groupLabel: z.string().trim().max(20).optional(),
 });
 
 export async function createSubjectAction(input: z.infer<typeof subjectSchema>) {
@@ -103,11 +109,13 @@ const blockSchema = z.object({
   parcial: z.number().int().min(1).max(4),
   topic: z.string().trim().min(1).max(160),
   unit: z.string().trim().max(80).optional(),
+  unitId: z.string().trim().max(40).nullish(),
   subtopic: z.string().trim().max(160).optional(),
   summary: z.string().trim().max(8000).optional(),
   source: z.string().trim().max(200).optional(),
   importance: z.number().int().min(1).max(4).optional(),
   difficulty: z.number().int().min(1).max(4).optional(),
+  initialSessions: z.number().int().min(1).max(6).optional(),
 });
 
 export async function createBlockAction(input: z.infer<typeof blockSchema>) {
@@ -121,6 +129,76 @@ export async function createBlockAction(input: z.infer<typeof blockSchema>) {
     return { success: true, block };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "No se pudo crear el bloque" };
+  }
+}
+
+// ── Unidades / Capítulos ──
+const unitSchema = z.object({
+  subjectId: z.string().min(1),
+  name: z.string().trim().min(1).max(80),
+});
+
+export async function createUnitAction(input: z.infer<typeof unitSchema>) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const parsed = unitSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  try {
+    const unit = await createUnit(userId, parsed.data);
+    revalidatePath("/estudio");
+    return { success: true, unit };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "No se pudo crear la unidad" };
+  }
+}
+
+export async function renameUnitAction(unitId: string, name: string) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  if (!name.trim()) return { error: "Nombre vacío" };
+  try {
+    await renameUnit(userId, unitId, name);
+    revalidatePath("/estudio");
+    return { success: true };
+  } catch {
+    return { error: "No se pudo renombrar" };
+  }
+}
+
+export async function deleteUnitAction(unitId: string) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  try {
+    await deleteUnit(userId, unitId);
+    revalidatePath("/estudio");
+    return { success: true };
+  } catch {
+    return { error: "No se pudo eliminar la unidad" };
+  }
+}
+
+export async function setGroupLabelAction(subjectId: string, label: string) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  try {
+    await setSubjectGroupLabel(userId, subjectId, label);
+    revalidatePath("/estudio");
+    return { success: true };
+  } catch {
+    return { error: "No se pudo guardar" };
+  }
+}
+
+/** "Empezar limpio": archiva todos los bloques (o los de una materia). Conserva el historial. */
+export async function archiveAllBlocksAction(subjectId?: string) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  try {
+    const count = await archiveAllBlocks(userId, subjectId);
+    revalidatePath("/estudio");
+    return { success: true, count };
+  } catch {
+    return { error: "No se pudo archivar" };
   }
 }
 

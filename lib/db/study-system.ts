@@ -25,7 +25,15 @@ export type SubjectDTO = {
   type: string;
   color: string | null;
   active: boolean;
+  groupLabel: string; // cómo llama a su agrupación: "Unidad" | "Capítulo" | …
   blockCount: number;
+};
+
+export type UnitDTO = {
+  id: string;
+  subjectId: string;
+  name: string;
+  order: number;
 };
 
 export type BlockDTO = {
@@ -84,13 +92,60 @@ export async function listSubjects(userId: string): Promise<SubjectDTO[]> {
     type: s.type,
     color: s.color,
     active: s.active,
+    groupLabel: s.groupLabel,
     blockCount: countMap.get(s.id) ?? 0,
   }));
 }
 
+// ─────────────────────────────────────────────
+// Unidades / Capítulos (agrupación dentro de la materia)
+// ─────────────────────────────────────────────
+export async function listUnits(userId: string, subjectId?: string): Promise<UnitDTO[]> {
+  const units = await prisma.studyUnit.findMany({
+    where: { userId, ...(subjectId ? { subjectId } : {}) },
+    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+  });
+  return units.map((u) => ({ id: u.id, subjectId: u.subjectId, name: u.name, order: u.order }));
+}
+
+export async function createUnit(
+  userId: string,
+  input: { subjectId: string; name: string; order?: number }
+): Promise<UnitDTO> {
+  const subject = await prisma.studySubject.findFirst({ where: { id: input.subjectId, userId }, select: { id: true } });
+  if (!subject) throw new Error("Materia no encontrada");
+  const order = input.order ?? (await prisma.studyUnit.count({ where: { userId, subjectId: input.subjectId } }));
+  const u = await prisma.studyUnit.create({
+    data: { userId, subjectId: input.subjectId, name: input.name.trim(), order },
+  });
+  return { id: u.id, subjectId: u.subjectId, name: u.name, order: u.order };
+}
+
+export async function renameUnit(userId: string, unitId: string, name: string): Promise<void> {
+  await prisma.studyUnit.updateMany({ where: { id: unitId, userId }, data: { name: name.trim() } });
+}
+
+/** Elimina la unidad; sus temas quedan sin unidad (unitId → null), no se borran. */
+export async function deleteUnit(userId: string, unitId: string): Promise<void> {
+  await prisma.studyUnit.deleteMany({ where: { id: unitId, userId } });
+}
+
+export async function setSubjectGroupLabel(userId: string, subjectId: string, label: string): Promise<void> {
+  await prisma.studySubject.updateMany({ where: { id: subjectId, userId }, data: { groupLabel: label.trim() || "Unidad" } });
+}
+
+/** "Empezar limpio": archiva todos los bloques (conserva historial) y opcionalmente sus unidades. */
+export async function archiveAllBlocks(userId: string, subjectId?: string): Promise<number> {
+  const res = await prisma.studyBlock.updateMany({
+    where: { userId, status: { not: "ARCHIVADO" }, ...(subjectId ? { subjectId } : {}) },
+    data: { status: "ARCHIVADO" },
+  });
+  return res.count;
+}
+
 export async function createSubject(
   userId: string,
-  input: { name: string; code: string; type?: string; color?: string | null }
+  input: { name: string; code: string; type?: string; color?: string | null; groupLabel?: string }
 ): Promise<SubjectDTO> {
   const s = await prisma.studySubject.create({
     data: {
@@ -99,9 +154,10 @@ export async function createSubject(
       code: input.code.toUpperCase(),
       type: input.type ?? "cuatrimestral",
       color: input.color ?? null,
+      groupLabel: input.groupLabel?.trim() || "Unidad",
     },
   });
-  return { id: s.id, name: s.name, code: s.code, type: s.type, color: s.color, active: s.active, blockCount: 0 };
+  return { id: s.id, name: s.name, code: s.code, type: s.type, color: s.color, active: s.active, groupLabel: s.groupLabel, blockCount: 0 };
 }
 
 // ─────────────────────────────────────────────
