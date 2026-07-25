@@ -29,7 +29,7 @@ import { StudyCalendar } from "./StudyCalendar";
 import { FocusMode } from "./FocusMode";
 import { StudyChat } from "./StudyChat";
 
-type Tab = "hoy" | "materias" | "tabla" | "parciales" | "pendientes";
+type Tab = "hoy" | "materias" | "temas" | "tabla" | "parciales" | "pendientes";
 
 const DAY_NAME: Record<number, string> = { 0: "Domingo", 1: "Lunes", 2: "Martes", 3: "Miércoles", 4: "Jueves", 5: "Viernes", 6: "Sábado" };
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -974,6 +974,7 @@ export function StudySystemClient({
   const [units, setUnits] = useState(initialUnits);
   const [expSubjects, setExpSubjects] = useState<Set<string>>(new Set());
   const [expUnits, setExpUnits] = useState<Set<string>>(new Set());
+  const [expTemas, setExpTemas] = useState<Set<string>>(new Set());
   const [exams, setExams] = useState(initialExams);
   const [exercises, setExercises] = useState(initialExercises);
   const [avail, setAvail] = useState(availability);
@@ -1072,7 +1073,8 @@ export function StudySystemClient({
   const TABS: { id: Tab; label: string; icon: typeof CalendarClock }[] = [
     { id: "hoy", label: "Plan de hoy", icon: CalendarClock },
     { id: "materias", label: "Materias", icon: BookOpen },
-    { id: "tabla", label: "Tabla", icon: Table2 },
+    { id: "temas", label: "Temas", icon: Layers },
+    { id: "tabla", label: "Repasos", icon: Table2 },
     { id: "parciales", label: "Parciales", icon: GraduationCap },
     { id: "pendientes", label: "Pendientes", icon: ListChecks },
   ];
@@ -1288,7 +1290,74 @@ export function StudySystemClient({
         </div>
       )}
 
-      {/* TABLA MAESTRA */}
+      {/* TEMAS — índice de contenido (materia → unidad → tema), sin el ruido de repasos */}
+      {tab === "temas" && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">Temas · índice de contenido</h2>
+            <p className="text-[11px] text-muted">{blocks.length} temas</p>
+          </div>
+          <p className="text-[11px] text-muted -mt-1">Acá organizás y editás <b>qué viste</b>. Los repasos (estudio espaciado) de cada tema los ves en <b>Repasos</b> y <b>Plan de hoy</b> — se sincronizan solos.</p>
+
+          {blocks.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted">Todavía no cargaste temas. Agregalos desde “Materias”.</div>
+          ) : (
+            <div className="space-y-2">
+              {subjects
+                .filter((s) => blocks.some((b) => b.subjectId === s.id))
+                .map((s) => {
+                  const sBlocks = blocks.filter((b) => b.subjectId === s.id);
+                  const label = s.groupLabel || "Unidad";
+                  const sUnits = units.filter((u) => u.subjectId === s.id);
+                  const groups = [
+                    ...sUnits.map((u) => ({ id: u.id, name: u.name, list: sBlocks.filter((b) => b.unitId === u.id) })),
+                    { id: "__none", name: `Sin ${label.toLowerCase()}`, list: sBlocks.filter((b) => !b.unitId) },
+                  ].filter((g) => g.list.length > 0);
+                  const sOpen = expTemas.has(s.id);
+                  return (
+                    <div key={s.id} className="rounded-2xl border border-border overflow-hidden">
+                      <button onClick={() => toggleSet(setExpTemas, s.id)} className="w-full flex items-center gap-2 px-3 py-2.5 bg-surface-2/30 hover:bg-surface-2/50 transition-colors">
+                        {sOpen ? <ChevronDown size={15} className="text-muted shrink-0" /> : <ChevronRight size={15} className="text-muted shrink-0" />}
+                        <BookOpen size={14} className="text-primary shrink-0" />
+                        <span className="font-semibold text-sm text-foreground truncate">{s.code} · {s.name}</span>
+                        <span className="ml-auto text-[11px] text-muted whitespace-nowrap">{sBlocks.length} temas</span>
+                      </button>
+                      {sOpen && (
+                        <div className="divide-y divide-border">
+                          {groups.map((g) => (
+                            <div key={g.id} className="bg-surface/40">
+                              <p className="flex items-center gap-2 px-3 py-1.5 pl-6 text-[12px] text-muted">
+                                <Layers size={12} className="shrink-0" /> {g.name} <span className="text-[10px]">· {g.list.length}</span>
+                              </p>
+                              <div className="divide-y divide-border">
+                                {g.list.map((b) => (
+                                  <div key={b.id} className="flex items-center gap-2 px-3 py-2 pl-10 text-sm">
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-foreground truncate" title={b.topic}>{b.topic}</p>
+                                      {(b.subtopic || b.importance >= 3) && (
+                                        <p className="text-[10px] text-muted truncate">
+                                          {b.subtopic}{b.subtopic && b.importance >= 3 ? " · " : ""}{b.importance >= 4 ? "muy importante" : b.importance === 3 ? "importante" : ""}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <button onClick={() => setEditing(b)} className="text-muted hover:text-foreground shrink-0" aria-label="Editar tema"><Pencil size={13} /></button>
+                                    <button onClick={() => deleteBlocks([b.id])} disabled={deleting} className="text-muted hover:text-danger shrink-0" aria-label="Eliminar tema"><Trash2 size={13} /></button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* REPASOS (estudio espaciado) — la agenda: mastery, próximo repaso, cerrar sesión */}
       {tab === "tabla" && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
