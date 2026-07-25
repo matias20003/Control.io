@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   CalendarClock, BookOpen, Table2, Sparkles, Plus, Loader2, X, Timer,
-  Clock, Target, ChevronRight, CheckCircle2, AlertCircle, Settings2,
-  GraduationCap, ListChecks, RefreshCw, Trash2, CalendarDays, Database,
+  Clock, Target, ChevronRight, ChevronDown, CheckCircle2, AlertCircle, Settings2,
+  GraduationCap, ListChecks, RefreshCw, Trash2, CalendarDays, Database, Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -15,9 +15,12 @@ import {
   createExerciseAction, toggleExerciseAction, deleteExerciseAction,
   setAvailabilityAction, reprogramarAction, summarizeForBlockAction,
   setStudyNotifyAction, postponeBlockAction, postponeTodayAction, deleteBlocksAction,
+  createUnitAction, archiveAllBlocksAction, setGroupLabelAction,
 } from "@/app/actions/study-system";
+
+const GROUP_LABELS = ["Unidad", "Capítulo", "Módulo", "Bolilla", "Tema"];
 import type {
-  SubjectDTO, BlockDTO, PlanItem, ExamDTO, ExerciseDTO, ErrorLogDTO, AvailabilityDTO,
+  SubjectDTO, BlockDTO, UnitDTO, PlanItem, ExamDTO, ExerciseDTO, ErrorLogDTO, AvailabilityDTO,
 } from "@/lib/db/study-system";
 import { EstudioClient } from "./EstudioClient";
 import { IngestMaterial } from "./IngestMaterial";
@@ -228,12 +231,13 @@ function NewSubject({ onCreated }: { onCreated: (s: SubjectDTO) => void }) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [type, setType] = useState<"cuatrimestral" | "anual">("cuatrimestral");
+  const [groupLabel, setGroupLabel] = useState("Unidad");
   const [isPending, start] = useTransition();
 
   const save = () => {
     if (!name.trim() || !code.trim()) { toast.error("Poné nombre y sigla (ej. AM2)"); return; }
     start(async () => {
-      const res = await createSubjectAction({ name: name.trim(), code: code.trim(), type });
+      const res = await createSubjectAction({ name: name.trim(), code: code.trim(), type, groupLabel });
       if (res.error) { toast.error(res.error); return; }
       if (res.success && res.subject) {
         onCreated(res.subject);
@@ -261,6 +265,9 @@ function NewSubject({ onCreated }: { onCreated: (s: SubjectDTO) => void }) {
           <option value="cuatrimestral">Cuatrimestral</option>
           <option value="anual">Anual</option>
         </select>
+        <select value={groupLabel} onChange={(e) => setGroupLabel(e.target.value)} className="rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground" title="Cómo se agrupan los temas en esta materia">
+          {GROUP_LABELS.map((l) => <option key={l} value={l}>Agrupa por {l}</option>)}
+        </select>
         <button onClick={save} disabled={isPending} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
           {isPending ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} Crear
         </button>
@@ -273,11 +280,20 @@ function NewSubject({ onCreated }: { onCreated: (s: SubjectDTO) => void }) {
 // ─────────────────────────────────────────────
 // Nuevo bloque
 // ─────────────────────────────────────────────
-function NewBlock({ subjects, onCreated }: { subjects: SubjectDTO[]; onCreated: (b: BlockDTO) => void }) {
+function NewBlock({
+  subjects, units, onCreated, onUnitCreated,
+}: {
+  subjects: SubjectDTO[];
+  units: UnitDTO[];
+  onCreated: (b: BlockDTO) => void;
+  onUnitCreated: (u: UnitDTO) => void;
+}) {
   const [subjectId, setSubjectId] = useState("");
   const [parcial, setParcial] = useState("1");
   const [topic, setTopic] = useState("");
-  const [unit, setUnit] = useState("");
+  const [unitId, setUnitId] = useState("");        // "" = sin unidad, "__new" = crear
+  const [newUnitName, setNewUnitName] = useState("");
+  const [initialSessions, setInitialSessions] = useState("1");
   const [importance, setImportance] = useState("2");
   const [difficulty, setDifficulty] = useState("2");
   const [summary, setSummary] = useState("");
@@ -285,7 +301,10 @@ function NewBlock({ subjects, onCreated }: { subjects: SubjectDTO[]; onCreated: 
   const [isPending, start] = useTransition();
   const [summarizing, startSummarize] = useTransition();
 
-  const selectedCode = subjects.find((s) => s.id === subjectId)?.code;
+  const subject = subjects.find((s) => s.id === subjectId);
+  const selectedCode = subject?.code;
+  const groupLabel = subject?.groupLabel ?? "Unidad";
+  const subjectUnits = units.filter((u) => u.subjectId === subjectId);
 
   const summarize = () => {
     if (raw.trim().length < 30) { toast.error("Pegá el texto del apunte para resumir"); return; }
@@ -302,27 +321,38 @@ function NewBlock({ subjects, onCreated }: { subjects: SubjectDTO[]; onCreated: 
 
   const save = () => {
     if (!subjectId) { toast.error("Elegí la materia"); return; }
-    if (!topic.trim()) { toast.error("Escribí el tema del bloque"); return; }
+    if (!topic.trim()) { toast.error("Escribí el tema"); return; }
     start(async () => {
+      // Crear la unidad al vuelo si eligió "nueva".
+      let finalUnitId: string | undefined = unitId && unitId !== "__new" ? unitId : undefined;
+      if (unitId === "__new") {
+        if (!newUnitName.trim()) { toast.error(`Poné el nombre de la ${groupLabel.toLowerCase()}`); return; }
+        const ur = await createUnitAction({ subjectId, name: newUnitName.trim() });
+        if (ur.error || !ur.unit) { toast.error(ur.error ?? "No se pudo crear la unidad"); return; }
+        onUnitCreated(ur.unit);
+        finalUnitId = ur.unit.id;
+      }
       const res = await createBlockAction({
         subjectId, parcial: Number(parcial), topic: topic.trim(),
-        unit: unit.trim() || undefined, importance: Number(importance), difficulty: Number(difficulty),
+        unitId: finalUnitId,
+        initialSessions: Number(initialSessions),
+        importance: Number(importance), difficulty: Number(difficulty),
         summary: summary.trim() || undefined,
       });
       if (res.error) { toast.error(res.error); return; }
       if (res.success && res.block) {
         onCreated(res.block);
-        setTopic(""); setUnit(""); setSummary(""); setRaw("");
-        toast.success(`Bloque ${res.block.code} creado — entra al plan de hoy`);
+        setTopic(""); setNewUnitName(""); setSummary(""); setRaw("");
+        toast.success(`Tema ${res.block.code} creado — entra al plan de hoy`);
       }
     });
   };
 
   return (
     <div className="rounded-2xl border border-border bg-surface p-4 space-y-3">
-      <p className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Plus size={15} className="text-primary" /> Nuevo bloque de estudio</p>
+      <p className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Plus size={15} className="text-primary" /> Nuevo tema</p>
       <div className="grid grid-cols-2 gap-2">
-        <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground">
+        <select value={subjectId} onChange={(e) => { setSubjectId(e.target.value); setUnitId(""); }} className="rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground">
           <option value="">Materia…</option>
           {subjects.map((s) => <option key={s.id} value={s.id}>{s.code} — {s.name}</option>)}
         </select>
@@ -330,8 +360,40 @@ function NewBlock({ subjects, onCreated }: { subjects: SubjectDTO[]; onCreated: 
           {[1, 2, 3, 4].map((p) => <option key={p} value={p}>Parcial {p}</option>)}
         </select>
       </div>
-      <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Tema del bloque (ej. Derivadas parciales)" className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground" />
-      <input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="Unidad (opcional)" className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground" />
+      {/* Unidad/Capítulo: elegir una existente o crear al vuelo */}
+      <div className="grid grid-cols-2 gap-2">
+        <select value={unitId} onChange={(e) => setUnitId(e.target.value)} disabled={!subjectId} className="rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground disabled:opacity-50">
+          <option value="">Sin {groupLabel.toLowerCase()}</option>
+          {subjectUnits.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          <option value="__new">＋ Nueva {groupLabel.toLowerCase()}…</option>
+        </select>
+        {unitId === "__new" ? (
+          <input value={newUnitName} onChange={(e) => setNewUnitName(e.target.value)} placeholder={`Nombre de la ${groupLabel.toLowerCase()}`} className="rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground" />
+        ) : (
+          <label className="flex items-center gap-2 text-xs text-muted">
+            <span className="whitespace-nowrap">Estudio en</span>
+            <select value={initialSessions} onChange={(e) => setInitialSessions(e.target.value)} className="flex-1 rounded-lg border border-border bg-surface-2/40 px-2 py-2 text-sm text-foreground" title="En cuántas sesiones repartís el estudio inicial de este tema">
+              <option value="1">1 sesión</option>
+              <option value="2">2 sesiones</option>
+              <option value="3">3 sesiones</option>
+              <option value="4">4 sesiones</option>
+            </select>
+          </label>
+        )}
+      </div>
+      <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Tema (ej. Derivadas parciales)" className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground" />
+      {unitId === "__new" && (
+        <label className="flex items-center gap-2 text-xs text-muted">
+          <span className="whitespace-nowrap">Estudio inicial en</span>
+          <select value={initialSessions} onChange={(e) => setInitialSessions(e.target.value)} className="rounded-lg border border-border bg-surface-2/40 px-2 py-1.5 text-sm text-foreground">
+            <option value="1">1 sesión</option>
+            <option value="2">2 sesiones</option>
+            <option value="3">3 sesiones</option>
+            <option value="4">4 sesiones</option>
+          </select>
+          <span className="text-[11px]">repartidas en la semana</span>
+        </label>
+      )}
       <div className="grid grid-cols-2 gap-2">
         <label className="text-xs text-muted">Importancia
           <select value={importance} onChange={(e) => setImportance(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground">
@@ -353,7 +415,7 @@ function NewBlock({ subjects, onCreated }: { subjects: SubjectDTO[]; onCreated: 
       </div>
       <textarea value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="Resumen / puntos clave del tema (opcional)…" rows={3} className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground resize-y" />
       <button onClick={save} disabled={isPending} className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
-        {isPending ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} Agregar bloque
+        {isPending ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} Agregar tema
       </button>
     </div>
   );
@@ -670,11 +732,12 @@ function PendientesTab({
 // Componente principal
 // ─────────────────────────────────────────────
 export function StudySystemClient({
-  initialSubjects, initialBlocks, initialPlan, stats, notes, reviews,
+  initialSubjects, initialBlocks, initialUnits, initialPlan, stats, notes, reviews,
   initialExams, initialExercises, initialErrors, availability, settings, notion, gcal,
 }: {
   initialSubjects: SubjectDTO[];
   initialBlocks: BlockDTO[];
+  initialUnits: UnitDTO[];
   initialPlan: { items: PlanItem[]; totalMin: number; budgetMin: number; overflow: PlanItem[]; isRestDay: boolean };
   stats: { total: number; byLevel: Record<string, number>; dueToday: number; overdue: number };
   notes: StudyNoteView[];
@@ -691,6 +754,9 @@ export function StudySystemClient({
   const [tab, setTab] = useState<Tab>("hoy");
   const [subjects, setSubjects] = useState(initialSubjects);
   const [blocks, setBlocks] = useState(initialBlocks);
+  const [units, setUnits] = useState(initialUnits);
+  const [expSubjects, setExpSubjects] = useState<Set<string>>(new Set());
+  const [expUnits, setExpUnits] = useState<Set<string>>(new Set());
   const [exams, setExams] = useState(initialExams);
   const [exercises, setExercises] = useState(initialExercises);
   const [avail, setAvail] = useState(availability);
@@ -702,16 +768,23 @@ export function StudySystemClient({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reprogramming, startReprogram] = useTransition();
   const [deleting, startDelete] = useTransition();
+  const [archiving, startArchive] = useTransition();
 
-  const filteredBlocks = tablaSubject ? blocks.filter((b) => b.subjectId === tablaSubject) : blocks;
+  const cleanSlate = () => {
+    if (!window.confirm("¿Archivar TODOS los temas actuales? No se borran (quedan guardados fuera de la vista) y podés rearmar limpio. Las materias se conservan.")) return;
+    startArchive(async () => {
+      const res = await archiveAllBlocksAction();
+      if (res.error) { toast.error(res.error); return; }
+      setBlocks([]);
+      setSelectedIds(new Set());
+      toast.success(`Archivé ${res.count ?? 0} tema(s) — empezá limpio`);
+      router.refresh();
+    });
+  };
+
   const toggleSel = (id: string) => setSelectedIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const allFilteredSelected = filteredBlocks.length > 0 && filteredBlocks.every((b) => selectedIds.has(b.id));
-  const toggleSelAll = () => setSelectedIds((prev) => {
-    const n = new Set(prev);
-    if (allFilteredSelected) filteredBlocks.forEach((b) => n.delete(b.id));
-    else filteredBlocks.forEach((b) => n.add(b.id));
-    return n;
-  });
+  const toggleSet = (setFn: (u: (p: Set<string>) => Set<string>) => void, id: string) =>
+    setFn((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const deleteBlocks = (ids: string[]) => {
     if (!ids.length) return;
     startDelete(async () => {
@@ -940,6 +1013,18 @@ export function StudySystemClient({
                       <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
                     </div>
                     <p className="text-[11px] text-muted mt-1">{dominated}/{sb.length} dominados · {pct}%</p>
+                    <select
+                      value={GROUP_LABELS.includes(s.groupLabel) ? s.groupLabel : "Unidad"}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setSubjects((p) => p.map((x) => (x.id === s.id ? { ...x, groupLabel: v } : x)));
+                        setGroupLabelAction(s.id, v).then((r) => { if (r?.error) toast.error(r.error); });
+                      }}
+                      className="mt-2 w-full rounded-md border border-border bg-surface-2/40 px-2 py-1 text-[11px] text-muted"
+                      title="Cómo agrupa sus temas"
+                    >
+                      {GROUP_LABELS.map((l) => <option key={l} value={l}>Agrupa por {l}</option>)}
+                    </select>
                   </div>
                 );
               })}
@@ -953,7 +1038,12 @@ export function StudySystemClient({
                   <Plus size={13} /> …o cargar un bloque a mano
                 </summary>
                 <div className="mt-2">
-                  <NewBlock subjects={subjects} onCreated={(b) => { setBlocks((p) => [...p, b]); router.refresh(); }} />
+                  <NewBlock
+                    subjects={subjects}
+                    units={units}
+                    onCreated={(b) => { setBlocks((p) => [...p, b]); router.refresh(); }}
+                    onUnitCreated={(u) => setUnits((p) => [...p, u])}
+                  />
                 </div>
               </details>
               <details className="group">
@@ -962,6 +1052,19 @@ export function StudySystemClient({
                 </summary>
                 <div className="mt-2">
                   <NotionCalendar subjects={subjects} notion={notion} gcal={gcal} onImported={(bs) => { setBlocks((p) => [...p, ...bs]); router.refresh(); }} />
+                </div>
+              </details>
+              <details className="group">
+                <summary className="cursor-pointer text-xs font-medium text-danger/80 hover:text-danger list-none flex items-center gap-1">
+                  <RefreshCw size={13} /> Empezar limpio
+                </summary>
+                <div className="mt-2 rounded-xl border border-danger/30 bg-danger/5 p-3 space-y-2">
+                  <p className="text-[11px] text-muted">
+                    Archiva todos los temas actuales para rearmar cada materia con su estructura de unidades/capítulos. No se borran: quedan guardados fuera de la vista, y las materias se conservan.
+                  </p>
+                  <button onClick={cleanSlate} disabled={archiving} className="inline-flex items-center gap-1.5 rounded-lg bg-danger px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+                    {archiving ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Archivar todos los temas
+                  </button>
                 </div>
               </details>
             </>
@@ -1020,42 +1123,73 @@ export function StudySystemClient({
                 </div>
               )}
 
-              <div className="overflow-x-auto rounded-2xl border border-border">
-                <table className="w-full text-sm">
-                  <thead className="bg-surface-2/40 text-[11px] uppercase tracking-wide text-muted">
-                    <tr>
-                      <th className="px-2 py-2 w-8"><input type="checkbox" checked={allFilteredSelected} onChange={toggleSelAll} className="h-3.5 w-3.5 accent-primary" aria-label="Seleccionar todos" /></th>
-                      <th className="px-3 py-2 text-left font-semibold">Código</th>
-                      <th className="px-3 py-2 text-left font-semibold">Tema</th>
-                      <th className="px-3 py-2 text-left font-semibold">Nivel</th>
-                      <th className="px-3 py-2 text-left font-semibold">A reforzar</th>
-                      <th className="px-3 py-2 text-left font-semibold">Próx. repaso</th>
-                      <th className="px-3 py-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {filteredBlocks.map((b) => (
-                      <tr key={b.id} className={cn("hover:bg-surface-2/20", selectedIds.has(b.id) && "bg-primary/5")}>
-                        <td className="px-2 py-2"><input type="checkbox" checked={selectedIds.has(b.id)} onChange={() => toggleSel(b.id)} className="h-3.5 w-3.5 accent-primary" /></td>
-                        <td className="px-3 py-2 font-mono text-[11px] text-muted whitespace-nowrap">{b.code}</td>
-                        <td className="px-3 py-2 text-foreground max-w-[150px] truncate" title={b.topic}>{b.topic}</td>
-                        <td className="px-3 py-2"><MasteryBadge level={b.masteryLevel} reviewCount={b.reviewCount} /></td>
-                        <td className="px-3 py-2 max-w-[160px]">
-                          {b.lastError ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-amber-500" title={b.lastError}>
-                              <AlertCircle size={11} className="shrink-0" /><span className="truncate">{b.lastError}</span>
-                            </span>
-                          ) : <span className="text-[11px] text-muted">—</span>}
-                        </td>
-                        <td className="px-3 py-2 text-[11px] text-muted whitespace-nowrap">{fmtDate(b.nextReviewDate)}</td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
-                          <button onClick={() => setClosing(b)} className="text-xs font-semibold text-primary hover:underline mr-2">Cerrar</button>
-                          <button onClick={() => deleteBlocks([b.id])} disabled={deleting} className="text-muted hover:text-danger" aria-label="Eliminar bloque"><Trash2 size={13} /></button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {/* Acordeón: Materia → Unidad/Capítulo → temas. Se abre lo que se necesita. */}
+              <div className="space-y-2">
+                {subjects
+                  .filter((s) => (!tablaSubject || s.id === tablaSubject) && blocks.some((b) => b.subjectId === s.id))
+                  .map((s) => {
+                    const sBlocks = blocks.filter((b) => b.subjectId === s.id);
+                    const label = s.groupLabel || "Unidad";
+                    const sUnits = units.filter((u) => u.subjectId === s.id);
+                    const groups = [
+                      ...sUnits.map((u) => ({ id: u.id, name: u.name, list: sBlocks.filter((b) => b.unitId === u.id) })),
+                      { id: "__none", name: `Sin ${label.toLowerCase()}`, list: sBlocks.filter((b) => !b.unitId) },
+                    ].filter((g) => g.list.length > 0);
+                    const sOpen = expSubjects.has(s.id) || !!tablaSubject;
+                    const dominated = sBlocks.filter((b) => b.masteryLevel === "VERDE" || b.masteryLevel === "CONSOLIDADO").length;
+                    return (
+                      <div key={s.id} className="rounded-2xl border border-border overflow-hidden">
+                        <button onClick={() => toggleSet(setExpSubjects, s.id)} className="w-full flex items-center gap-2 px-3 py-2.5 bg-surface-2/30 hover:bg-surface-2/50 transition-colors">
+                          {sOpen ? <ChevronDown size={15} className="text-muted shrink-0" /> : <ChevronRight size={15} className="text-muted shrink-0" />}
+                          <BookOpen size={14} className="text-primary shrink-0" />
+                          <span className="font-semibold text-sm text-foreground truncate">{s.code} · {s.name}</span>
+                          <span className="ml-auto text-[11px] text-muted whitespace-nowrap">{sBlocks.length} temas · {dominated} dominados</span>
+                        </button>
+                        {sOpen && (
+                          <div className="divide-y divide-border">
+                            {groups.map((g) => {
+                              const gKey = `${s.id}:${g.id}`;
+                              const gOpen = expUnits.has(gKey);
+                              const gDom = g.list.filter((b) => b.masteryLevel === "VERDE" || b.masteryLevel === "CONSOLIDADO").length;
+                              return (
+                                <div key={g.id}>
+                                  <button onClick={() => toggleSet(setExpUnits, gKey)} className="w-full flex items-center gap-2 px-3 py-2 pl-6 hover:bg-surface-2/20 transition-colors">
+                                    {gOpen ? <ChevronDown size={13} className="text-muted shrink-0" /> : <ChevronRight size={13} className="text-muted shrink-0" />}
+                                    <Layers size={12} className="text-muted shrink-0" />
+                                    <span className="text-[13px] text-foreground truncate">{g.name}</span>
+                                    <span className="ml-auto text-[11px] text-muted whitespace-nowrap">{gDom}/{g.list.length} dominados</span>
+                                  </button>
+                                  {gOpen && (
+                                    <div className="divide-y divide-border bg-surface/40">
+                                      {g.list.map((b) => {
+                                        const inInitial = b.initialSessions > 1 && b.initialDone < b.initialSessions;
+                                        return (
+                                          <div key={b.id} className={cn("flex items-center gap-2 px-3 py-2 pl-10 text-sm", selectedIds.has(b.id) && "bg-primary/5")}>
+                                            <input type="checkbox" checked={selectedIds.has(b.id)} onChange={() => toggleSel(b.id)} className="h-3.5 w-3.5 accent-primary shrink-0" />
+                                            <div className="min-w-0 flex-1">
+                                              <p className="text-foreground truncate" title={b.topic}>{b.topic}</p>
+                                              <p className="text-[10px] font-mono text-muted truncate">
+                                                {b.code} · próx {fmtDate(b.nextReviewDate)}
+                                                {inInitial ? ` · estudio inicial ${b.initialDone}/${b.initialSessions}` : ""}
+                                                {b.lastError ? ` · ⚠ ${b.lastError}` : ""}
+                                              </p>
+                                            </div>
+                                            <MasteryBadge level={b.masteryLevel} reviewCount={b.reviewCount} />
+                                            <button onClick={() => setClosing(b)} className="text-xs font-semibold text-primary hover:underline shrink-0">Cerrar</button>
+                                            <button onClick={() => deleteBlocks([b.id])} disabled={deleting} className="text-muted hover:text-danger shrink-0" aria-label="Eliminar tema"><Trash2 size={13} /></button>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
               </div>
             </>
           )}
