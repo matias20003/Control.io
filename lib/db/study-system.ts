@@ -312,8 +312,8 @@ export async function createBlocksDistributed(
   subjectId: string,
   parcial: number,
   proposals: Array<{
-    topic: string; unit?: string | null; summary?: string | null; prerequisites?: string | null;
-    source?: string | null; difficulty?: number; importance?: number; estMinutes?: number;
+    topic: string; unit?: string | null; unitId?: string | null; summary?: string | null; prerequisites?: string | null;
+    source?: string | null; difficulty?: number; importance?: number; estMinutes?: number; initialSessions?: number;
   }>,
   now = new Date()
 ): Promise<BlockDTO[]> {
@@ -366,9 +366,11 @@ export async function createBlocksDistributed(
     const b = await prisma.studyBlock.create({
       data: {
         userId, subjectId: subject.id, code,
+        unitId: p.unitId ?? null,
         unit: p.unit ?? null, topic: p.topic,
         summary: encrypt(p.summary ?? null), source,
         importance: p.importance ?? 2, difficulty: p.difficulty ?? 2,
+        initialSessions: Math.max(1, Math.min(6, Math.round(p.initialSessions ?? 1))),
         masteryLevel: "ROJO", reviewStage: "D0", reviewDuration: dur,
         incorporationDate: now, nextReviewDate: day,
       },

@@ -5,7 +5,7 @@
 
 import {
   listSubjects, createSubject, createBlock, createExam, createExercise,
-  getTodayPlan, type SubjectDTO,
+  getTodayPlan, listUnits, createUnit, type SubjectDTO,
 } from "@/lib/db/study-system";
 import { todayStringArg } from "@/lib/timezone";
 
@@ -111,11 +111,13 @@ const TOOLS: Tool[] = [
   },
   {
     type: "function", function: {
-      name: "create_block", description: "Crea un bloque/tema de estudio en una materia. Entra al plan de hoy.",
+      name: "create_block", description: "Crea un tema de estudio en una materia. Entra al plan. Podés agruparlo en una unidad/capítulo por nombre (se crea si no existe) y decir en cuántas sesiones se estudia por primera vez.",
       parameters: { type: "object", properties: {
         subjectCode: { type: "string", description: "Código de la materia (debe existir; si no, creala antes)" },
         topic: { type: "string", description: "Tema del bloque" },
+        unit: { type: "string", description: "Nombre de la unidad/capítulo, ej: 'Unidad 3' o 'Capítulo 2: Magnetismo'. Opcional; si no existe se crea." },
         parcial: { type: "number", description: "Número de parcial (1,2,3). Default 1" },
+        initialSessions: { type: "number", description: "En cuántas sesiones se estudia por primera vez (1-4). Default 1. Usalo si el tema es grande." },
         importance: { type: "number", description: "1 baja … 4 muy alta. Default 2" },
         difficulty: { type: "number", description: "1 … 4. Default 2" },
       }, required: ["subjectCode", "topic"] },
@@ -170,10 +172,19 @@ async function execTool(userId: string, name: string, args: Record<string, unkno
       const subs = await listSubjects(userId);
       const subject = findSubject(subs, String(args.subjectCode));
       if (!subject) return { ok: false, error: `No existe la materia "${args.subjectCode}". Creala primero con create_subject.` };
+      // Resolver unidad por nombre (crear si no existe).
+      let unitId: string | undefined;
+      const unitName = args.unit != null ? String(args.unit).trim() : "";
+      if (unitName) {
+        const existing = (await listUnits(userId, subject.id)).find((u) => u.name.toLowerCase() === unitName.toLowerCase());
+        unitId = existing ? existing.id : (await createUnit(userId, { subjectId: subject.id, name: unitName })).id;
+      }
       const b = await createBlock(userId, {
         subjectId: subject.id,
         parcial: Number(args.parcial) || 1,
         topic: String(args.topic),
+        unitId,
+        initialSessions: args.initialSessions != null ? Number(args.initialSessions) : undefined,
         importance: args.importance != null ? Number(args.importance) : undefined,
         difficulty: args.difficulty != null ? Number(args.difficulty) : undefined,
       });

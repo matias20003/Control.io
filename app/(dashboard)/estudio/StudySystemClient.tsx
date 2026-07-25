@@ -15,7 +15,7 @@ import {
   createExerciseAction, toggleExerciseAction, deleteExerciseAction,
   setAvailabilityAction, reprogramarAction,
   setStudyNotifyAction, postponeBlockAction, postponeTodayAction, deleteBlocksAction,
-  createUnitAction, archiveAllBlocksAction, setGroupLabelAction,
+  createUnitAction, archiveAllBlocksAction, setGroupLabelAction, createTopicsListAction,
 } from "@/app/actions/study-system";
 
 const GROUP_LABELS = ["Unidad", "Capítulo", "Módulo", "Bolilla", "Tema"];
@@ -294,11 +294,44 @@ function NewBlock({
   const [importance, setImportance] = useState("2");
   const [difficulty, setDifficulty] = useState("2");
   const [summary, setSummary] = useState("");
+  const [mode, setMode] = useState<"uno" | "lista">("uno");
+  const [listText, setListText] = useState("");
   const [isPending, start] = useTransition();
+  const [creatingList, startList] = useTransition();
 
   const subject = subjects.find((s) => s.id === subjectId);
   const groupLabel = subject?.groupLabel ?? "Unidad";
   const subjectUnits = units.filter((u) => u.subjectId === subjectId);
+  const listTopics = listText.split("\n").map((t) => t.trim()).filter(Boolean);
+
+  // Resuelve la unidad elegida, creándola si es "nueva". null = hubo error.
+  const resolveUnit = async (): Promise<string | null | undefined> => {
+    if (unitId !== "__new") return unitId || undefined;
+    if (!newUnitName.trim()) { toast.error(`Poné el nombre de la ${groupLabel.toLowerCase()}`); return null; }
+    const ur = await createUnitAction({ subjectId, name: newUnitName.trim() });
+    if (ur.error || !ur.unit) { toast.error(ur.error ?? "No se pudo crear la unidad"); return null; }
+    onUnitCreated(ur.unit);
+    return ur.unit.id;
+  };
+
+  const saveList = () => {
+    if (!subjectId) { toast.error("Elegí la materia"); return; }
+    if (listTopics.length === 0) { toast.error("Pegá al menos un tema (uno por línea)"); return; }
+    startList(async () => {
+      const finalUnitId = await resolveUnit();
+      if (finalUnitId === null) return; // error ya avisado
+      const res = await createTopicsListAction({
+        subjectId, parcial: Number(parcial), unitId: finalUnitId ?? null,
+        initialSessions: Number(initialSessions), topics: listTopics,
+      });
+      if (res.error) { toast.error(res.error); return; }
+      if (res.success && res.created) {
+        res.created.forEach(onCreated);
+        setListText("");
+        toast.success(`${res.created.length} tema(s) creados y repartidos en tus días`);
+      }
+    });
+  };
 
   const save = () => {
     if (!subjectId) { toast.error("Elegí la materia"); return; }
@@ -331,7 +364,13 @@ function NewBlock({
 
   return (
     <div className="rounded-2xl border border-border bg-surface p-4 space-y-3">
-      <p className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Plus size={15} className="text-primary" /> Nuevo tema</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Plus size={15} className="text-primary" /> Nuevos temas</p>
+        <div className="flex gap-1 rounded-lg border border-border bg-surface-2/40 p-0.5">
+          <button onClick={() => setMode("uno")} className={cn("rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors", mode === "uno" ? "bg-primary text-white" : "text-muted hover:text-foreground")}>Un tema</button>
+          <button onClick={() => setMode("lista")} className={cn("rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors", mode === "lista" ? "bg-primary text-white" : "text-muted hover:text-foreground")}>Pegar lista</button>
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <select value={subjectId} onChange={(e) => { setSubjectId(e.target.value); setUnitId(""); }} className="rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground">
           <option value="">Materia…</option>
@@ -362,7 +401,7 @@ function NewBlock({
           </label>
         )}
       </div>
-      <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Tema (ej. Derivadas parciales)" className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground" />
+      {/* Nº de sesiones de estudio inicial cuando se crea unidad nueva (compartido) */}
       {unitId === "__new" && (
         <label className="flex items-center gap-2 text-xs text-muted">
           <span className="whitespace-nowrap">Estudio inicial en</span>
@@ -375,22 +414,44 @@ function NewBlock({
           <span className="text-[11px]">repartidas en la semana</span>
         </label>
       )}
-      <div className="grid grid-cols-2 gap-2">
-        <label className="text-xs text-muted">Importancia
-          <select value={importance} onChange={(e) => setImportance(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground">
-            <option value="1">Baja</option><option value="2">Media</option><option value="3">Alta</option><option value="4">Muy alta</option>
-          </select>
-        </label>
-        <label className="text-xs text-muted">Dificultad
-          <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground">
-            <option value="1">Fácil</option><option value="2">Media</option><option value="3">Difícil</option><option value="4">Muy difícil</option>
-          </select>
-        </label>
-      </div>
-      <textarea value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="Puntos clave del tema (opcional)…" rows={2} className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground resize-y" />
-      <button onClick={save} disabled={isPending} className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
-        {isPending ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} Agregar tema
-      </button>
+
+      {mode === "uno" ? (
+        <>
+          <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Tema (ej. Derivadas parciales)" className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground" />
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-xs text-muted">Importancia
+              <select value={importance} onChange={(e) => setImportance(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground">
+                <option value="1">Baja</option><option value="2">Media</option><option value="3">Alta</option><option value="4">Muy alta</option>
+              </select>
+            </label>
+            <label className="text-xs text-muted">Dificultad
+              <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground">
+                <option value="1">Fácil</option><option value="2">Media</option><option value="3">Difícil</option><option value="4">Muy difícil</option>
+              </select>
+            </label>
+          </div>
+          <textarea value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="Puntos clave del tema (opcional)…" rows={2} className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground resize-y" />
+          <button onClick={save} disabled={isPending} className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+            {isPending ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} Agregar tema
+          </button>
+        </>
+      ) : (
+        <>
+          <textarea
+            value={listText}
+            onChange={(e) => setListText(e.target.value)}
+            placeholder={"Pegá un tema por línea, ej:\nCampo magnético\nFlujo magnético\nLey de Faraday\nInducción"}
+            rows={6}
+            className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground resize-y font-mono"
+          />
+          <p className="text-[11px] text-muted">
+            Se crean todos bajo la {groupLabel.toLowerCase()} elegida y se reparten en tus días disponibles. Podés editar importancia/dificultad después.
+          </p>
+          <button onClick={saveList} disabled={creatingList || listTopics.length === 0} className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+            {creatingList ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} Crear {listTopics.length || ""} tema{listTopics.length === 1 ? "" : "s"}
+          </button>
+        </>
+      )}
     </div>
   );
 }

@@ -132,6 +132,36 @@ export async function createBlockAction(input: z.infer<typeof blockSchema>) {
   }
 }
 
+// ── Carga por lista: pegás varios temas (uno por línea) bajo una unidad ──
+const topicsListSchema = z.object({
+  subjectId: z.string().min(1),
+  parcial: z.number().int().min(1).max(4).optional(),
+  unitId: z.string().trim().max(40).nullish(),
+  initialSessions: z.number().int().min(1).max(6).optional(),
+  topics: z.array(z.string().trim().min(1).max(160)).min(1).max(60),
+});
+
+export async function createTopicsListAction(input: z.infer<typeof topicsListSchema>) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const parsed = topicsListSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  try {
+    const created = await createBlocksDistributed(
+      userId, parsed.data.subjectId, parsed.data.parcial ?? 1,
+      parsed.data.topics.map((t) => ({
+        topic: t,
+        unitId: parsed.data.unitId ?? null,
+        initialSessions: parsed.data.initialSessions,
+      })),
+    );
+    revalidatePath("/estudio");
+    return { success: true, created };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "No se pudieron crear los temas" };
+  }
+}
+
 // ── Unidades / Capítulos ──
 const unitSchema = z.object({
   subjectId: z.string().min(1),
