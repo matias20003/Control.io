@@ -22,6 +22,7 @@ const GROUP_LABELS = ["Unidad", "Capítulo", "Módulo", "Bolilla", "Tema"];
 import type {
   SubjectDTO, BlockDTO, UnitDTO, PlanItem, ExamDTO, ExerciseDTO, ErrorLogDTO, AvailabilityDTO,
 } from "@/lib/db/study-system";
+import { suggestedActivity } from "@/lib/study/spaced";
 import { NotionCalendar } from "./NotionCalendar";
 import { StudyCalendar } from "./StudyCalendar";
 import { FocusMode } from "./FocusMode";
@@ -215,6 +216,93 @@ function CloseSessionModal({
         >
           No llegué a verlo → pasarlo a otro día
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Autoevaluación / recuerdo activo: recordás sin mirar → mostrás → te calificás.
+// El color que elegís cierra la sesión y agenda el próximo repaso.
+// ─────────────────────────────────────────────
+function RecallModal({
+  block, onClose, onDone,
+}: {
+  block: PlanItem | BlockDTO;
+  onClose: () => void;
+  onDone: (b: BlockDTO) => void;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  const [isPending, start] = useTransition();
+  const challenge = "activity" in block && block.activity ? block.activity : suggestedActivity(block.reviewStage);
+
+  const rate = (result: string) => {
+    start(async () => {
+      const res = await closeSessionAction({ blockId: block.id, result });
+      if (res.error) { toast.error(res.error); return; }
+      if (res.success && res.block) {
+        onDone(res.block);
+        const next = res.block.nextReviewDate ? fmtDate(res.block.nextReviewDate) : "—";
+        toast.success(`Guardado. Próximo repaso: ${next}`);
+        onClose();
+      }
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onClick={onClose}>
+      <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-border bg-surface p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-mono text-muted">{block.code} · {block.subjectCode}</p>
+            <h3 className="text-base font-bold text-foreground">{block.topic}</h3>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-muted hover:text-foreground"><X size={18} /></button>
+        </div>
+
+        {/* Desafío de recuerdo activo */}
+        <div className="rounded-xl border border-primary/25 bg-primary/5 p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-primary mb-1.5">Recordá sin mirar</p>
+          <p className="text-sm text-foreground">{challenge}</p>
+        </div>
+
+        {!revealed ? (
+          <button onClick={() => setRevealed(true)} className="w-full rounded-xl border border-border py-3 text-sm font-medium text-foreground hover:bg-surface-2">
+            Ya lo intenté — comprobar
+          </button>
+        ) : (
+          <>
+            <div className="rounded-xl border border-border bg-surface-2/30 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted mb-1.5">Tus puntos clave</p>
+              {block.summary ? (
+                <p className="text-sm text-foreground/90 whitespace-pre-wrap">{block.summary}</p>
+              ) : (
+                <p className="text-sm text-muted">No guardaste puntos clave de este tema — comparalo con tu apunte real y calificate honesto.</p>
+              )}
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-2">¿Cómo te fue recordándolo?</p>
+              <div className="grid grid-cols-2 gap-2">
+                {["ROJO", "AMARILLO", "VERDE", "CONSOLIDADO"].map((lv) => {
+                  const m = MASTERY_META[lv];
+                  return (
+                    <button
+                      key={lv}
+                      onClick={() => rate(lv)}
+                      disabled={isPending}
+                      className={cn("flex items-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm font-medium hover:bg-surface-2 disabled:opacity-50", m.text)}
+                    >
+                      <span className={cn("h-2.5 w-2.5 rounded-full", m.dot)} /> {m.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-muted mt-1.5">
+                Rojo = no me salió · Amarillo = con ayuda · Verde = solo · Consolidado = lo domino hace varios repasos
+              </p>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -823,6 +911,7 @@ export function StudySystemClient({
   const [avail, setAvail] = useState(availability);
   const [closing, setClosing] = useState<PlanItem | BlockDTO | null>(null);
   const [focusBlock, setFocusBlock] = useState<PlanItem | BlockDTO | null>(null);
+  const [recallBlock, setRecallBlock] = useState<PlanItem | BlockDTO | null>(null);
   const [showAvail, setShowAvail] = useState(false);
   const [tablaView, setTablaView] = useState<"lista" | "calendario">("lista");
   const [tablaSubject, setTablaSubject] = useState<string>(""); // "" = todas
@@ -1029,15 +1118,15 @@ export function StudySystemClient({
                         <span>{STAGE_LABEL[it.reviewStage] ?? it.reviewStage}</span>
                         {it.overdueDays > 0 && <span className="text-danger font-semibold">atrasado {it.overdueDays}d</span>}
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
                         <button onClick={() => noLoVi(it)} disabled={reprogramming} className="inline-flex items-center rounded-lg border border-border px-2 py-1.5 text-[11px] font-medium text-muted hover:text-foreground disabled:opacity-50" title="Pasarlo a otro día sin marcar resultado">
                           No lo vi
                         </button>
-                        <button onClick={() => setClosing(it)} className="inline-flex items-center rounded-lg border border-border px-2 py-1.5 text-[11px] font-medium text-muted hover:text-foreground">
-                          Cerrar directo
-                        </button>
-                        <button onClick={() => setFocusBlock(it)} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white">
+                        <button onClick={() => setFocusBlock(it)} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted hover:text-foreground" title="Cronómetro + música">
                           <Timer size={13} /> Enfoque
+                        </button>
+                        <button onClick={() => setRecallBlock(it)} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white" title="Recordá sin mirar y calificate">
+                          <Target size={13} /> Repasar
                         </button>
                       </div>
                     </div>
@@ -1263,6 +1352,7 @@ export function StudySystemClient({
       )}
 
       {closing && <CloseSessionModal block={closing} onClose={() => setClosing(null)} onDone={applyClosed} />}
+      {recallBlock && <RecallModal block={recallBlock} onClose={() => setRecallBlock(null)} onDone={applyClosed} />}
       {focusBlock && <FocusMode block={focusBlock} onClose={() => setFocusBlock(null)} onDone={applyClosed} />}
       <StudyChat />
       {showAvail && (
