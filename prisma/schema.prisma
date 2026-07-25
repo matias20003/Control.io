@@ -661,6 +661,7 @@ model StudySubject {
   type          String   @default("cuatrimestral") // anual | cuatrimestral
   color         String?
   active        Boolean  @default(true)
+  groupLabel    String   @default("Unidad") @map("group_label") // cómo llama a su agrupación: Unidad | Capítulo | Módulo…
   notebookPages Int      @default(0) @map("notebook_pages") // páginas ya procesadas del cuaderno PDF
   createdAt     DateTime @default(now()) @map("created_at")
 
@@ -668,13 +669,28 @@ model StudySubject {
   @@map("study_subjects")
 }
 
+model StudyUnit {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  subjectId String   @map("subject_id")
+  name      String // "Unidad 1", "Capítulo 3: Magnetismo", …
+  order     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, subjectId])
+  @@map("study_units")
+}
+
 model StudyBlock {
   id               String    @id @default(cuid())
   userId           String    @map("user_id")
   subjectId        String    @map("subject_id")
+  unitId           String?   @map("unit_id") // FK a StudyUnit (agrupación)
   code             String // AM2-P2-03
-  unit             String? // unidad
+  unit             String? // unidad (texto legacy; se reemplaza por unitId)
   topic            String // tema
+  initialSessions  Int       @default(1) @map("initial_sessions") // sesiones de estudio inicial del tema
+  initialDone      Int       @default(0) @map("initial_done") // cuántas ya se hicieron
   subtopic         String?
   summary          String? // cifrado
   source           String? // fuente/archivo/páginas

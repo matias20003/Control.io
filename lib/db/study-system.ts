@@ -8,8 +8,10 @@ import {
   examBoost,
   subjectTypeBoost,
   DEFAULT_AVAILABILITY,
+  nextInitialDate,
   type Mastery,
   type Stage,
+  type NextReview,
 } from "@/lib/study/spaced";
 import { endOfTodayArg, startOfTodayArg, nowArgParts } from "@/lib/timezone";
 
@@ -30,6 +32,7 @@ export type BlockDTO = {
   id: string;
   subjectId: string;
   subjectCode: string;
+  unitId: string | null;
   code: string;
   unit: string | null;
   topic: string;
@@ -41,6 +44,8 @@ export type BlockDTO = {
   masteryLevel: Mastery;
   reviewStage: Stage;
   reviewDuration: number;
+  initialSessions: number; // sesiones de estudio inicial del tema
+  initialDone: number;     // cuántas ya se hicieron (al completarlas entra al repaso)
   nextReviewDate: string | null;
   lastStudyDate: string | null;
   reviewCount: number;
@@ -103,9 +108,10 @@ export async function createSubject(
 // Bloques
 // ─────────────────────────────────────────────
 function toBlockDTO(b: {
-  id: string; subjectId: string; code: string; unit: string | null; topic: string;
+  id: string; subjectId: string; unitId: string | null; code: string; unit: string | null; topic: string;
   subtopic: string | null; summary: string | null; source: string | null; importance: number;
   difficulty: number; masteryLevel: string; reviewStage: string; reviewDuration: number;
+  initialSessions: number; initialDone: number;
   nextReviewDate: Date | null; lastStudyDate: Date | null; reviewCount: number;
   successCount: number; errorCount: number; status: string;
 }, subjectCode: string): BlockDTO {
@@ -113,6 +119,7 @@ function toBlockDTO(b: {
     id: b.id,
     subjectId: b.subjectId,
     subjectCode,
+    unitId: b.unitId,
     code: b.code,
     unit: b.unit,
     topic: b.topic,
@@ -124,6 +131,8 @@ function toBlockDTO(b: {
     masteryLevel: b.masteryLevel as Mastery,
     reviewStage: b.reviewStage as Stage,
     reviewDuration: b.reviewDuration,
+    initialSessions: b.initialSessions,
+    initialDone: b.initialDone,
     nextReviewDate: b.nextReviewDate ? b.nextReviewDate.toISOString() : null,
     lastStudyDate: b.lastStudyDate ? b.lastStudyDate.toISOString() : null,
     reviewCount: b.reviewCount,
@@ -178,11 +187,13 @@ export async function createBlock(
     parcial: number;
     topic: string;
     unit?: string | null;
+    unitId?: string | null;
     subtopic?: string | null;
     summary?: string | null;
     source?: string | null;
     importance?: number;
     difficulty?: number;
+    initialSessions?: number; // en cuántas sesiones se estudia por primera vez
   }
 ): Promise<BlockDTO> {
   const subject = await prisma.studySubject.findFirst({
@@ -193,10 +204,12 @@ export async function createBlock(
 
   const code = await nextBlockCode(userId, subject.code, input.parcial);
   const now = new Date();
+  const initialSessions = Math.max(1, Math.min(6, Math.round(input.initialSessions ?? 1)));
   const b = await prisma.studyBlock.create({
     data: {
       userId,
       subjectId: subject.id,
+      unitId: input.unitId ?? null,
       code,
       unit: input.unit ?? null,
       topic: input.topic,
@@ -208,6 +221,8 @@ export async function createBlock(
       masteryLevel: "ROJO",
       reviewStage: "D0",
       reviewDuration: 30,
+      initialSessions,
+      initialDone: 0,
       incorporationDate: now,
       nextReviewDate: now, // el D0 es hoy: entra al plan de una
     },
@@ -403,16 +418,31 @@ export async function closeSession(
   if (!block) throw new Error("Bloque no encontrado");
 
   const now = new Date();
-  const next = calcularProximoRepaso(
-    {
-      reviewStage: block.reviewStage as Stage,
-      importance: block.importance,
-      reviewDuration: block.reviewDuration,
-      reviewCount: block.reviewCount,
-    },
-    input.result,
-    now
-  );
+
+  // Estudio inicial repartido: mientras queden sesiones iniciales del tema, NO
+  // entra al repaso espaciado — se agenda la próxima sesión inicial en ~2 días.
+  // Recién al completar la última sesión inicial arranca el ciclo D+1, D+3, …
+  const totalInitial = Math.max(1, block.initialSessions);
+  const willBeDone = Math.min(block.initialDone + 1, totalInitial);
+  const stillInitial = willBeDone < totalInitial;
+
+  const next: NextReview = stillInitial
+    ? {
+        nextDate: nextInitialDate(now),
+        nextStage: "D0",
+        duration: 30,
+        masteryLevel: input.result as Mastery, // refleja cómo viene, sin consolidar
+      }
+    : calcularProximoRepaso(
+        {
+          reviewStage: block.reviewStage as Stage,
+          importance: block.importance,
+          reviewDuration: block.reviewDuration,
+          reviewCount: block.reviewCount,
+        },
+        input.result,
+        now
+      );
 
   const success = input.result === "VERDE" || input.result === "CONSOLIDADO";
   const failed = input.result === "ROJO";
@@ -445,6 +475,7 @@ export async function closeSession(
       reviewDuration: next.duration,
       nextReviewDate: next.nextDate,
       lastStudyDate: now,
+      initialDone: willBeDone,
       reviewCount: { increment: 1 },
       successCount: success ? { increment: 1 } : undefined,
       errorCount: failed ? { increment: 1 } : undefined,

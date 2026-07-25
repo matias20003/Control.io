@@ -32,6 +32,14 @@ function inDays(from: Date, days: number): Date {
 
 export type NextReview = { nextDate: Date; nextStage: Stage; duration: number; masteryLevel: Mastery };
 
+// Estudio inicial repartido: un tema grande se estudia en varias sesiones antes
+// de entrar al repaso espaciado. Las sesiones iniciales van cada ~2 días para
+// repartirse en la semana sin amontonarse.
+export const INITIAL_SESSION_GAP = 2;
+export function nextInitialDate(now = new Date()): Date {
+  return inDays(now, INITIAL_SESSION_GAP);
+}
+
 /**
  * Calcula la ÚNICA próxima fecha/etapa según el resultado de la sesión (Sección 35).
  * `reviewCount` se usa para no dejar CONSOLIDADO tras un solo estudio (Sección 6).
