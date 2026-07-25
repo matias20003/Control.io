@@ -553,6 +553,26 @@ export async function updateBlockStatus(userId: string, blockId: string, status:
   await prisma.studyBlock.updateMany({ where: { id: blockId, userId }, data: { status } });
 }
 
+/** Edita los datos de un bloque (tema): título, subtema, resumen, importancia y dificultad. */
+export async function updateBlock(
+  userId: string,
+  blockId: string,
+  fields: { topic?: string; subtopic?: string | null; summary?: string | null; importance?: number; difficulty?: number }
+): Promise<BlockDTO | null> {
+  const block = await prisma.studyBlock.findFirst({ where: { id: blockId, userId } });
+  if (!block) return null;
+  const data: Record<string, unknown> = {};
+  if (fields.topic !== undefined && fields.topic.trim()) data.topic = fields.topic.trim().slice(0, 160);
+  if (fields.subtopic !== undefined) data.subtopic = fields.subtopic && fields.subtopic.trim() ? fields.subtopic.trim().slice(0, 160) : null;
+  if (fields.summary !== undefined) data.summary = fields.summary && fields.summary.trim() ? encrypt(fields.summary.trim().slice(0, 8000)) : null;
+  if (fields.importance !== undefined) data.importance = Math.max(1, Math.min(4, Math.round(fields.importance)));
+  if (fields.difficulty !== undefined) data.difficulty = Math.max(1, Math.min(4, Math.round(fields.difficulty)));
+
+  const updated = await prisma.studyBlock.update({ where: { id: block.id }, data });
+  const subject = await prisma.studySubject.findFirst({ where: { id: block.subjectId }, select: { code: true } });
+  return toBlockDTO(updated, subject?.code ?? "?");
+}
+
 /**
  * Pasa TODO lo que vence hoy (o antes) a partir de mañana y lo reparte en los
  * próximos días hábiles respetando la capacidad. Útil cuando no llegaste a

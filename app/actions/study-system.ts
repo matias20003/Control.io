@@ -9,6 +9,7 @@ import {
   createBlock,
   closeSession,
   updateBlockStatus,
+  updateBlock,
   postponeBlock,
   postponeTodayForward,
   deleteBlocks,
@@ -303,6 +304,29 @@ export async function deleteBlocksAction(ids: string[]) {
     return { success: true, deleted };
   } catch {
     return { error: "No se pudieron eliminar" };
+  }
+}
+
+const updateBlockSchema = z.object({
+  topic: z.string().trim().min(1).max(160).optional(),
+  subtopic: z.string().trim().max(160).nullish(),
+  summary: z.string().max(8000).nullish(),
+  importance: z.number().int().min(1).max(4).optional(),
+  difficulty: z.number().int().min(1).max(4).optional(),
+});
+
+export async function updateBlockAction(blockId: string, input: z.infer<typeof updateBlockSchema>) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const parsed = updateBlockSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  try {
+    const block = await updateBlock(userId, blockId, parsed.data);
+    if (!block) return { error: "Bloque no encontrado" };
+    revalidatePath("/estudio");
+    return { success: true, block };
+  } catch {
+    return { error: "No se pudo editar el bloque" };
   }
 }
 

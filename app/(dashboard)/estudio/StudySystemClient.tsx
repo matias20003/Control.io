@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   CalendarClock, BookOpen, Table2, Plus, Loader2, X, Timer,
   Clock, Target, ChevronRight, ChevronDown, CheckCircle2, AlertCircle, Settings2,
-  GraduationCap, ListChecks, RefreshCw, Trash2, CalendarDays, Database, Layers,
+  GraduationCap, ListChecks, RefreshCw, Trash2, CalendarDays, Database, Layers, Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -16,6 +16,7 @@ import {
   setAvailabilityAction, reprogramarAction,
   setStudyNotifyAction, postponeBlockAction, postponeTodayAction, deleteBlocksAction,
   createUnitAction, archiveAllBlocksAction, setGroupLabelAction, createTopicsListAction,
+  updateBlockAction,
 } from "@/app/actions/study-system";
 
 const GROUP_LABELS = ["Unidad", "Capítulo", "Módulo", "Bolilla", "Tema"];
@@ -215,6 +216,73 @@ function CloseSessionModal({
           className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted hover:text-foreground disabled:opacity-50"
         >
           No llegué a verlo → pasarlo a otro día
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Modal para EDITAR un bloque (tema): título, subtema, importancia, dificultad, resumen
+// ─────────────────────────────────────────────
+function EditBlockModal({ block, onClose, onDone }: { block: BlockDTO; onClose: () => void; onDone: (b: BlockDTO) => void }) {
+  const [topic, setTopic] = useState(block.topic);
+  const [subtopic, setSubtopic] = useState(block.subtopic ?? "");
+  const [importance, setImportance] = useState(String(block.importance));
+  const [difficulty, setDifficulty] = useState(String(block.difficulty));
+  const [summary, setSummary] = useState(block.summary ?? "");
+  const [isPending, start] = useTransition();
+
+  const save = () => {
+    if (!topic.trim()) { toast.error("El tema no puede quedar vacío"); return; }
+    start(async () => {
+      const res = await updateBlockAction(block.id, {
+        topic: topic.trim(),
+        subtopic: subtopic.trim() || null,
+        summary: summary.trim() || null,
+        importance: Number(importance),
+        difficulty: Number(difficulty),
+      });
+      if (res.error) { toast.error(res.error); return; }
+      if (res.success && res.block) { onDone(res.block); toast.success("Tema actualizado"); onClose(); }
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onClick={onClose}>
+      <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-border bg-surface p-5 space-y-3 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-mono text-muted">{block.code} · {block.subjectCode}</p>
+            <h3 className="text-base font-bold text-foreground">Editar tema</h3>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-muted hover:text-foreground"><X size={18} /></button>
+        </div>
+
+        <label className="block text-xs text-muted">Tema
+          <input value={topic} onChange={(e) => setTopic(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground" />
+        </label>
+        <label className="block text-xs text-muted">Subtema (opcional)
+          <input value={subtopic} onChange={(e) => setSubtopic(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground" />
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs text-muted">Importancia
+            <select value={importance} onChange={(e) => setImportance(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground">
+              <option value="1">Baja</option><option value="2">Media</option><option value="3">Alta</option><option value="4">Muy alta</option>
+            </select>
+          </label>
+          <label className="text-xs text-muted">Dificultad
+            <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground">
+              <option value="1">Fácil</option><option value="2">Media</option><option value="3">Difícil</option><option value="4">Muy difícil</option>
+            </select>
+          </label>
+        </div>
+        <label className="block text-xs text-muted">Resumen / puntos clave
+          <textarea value={summary} onChange={(e) => setSummary(e.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-sm text-foreground resize-y" />
+        </label>
+
+        <button onClick={save} disabled={isPending} className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+          {isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Guardar cambios
         </button>
       </div>
     </div>
@@ -910,6 +978,7 @@ export function StudySystemClient({
   const [exercises, setExercises] = useState(initialExercises);
   const [avail, setAvail] = useState(availability);
   const [closing, setClosing] = useState<PlanItem | BlockDTO | null>(null);
+  const [editing, setEditing] = useState<BlockDTO | null>(null);
   const [focusBlock, setFocusBlock] = useState<PlanItem | BlockDTO | null>(null);
   const [recallBlock, setRecallBlock] = useState<PlanItem | BlockDTO | null>(null);
   const [showAvail, setShowAvail] = useState(false);
@@ -1323,6 +1392,7 @@ export function StudySystemClient({
                                             </div>
                                             <MasteryBadge level={b.masteryLevel} reviewCount={b.reviewCount} />
                                             <button onClick={() => setClosing(b)} className="text-xs font-semibold text-primary hover:underline shrink-0">Cerrar</button>
+                                            <button onClick={() => setEditing(b)} className="text-muted hover:text-foreground shrink-0" aria-label="Editar tema"><Pencil size={13} /></button>
                                             <button onClick={() => deleteBlocks([b.id])} disabled={deleting} className="text-muted hover:text-danger shrink-0" aria-label="Eliminar tema"><Trash2 size={13} /></button>
                                           </div>
                                         );
@@ -1352,6 +1422,7 @@ export function StudySystemClient({
       )}
 
       {closing && <CloseSessionModal block={closing} onClose={() => setClosing(null)} onDone={applyClosed} />}
+      {editing && <EditBlockModal block={editing} onClose={() => setEditing(null)} onDone={applyClosed} />}
       {recallBlock && <RecallModal block={recallBlock} onClose={() => setRecallBlock(null)} onDone={applyClosed} />}
       {focusBlock && <FocusMode block={focusBlock} onClose={() => setFocusBlock(null)} onDone={applyClosed} />}
       <StudyChat />
