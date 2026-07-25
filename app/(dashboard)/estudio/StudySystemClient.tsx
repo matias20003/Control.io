@@ -565,11 +565,12 @@ function AvailabilityModal({
 // Pestaña Parciales / objetivos
 // ─────────────────────────────────────────────
 function ExamsTab({
-  subjects, exams, setExams,
+  subjects, exams, setExams, blocks,
 }: {
   subjects: SubjectDTO[];
   exams: ExamDTO[];
   setExams: React.Dispatch<React.SetStateAction<ExamDTO[]>>;
+  blocks: BlockDTO[];
 }) {
   const router = useRouter();
   const [subjectId, setSubjectId] = useState("");
@@ -631,19 +632,45 @@ function ExamsTab({
         <div className="space-y-2">
           {exams.map((e) => {
             const soon = !e.done && e.daysLeft >= 0 && e.daysLeft <= 7;
+            // Preparación: temas de la materia en verde/consolidado vs total.
+            const sb = blocks.filter((b) => b.subjectId === e.subjectId && b.status !== "ARCHIVADO");
+            const dominated = sb.filter((b) => b.masteryLevel === "VERDE" || b.masteryLevel === "CONSOLIDADO").length;
+            const faltan = sb.length - dominated;
+            const pct = sb.length ? Math.round((dominated / sb.length) * 100) : 0;
+            const barTone = pct >= 80 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-500" : "bg-red-500";
             return (
-              <div key={e.id} className={cn("flex items-center gap-3 rounded-xl border bg-surface p-3", e.done ? "border-border opacity-60" : soon ? "border-danger/40" : "border-border")}>
-                <div className="min-w-0 flex-1">
-                  <p className={cn("text-sm font-semibold", e.done ? "text-muted line-through" : "text-foreground")}>{e.subjectCode} · {e.title}</p>
-                  <p className="text-[11px] text-muted">
-                    {new Date(e.examDate).toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short" })}
-                    {!e.done && (e.daysLeft < 0 ? " · pasó" : e.daysLeft === 0 ? " · ¡HOY!" : ` · faltan ${e.daysLeft} días`)}
-                  </p>
+              <div key={e.id} className={cn("rounded-xl border bg-surface p-3 space-y-2.5", e.done ? "border-border opacity-60" : soon ? "border-danger/40" : "border-border")}>
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className={cn("text-sm font-semibold", e.done ? "text-muted line-through" : "text-foreground")}>{e.subjectCode} · {e.title}</p>
+                    <p className="text-[11px] text-muted">
+                      {new Date(e.examDate).toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short" })}
+                      {!e.done && (e.daysLeft < 0 ? " · pasó" : e.daysLeft === 0 ? " · ¡HOY!" : ` · faltan ${e.daysLeft} días`)}
+                    </p>
+                  </div>
+                  {!e.done && e.daysLeft >= 0 && (
+                    <div className="shrink-0 text-right">
+                      <p className={cn("text-2xl font-bold font-mono tabular-nums leading-none", soon ? "text-danger" : "text-foreground")}>{e.daysLeft}</p>
+                      <p className="text-[9px] uppercase tracking-wide text-muted">{e.daysLeft === 1 ? "día" : "días"}</p>
+                    </div>
+                  )}
+                  <button onClick={() => toggle(e.id, !e.done)} className="shrink-0 rounded-lg p-1.5 text-muted hover:text-success" title={e.done ? "Reabrir" : "Marcar rendido"}>
+                    <CheckCircle2 size={16} className={e.done ? "text-success" : ""} />
+                  </button>
+                  <button onClick={() => del(e.id)} className="shrink-0 rounded-lg p-1.5 text-muted hover:text-danger"><Trash2 size={15} /></button>
                 </div>
-                <button onClick={() => toggle(e.id, !e.done)} className="shrink-0 rounded-lg p-1.5 text-muted hover:text-success" title={e.done ? "Reabrir" : "Marcar rendido"}>
-                  <CheckCircle2 size={16} className={e.done ? "text-success" : ""} />
-                </button>
-                <button onClick={() => del(e.id)} className="shrink-0 rounded-lg p-1.5 text-muted hover:text-danger"><Trash2 size={15} /></button>
+                {/* Preparación hacia el parcial */}
+                {!e.done && sb.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="h-1.5 w-full rounded-full bg-surface-2 overflow-hidden">
+                      <div className={cn("h-full rounded-full transition-all", barTone)} style={{ width: `${pct}%` }} />
+                    </div>
+                    <p className="text-[11px] text-muted">
+                      {dominated}/{sb.length} temas en verde ({pct}%)
+                      {faltan > 0 ? <span className="text-foreground/80"> · te faltan <b>{faltan}</b> para llegar</span> : <span className="text-emerald-500"> · ¡listo para rendir! 🎯</span>}
+                    </p>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -767,7 +794,7 @@ function PendientesTab({
 // Componente principal
 // ─────────────────────────────────────────────
 export function StudySystemClient({
-  initialSubjects, initialBlocks, initialUnits, initialPlan, stats,
+  initialSubjects, initialBlocks, initialUnits, initialPlan, stats, progress,
   initialExams, initialExercises, initialErrors, availability, settings, notion, gcal,
 }: {
   initialSubjects: SubjectDTO[];
@@ -775,6 +802,7 @@ export function StudySystemClient({
   initialUnits: UnitDTO[];
   initialPlan: { items: PlanItem[]; totalMin: number; budgetMin: number; overflow: PlanItem[]; isRestDay: boolean };
   stats: { total: number; byLevel: Record<string, number>; dueToday: number; overdue: number };
+  progress: { streak: number; weekSessions: number };
   initialExams: ExamDTO[];
   initialExercises: ExerciseDTO[];
   initialErrors: ErrorLogDTO[];
@@ -902,6 +930,12 @@ export function StudySystemClient({
           <h1 className="text-xl font-bold text-foreground">Estudio</h1>
           <p className="text-xs text-muted">Repetición espaciada + recuperación activa. Te digo qué estudiar hoy y cuándo repasarlo.</p>
         </div>
+        {progress.streak > 0 && (
+          <span className="shrink-0 inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-500" title={`${progress.weekSessions} repasos en los últimos 7 días`}>
+            🔥 {progress.streak}
+            <span className="hidden sm:inline font-medium">{progress.streak === 1 ? "día" : "días"}</span>
+          </span>
+        )}
         <button onClick={() => setShowAvail(true)} className="shrink-0 rounded-lg border border-border p-2 text-muted hover:text-foreground" title="Disponibilidad semanal">
           <Settings2 size={17} />
         </button>
@@ -1221,7 +1255,7 @@ export function StudySystemClient({
       )}
 
       {/* PARCIALES */}
-      {tab === "parciales" && <ExamsTab subjects={subjects} exams={exams} setExams={setExams} />}
+      {tab === "parciales" && <ExamsTab subjects={subjects} exams={exams} setExams={setExams} blocks={blocks} />}
 
       {/* PENDIENTES */}
       {tab === "pendientes" && (

@@ -711,6 +711,32 @@ export async function studyStats(userId: string, now = new Date()) {
   return { total: blocks.length, byLevel, dueToday, overdue };
 }
 
+// Racha de estudio: días consecutivos (hora ARG) con al menos una sesión cerrada,
+// contando hacia atrás desde hoy (o ayer, para no romperla si hoy todavía no
+// estudiaste). Devuelve también cuántos repasos hiciste en los últimos 7 días.
+export async function getStudyProgress(userId: string): Promise<{ streak: number; weekSessions: number }> {
+  const now = Date.now();
+  const since = new Date(now - 60 * 86_400_000);
+  const sessions = await prisma.studySession.findMany({
+    where: { userId, createdAt: { gte: since } },
+    select: { createdAt: true },
+  });
+  const argDay = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+  const days = new Set(sessions.map((s) => argDay(s.createdAt)));
+
+  const todayKey = argDay(new Date(now));
+  let cursor = days.has(todayKey) ? new Date(now) : new Date(now - 86_400_000);
+  let streak = 0;
+  for (let i = 0; i < 60; i++) {
+    if (days.has(argDay(cursor))) { streak++; cursor = new Date(cursor.getTime() - 86_400_000); }
+    else break;
+  }
+
+  const weekAgo = now - 7 * 86_400_000;
+  const weekSessions = sessions.filter((s) => s.createdAt.getTime() >= weekAgo).length;
+  return { streak, weekSessions };
+}
+
 // ─────────────────────────────────────────────
 // Disponibilidad semanal (Sección — calendario/disponibilidad)
 // ─────────────────────────────────────────────

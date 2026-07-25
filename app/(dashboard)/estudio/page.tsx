@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
   listSubjects, listBlocks, getTodayPlan, studyStats,
-  listExams, listExercises, listRecentErrors, listAvailability, listUnits,
+  listExams, listExercises, listRecentErrors, listAvailability, listUnits, getStudyProgress,
 } from "@/lib/db/study-system";
 import { getStudySettings } from "@/lib/study/notify";
 import { getNotionConfigView } from "@/lib/study/notion";
@@ -17,12 +17,13 @@ export default async function EstudioPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || user.email !== process.env.ADMIN_EMAIL) redirect("/dashboard");
 
-  const [subjects, blocks, units, plan, stats, exams, exercises, errors, availability, settings, notion, gcal] = await Promise.all([
+  const [subjects, blocks, units, plan, stats, progress, exams, exercises, errors, availability, settings, notion, gcal] = await Promise.all([
     listSubjects(user.id).catch(() => []),
     listBlocks(user.id).catch(() => []),
     listUnits(user.id).catch(() => []),
     getTodayPlan(user.id).catch(() => ({ items: [], totalMin: 0, budgetMin: 240, overflow: [], isRestDay: false })),
     studyStats(user.id).catch(() => ({ total: 0, byLevel: {}, dueToday: 0, overdue: 0 })),
+    getStudyProgress(user.id).catch(() => ({ streak: 0, weekSessions: 0 })),
     listExams(user.id).catch(() => []),
     listExercises(user.id).catch(() => []),
     listRecentErrors(user.id).catch(() => []),
@@ -40,6 +41,7 @@ export default async function EstudioPage() {
         initialUnits={units}
         initialPlan={plan}
         stats={stats}
+        progress={progress}
         initialExams={exams}
         initialExercises={exercises}
         initialErrors={errors}
