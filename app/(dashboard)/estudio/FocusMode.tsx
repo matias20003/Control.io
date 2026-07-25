@@ -70,6 +70,7 @@ export function FocusMode({
   const [draft, setDraft] = useState("");
   const [sessionNotes, setSessionNotes] = useState<{ id: string; text: string }[]>([]);
   const [savingNote, setSavingNote] = useState(false);
+  const [showNotes, setShowNotes] = useState(false); // notas ocultas por defecto: son opcionales
   const [track, setTrack] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const [phase, setPhase] = useState<"focus" | "finish">("focus");
@@ -200,11 +201,22 @@ export function FocusMode({
 
           {/* ── Panel derecho: notas + música ── */}
           <div className="space-y-4">
-            {/* Notas rápidas: escribís y Enter la guarda (vinculada a este bloque) */}
+            {/* Notas rápidas (OPCIONAL, ocultas por defecto): escribís y Enter guarda */}
+            {!showNotes ? (
+              <button
+                onClick={() => setShowNotes(true)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border px-4 py-2.5 text-xs font-medium text-muted hover:text-foreground hover:border-primary/50"
+              >
+                <BrainCircuit size={14} /> Vaciar la cabeza (opcional)
+              </button>
+            ) : (
             <div className="rounded-2xl border border-border bg-surface p-4">
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                <BrainCircuit size={14} className="text-primary" /> Vaciá la cabeza
-              </p>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                  <BrainCircuit size={14} className="text-primary" /> Vaciá la cabeza
+                </p>
+                <button onClick={() => setShowNotes(false)} className="text-[11px] text-muted hover:text-foreground">Ocultar</button>
+              </div>
               <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
@@ -235,6 +247,7 @@ export function FocusMode({
               )}
               {savingNote && <p className="mt-1.5 flex items-center gap-1 text-[11px] text-primary"><Loader2 size={11} className="animate-spin" /> Guardando…</p>}
             </div>
+            )}
 
             {/* Música */}
             <div className="rounded-2xl border border-border bg-surface p-4">
