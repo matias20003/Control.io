@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sendText, markReadAndType, fetchMediaAsDataUrl, fetchMediaBuffer, verifySignature } from "@/lib/whatsapp/kapso";
-import { isStudyOwner, ingestStudyPdf, ingestStudyText, ingestStudyImage, studySavedMessage } from "@/lib/study/ingest";
+import { sendText, markReadAndType, fetchMediaAsDataUrl, verifySignature } from "@/lib/whatsapp/kapso";
+import { isStudyOwner } from "@/lib/study/ingest";
 import { findProfileByPhone } from "@/lib/whatsapp/users";
 import { linkWhatsappByCode } from "@/lib/db/profile";
 import { rateLimitKey } from "@/lib/rate-limit";
@@ -156,54 +156,9 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const isPdf =
-        message.type === "document" ||
-        (message.document?.mime_type ?? "").includes("pdf") ||
-        (message.document?.filename ?? "").toLowerCase().endsWith(".pdf");
-      if (isPdf && message.kapso?.media_url) {
-        try {
-          const buf = await fetchMediaBuffer(message.kapso.media_url);
-          const r = await ingestStudyPdf(profile.id, buf, message.document?.caption || undefined);
-          processed = true;
-          await sendText(
-            from,
-            r.ok
-              ? studySavedMessage(r)
-              : r.reason === "empty"
-                ? "📄 Ese PDF es manuscrito (imagen), no tiene texto. Mandámelo como *FOTO* y te leo la letra 📸"
-                : "Uf, tuve un problema procesando ese PDF 😕 Probá de nuevo."
-          );
-          return Response.json({ ok: true, study: r.ok });
-        } catch (err) {
-          console.error("[study] pdf:", err);
-        }
-      }
-      // Foto/captura de un apunte (manuscrito) con caption de estudio → visión.
-      const cap = (message.image?.caption ?? "").toLowerCase();
-      if (
-        message.type === "image" && message.kapso?.media_url &&
-        /apunte|estudio|materia|clase|resumen|facultad/.test(cap)
-      ) {
-        try {
-          const dataUrl = await fetchMediaAsDataUrl(message.kapso.media_url, message.image?.mime_type);
-          const r = await ingestStudyImage(profile.id, [dataUrl], message.image?.caption || undefined);
-          processed = true;
-          await sendText(from, r.ok ? studySavedMessage(r) : "No pude leer esa foto 😕 Probá con una más nítida o mejor luz.");
-          return Response.json({ ok: true, study: r.ok });
-        } catch (err) {
-          console.error("[study] image:", err);
-        }
-      }
-      const tStudy = getText(message) ?? "";
-      const mStudy = tStudy.match(
-        /^\s*(?:estudio|apunte|resumen del d[ií]a|guard[aá](?:me)? (?:esto|este apunte|apunte|el resumen))\s*:?\s*([\s\S]+)/i
-      );
-      if (mStudy && mStudy[1] && mStudy[1].trim().length > 20) {
-        const r = await ingestStudyText(profile.id, mStudy[1].trim());
-        processed = true;
-        await sendText(from, r.ok ? studySavedMessage(r) : "No pude guardar el apunte 😕 Probá con un poco más de texto.");
-        return Response.json({ ok: true, study: r.ok });
-      }
+      // La carga de estudio por foto/texto ya NO usa el viejo ingestor de "guía":
+      // las imágenes y el texto caen al asistente general (handleUserMessage), que
+      // ahora sabe crear unidades + temas con la acción create_study.
     }
 
     // Si mandó una imagen (ticket, recibo, captura), la descargamos para que la lea la IA.

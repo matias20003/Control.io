@@ -31,6 +31,8 @@ import { getInvestments, type SerializedInvestment } from "@/lib/db/investments"
 import { getTasks, createTask, toggleTask, deleteTask, type SerializedTask } from "@/lib/db/tasks";
 import { createReminder, getPendingReminders, type SerializedReminder } from "@/lib/db/reminders";
 import { createRecurringReminder, listRecurringReminders, updateRecurringReminder, deleteRecurringReminder, type SerializedRecurringReminder } from "@/lib/db/recurring-reminders";
+import { isStudyOwner } from "@/lib/study/ingest";
+import { listSubjects as listStudySubjects, listUnits as listStudyUnits, createUnit as createStudyUnit, createBlocksDistributed } from "@/lib/db/study-system";
 import { createCalendarEvent, createGoogleTask, getGoogleStatus, listCalendarEvents, listGoogleTasks, deleteCalendarEvent, updateCalendarEvent, completeGoogleTask } from "@/lib/google";
 import { getIsTester } from "@/lib/db/profile";
 import { hasFeature } from "@/lib/feature-flags";
@@ -90,6 +92,10 @@ interface Action {
   durationMin?: number; // agendar_evento / editar_evento: duración en minutos (default 60)
   eventRef?: number; // borrar_evento / editar_evento: [#N] de AGENDA
   motivo?: string;   // escalar_soporte: resumen del problema a derivar al equipo
+  subjectCode?: string;     // create_study: código de la materia (debe existir)
+  unit?: string;            // create_study: nombre de la unidad/capítulo
+  topics?: string[];        // create_study: lista de temas de la unidad
+  initialSessions?: number; // create_study: sesiones de estudio inicial (1-4)
 }
 
 interface AssistantOutput {
@@ -123,6 +129,8 @@ interface FinancialContext {
   gcalEvents: { id: string; summary: string; start: string }[];
   gtasks: { id: string; title: string; due: string | null }[];
   referralUrl: string;
+  isStudyOwner: boolean; // solo el dueño del estudio puede cargar materias/temas
+  studySubjects: { code: string; name: string }[];
 }
 
 function baseUrl(): string {
@@ -356,6 +364,15 @@ function formatFinancialState(c: FinancialContext): string {
     );
   }
 
+  if (c.isStudyOwner) {
+    s.push(
+      c.studySubjects.length
+        ? `TUS MATERIAS DE ESTUDIO (usá el "code" en create_study):\n` +
+            c.studySubjects.map((m) => `- ${m.code}: ${m.name}`).join("\n")
+        : `ESTUDIO: todavía no tenés materias creadas. Si te piden cargar una unidad/temas, avisá que primero hay que crear la materia en la sección Estudio de la app.`
+    );
+  }
+
   return s.join("\n\n");
 }
 
@@ -533,6 +550,8 @@ ${hasFeature("recordatorios", { isTester: c.isTester }) ? `- "create_reminder": 
 ${hasFeature("google", { isTester: c.isTester }) && c.googleConnected ? `- "agendar_evento": { title, eventStart, durationMin }   // crea un EVENTO en Google Calendar ("agendá turno médico el jueves 10hs", "reunión mañana 15hs", "cumple de Ana el 20"). title = qué. eventStart = "YYYY-MM-DDTHH:mm" en hora Argentina (relativo a HOY). durationMin opcional (default 60). Usalo para citas/eventos con fecha y hora; create_task es para to-dos sin hora.
 - "borrar_evento": { eventRef }   // borra un evento del calendario ("borrá la reunión del lunes", "cancelá el turno"). eventRef = [#N] de AGENDA.
 - "editar_evento": { eventRef, title, eventStart, durationMin }   // reprograma o renombra un evento ("movélo a las 16", "cambialo para el martes 11hs"). eventRef = [#N] de AGENDA. Mandá solo lo que cambia (title y/o eventStart).` : ``}
+${c.isStudyOwner ? `- "create_study": { subjectCode, unit, topics, initialSessions }   // CARGAR UNA UNIDAD + SUS TEMAS en el sistema de Estudio (repetición espaciada). Usalo cuando te mandan una unidad/capítulo con sus temas, por FOTO (un índice, mapa o lista) o por TEXTO ("agregá la unidad Integrales dobles y triples con estos temas: ..."). subjectCode = código de una de TUS MATERIAS (ver la lista de arriba). unit = nombre de la unidad/capítulo tal cual. topics = array con CADA tema, uno por elemento, LEÍDOS EXACTO de la imagen/texto (NO inventes, NO resumas, NO agregues). initialSessions opcional (1-4, default 1). Es DISTINTO de create_task: NO es un pendiente, son temas de estudio.
+  ⚠️ Si el pedido es de estudio (una unidad con lista de temas), usá create_study, NUNCA create_task. Si NO podés leer bien la imagen, o no sabés a qué materia va y no es obvio por el nombre, NO inventes: respondé intent "chat" preguntando (qué materia, o que reenvíe la foto).` : ``}
 REGLAS:
 - "intent":"action" cuando hay que ejecutar algo (llená "actions"). Podés poner varias acciones.
 - "intent":"query" para CUALQUIER pregunta o pedido de análisis/consejo/información —de finanzas, de la vida cotidiana, organización o conocimiento general—: "actions" vacío, respondé en "answer" con una respuesta EXPERTA y útil. Si es financiera, usá los datos reales (montos con $ y miles) con diagnóstico + recomendación concreta. Si es de otro tema, respondé igual de bien con tu conocimiento. NUNCA contestes "solo puedo cargar gastos" ni redirijas sin ayudar primero.
@@ -840,6 +859,31 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       return `✅ Anotado: ${a.title}${validDue ? ` (para el ${validDue.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })})` : ""}${enGoogle ? " · también en tu Google Tasks 📋" : ""}`;
     }
 
+    case "create_study": {
+      if (!c.isStudyOwner) throw new Error("el sistema de estudio es solo del dueño");
+      const code = (a.subjectCode ?? "").trim();
+      const unitName = (a.unit ?? "").trim();
+      const topics = (a.topics ?? []).map((t) => String(t).trim()).filter(Boolean);
+      if (!code) throw new Error("no me quedó claro a qué materia va. Decime la materia y lo cargo.");
+      if (topics.length === 0) throw new Error("no leí ningún tema para cargar. Reenviame la foto o pasámelos por texto.");
+      const subs = await listStudySubjects(userId);
+      const subject =
+        subs.find((s) => s.code.toLowerCase() === code.toLowerCase()) ??
+        subs.find((s) => s.name.toLowerCase().includes(code.toLowerCase()));
+      if (!subject) throw new Error(`no encontré la materia "${code}". Creala en la app (Estudio → Materias) y lo cargo.`);
+      let unitId: string | undefined;
+      if (unitName) {
+        const existing = (await listStudyUnits(userId, subject.id)).find((u) => u.name.toLowerCase() === unitName.toLowerCase());
+        unitId = existing ? existing.id : (await createStudyUnit(userId, { subjectId: subject.id, name: unitName })).id;
+      }
+      const created = await createBlocksDistributed(
+        userId, subject.id, 1,
+        topics.map((t) => ({ topic: t, unitId: unitId ?? null, initialSessions: a.initialSessions })),
+      );
+      const unitLabel = unitName ? ` en "${unitName}"` : "";
+      return `📚 Cargué ${created.length} tema${created.length === 1 ? "" : "s"}${unitLabel} de ${subject.code} y los repartí en tus días. Los ves en la app → Estudio.`;
+    }
+
     case "complete_task": {
       if (!hasFeature("tareas", { isTester: c.isTester })) throw new Error("esa función todavía no está disponible");
       // Título a buscar: lo que pidió el usuario o el de la tarea referida por [#N].
@@ -1098,6 +1142,12 @@ export async function handleUserMessage(userId: string, message: string, imageUr
     ]);
   }
 
+  // Estudio: solo el dueño puede cargar materias/unidades/temas por WhatsApp.
+  const studyOwner = await isStudyOwner(userId).catch(() => false);
+  const studySubjects = studyOwner
+    ? (await listStudySubjects(userId).catch(() => [])).map((s) => ({ code: s.code, name: s.name }))
+    : [];
+
   const ctx: FinancialContext = {
     accounts,
     categories,
@@ -1123,6 +1173,8 @@ export async function handleUserMessage(userId: string, message: string, imageUr
     gcalEvents,
     gtasks,
     referralUrl: `https://controlio.site/?ref=${userId}`,
+    isStudyOwner: studyOwner,
+    studySubjects,
   };
 
   const result = await interpret(clean, ctx, imageUrl, history);
