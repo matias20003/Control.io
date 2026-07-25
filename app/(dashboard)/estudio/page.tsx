@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getStudyNotes, getUpcomingReviews } from "@/lib/db/study";
 import {
   listSubjects, listBlocks, getTodayPlan, studyStats,
   listExams, listExercises, listRecentErrors, listAvailability, listUnits,
@@ -18,9 +17,7 @@ export default async function EstudioPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || user.email !== process.env.ADMIN_EMAIL) redirect("/dashboard");
 
-  const [notes, reviews, subjects, blocks, units, plan, stats, exams, exercises, errors, availability, settings, notion, gcal] = await Promise.all([
-    getStudyNotes(user.id).catch(() => []),
-    getUpcomingReviews(user.id).catch(() => []),
+  const [subjects, blocks, units, plan, stats, exams, exercises, errors, availability, settings, notion, gcal] = await Promise.all([
     listSubjects(user.id).catch(() => []),
     listBlocks(user.id).catch(() => []),
     listUnits(user.id).catch(() => []),
@@ -43,8 +40,6 @@ export default async function EstudioPage() {
         initialUnits={units}
         initialPlan={plan}
         stats={stats}
-        notes={notes}
-        reviews={reviews}
         initialExams={exams}
         initialExercises={exercises}
         initialErrors={errors}
