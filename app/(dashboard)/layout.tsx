@@ -42,7 +42,7 @@ export default async function DashboardLayout({
       <Sidebar newsletterUnread={newsletterUnread} showCorreos={showCorreos} />
       <Header name={name} email={user.email ?? ""} />
       <Calculator />
-      <main className="md:ml-60 pb-20 md:pb-0 min-h-dvh">
+      <main className="md:ml-60 pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-0 min-h-dvh">
         <Topbar name={name} email={user.email ?? ""} />
         <InstallBanner />
         {children}
