@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { buildSubjectColors } from "./colors";
-import type { BlockDTO, SubjectDTO } from "@/lib/db/study-system";
+import type { BlockDTO, SubjectDTO, ExamDTO } from "@/lib/db/study-system";
 
 // Vista global tipo "contribuciones": semanas en columnas, días en filas.
 const WEEKS_BACK = 2;
@@ -17,10 +17,11 @@ function keyOf(d: Date): string {
 }
 
 export function StudyHeatmap({
-  blocks, subjects, onReviewClick,
+  blocks, subjects, exams, onReviewClick,
 }: {
   blocks: BlockDTO[];
   subjects: SubjectDTO[];
+  exams: ExamDTO[];
   onReviewClick: (b: BlockDTO) => void;
 }) {
   const colors = buildSubjectColors(subjects);
@@ -43,6 +44,21 @@ export function StudyHeatmap({
     }
     return map;
   }, [blocks, colors]);
+
+  // Días de examen/parcial (no rendidos) → color de la materia + etiqueta.
+  const examsByDay = useMemo(() => {
+    const map = new Map<string, { color: string; labels: string[] }>();
+    for (const e of exams) {
+      if (e.done) continue;
+      const d = new Date(e.examDate);
+      const k = keyOf(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+      const color = colors.get(e.subjectId) ?? "#ef4444";
+      const entry = map.get(k) ?? { color, labels: [] };
+      entry.labels.push(`${e.subjectCode} · ${e.title}`);
+      map.set(k, entry);
+    }
+    return map;
+  }, [exams, colors]);
 
   // Semanas (columnas). Arranca el lunes de (esta semana - WEEKS_BACK).
   const weeks = useMemo(() => {
@@ -84,6 +100,9 @@ export function StudyHeatmap({
             <span className="h-2.5 w-2.5 rounded-sm" style={{ background: colors.get(s.id) }} /> {s.code}
           </span>
         ))}
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-muted">
+          <span className="h-2.5 w-2.5 rounded-sm ring-2 ring-red-500 ring-inset" /> examen
+        </span>
       </div>
 
       {/* Grilla global (scroll horizontal) */}
@@ -105,6 +124,7 @@ export function StudyHeatmap({
                 {week.map((day) => {
                   const k = keyOf(day);
                   const entry = byDay.get(k);
+                  const exam = examsByDay.get(k);
                   const isToday = k === todayKey;
                   const isSel = k === selected;
                   const isPast = day < startToday;
@@ -112,19 +132,22 @@ export function StudyHeatmap({
                     <button
                       key={k}
                       onClick={() => setSelected(k)}
-                      title={`${day.toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short" })}${entry ? ` · ${entry.blocks.length} repaso(s)` : ""}`}
+                      title={`${day.toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short" })}${exam ? ` · 📝 ${exam.labels.join(", ")}` : ""}${entry ? ` · ${entry.blocks.length} repaso(s)` : ""}`}
                       className={cn(
                         "relative h-3 w-3 rounded-[2px] overflow-hidden border transition-all",
-                        entry ? "border-transparent" : "border-border/50 bg-surface-2/30",
-                        isSel && "ring-1 ring-primary ring-offset-1 ring-offset-surface",
-                        isToday && !isSel && "ring-1 ring-primary/60"
+                        entry || exam ? "border-transparent" : "border-border/50 bg-surface-2/30",
+                        isSel ? "ring-1 ring-primary ring-offset-1 ring-offset-surface"
+                          : exam ? "ring-2 ring-red-500"
+                          : isToday ? "ring-1 ring-primary/60" : ""
                       )}
                     >
-                      {entry && entry.colors.length > 0 && (
+                      {entry && entry.colors.length > 0 ? (
                         <div className="absolute inset-0 flex" style={{ opacity: isPast ? 0.4 : 1 }}>
                           {entry.colors.map((c, i) => <div key={i} className="flex-1" style={{ background: c }} />)}
                         </div>
-                      )}
+                      ) : exam ? (
+                        <div className="absolute inset-0" style={{ background: exam.color, opacity: isPast ? 0.35 : 0.6 }} />
+                      ) : null}
                     </button>
                   );
                 })}
@@ -140,6 +163,9 @@ export function StudyHeatmap({
         <p className="text-sm font-bold text-foreground capitalize">
           {selDate.toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "long" })}
         </p>
+        {examsByDay.get(selected)?.labels.map((l, i) => (
+          <p key={i} className="inline-flex items-center gap-1.5 rounded-lg bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-500">📝 Examen: {l}</p>
+        ))}
         {!selEntry || selEntry.blocks.length === 0 ? (
           <p className="text-xs text-muted py-2 text-center">Sin repasos este día.</p>
         ) : (

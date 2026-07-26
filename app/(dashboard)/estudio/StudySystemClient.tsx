@@ -77,6 +77,32 @@ function MasteryBadge({ level, reviewCount }: { level: string; reviewCount?: num
   );
 }
 
+// Avance de un tema (0–1) + color, según nivel de dominio (y afina con la etapa).
+function topicProgress(level: string, reviewStage?: string): { pct: number; color: string } {
+  const STAGE_BONUS: Record<string, number> = { "D0": 0, "D+1": 0.04, "D+3": 0.08, "D+7": 0.12, "D+16": 0.16, "MANT_SEM": 0.2, "MANT_QUIN": 0.2 };
+  const bonus = STAGE_BONUS[reviewStage ?? "D0"] ?? 0;
+  switch (level) {
+    case "CONSOLIDADO": return { pct: 1, color: "#0ea5e9" };
+    case "VERDE": return { pct: Math.min(0.95, 0.7 + bonus), color: "#10b981" };
+    case "AMARILLO": return { pct: Math.min(0.6, 0.38 + bonus), color: "#f59e0b" };
+    default: return { pct: Math.min(0.3, 0.1 + bonus), color: "#ef4444" };
+  }
+}
+
+/** Anillo de progreso circular (SVG). */
+function ProgressRing({ pct, color, size = 22 }: { pct: number; color: string; size?: number }) {
+  const sw = 3;
+  const r = (size - sw) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg width={size} height={size} className="shrink-0 -rotate-90">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-surface-2)" strokeWidth={sw} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round"
+        strokeDasharray={c} strokeDashoffset={c * (1 - Math.max(0, Math.min(1, pct)))} />
+    </svg>
+  );
+}
+
 // ─────────────────────────────────────────────
 // Modal de cierre de sesión (Sección 11 — obligatorio elegir estado)
 // ─────────────────────────────────────────────
@@ -976,7 +1002,6 @@ export function StudySystemClient({
   const [units, setUnits] = useState(initialUnits);
   const [expSubjects, setExpSubjects] = useState<Set<string>>(new Set());
   const [expUnits, setExpUnits] = useState<Set<string>>(new Set());
-  const [expTemas, setExpTemas] = useState<Set<string>>(new Set());
   const [exams, setExams] = useState(initialExams);
   const [exercises, setExercises] = useState(initialExercises);
   const [avail, setAvail] = useState(availability);
@@ -1304,7 +1329,7 @@ export function StudySystemClient({
           {blocks.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted">Todavía no cargaste temas. Agregalos desde “Materias”.</div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {subjects
                 .filter((s) => blocks.some((b) => b.subjectId === s.id))
                 .map((s) => {
@@ -1315,42 +1340,49 @@ export function StudySystemClient({
                     ...sUnits.map((u) => ({ id: u.id, name: u.name, list: sBlocks.filter((b) => b.unitId === u.id) })),
                     { id: "__none", name: `Sin ${label.toLowerCase()}`, list: sBlocks.filter((b) => !b.unitId) },
                   ].filter((g) => g.list.length > 0);
-                  const sOpen = expTemas.has(s.id);
+                  // Avance de la materia = promedio del avance de sus temas.
+                  const avg = sBlocks.reduce((a, b) => a + topicProgress(b.masteryLevel, b.reviewStage).pct, 0) / sBlocks.length;
+                  const dominated = sBlocks.filter((b) => b.masteryLevel === "VERDE" || b.masteryLevel === "CONSOLIDADO").length;
                   return (
                     <div key={s.id} className="rounded-2xl border border-border overflow-hidden">
-                      <button onClick={() => toggleSet(setExpTemas, s.id)} className="w-full flex items-center gap-2 px-3 py-2.5 bg-surface-2/30 hover:bg-surface-2/50 transition-colors">
-                        {sOpen ? <ChevronDown size={15} className="text-muted shrink-0" /> : <ChevronRight size={15} className="text-muted shrink-0" />}
-                        <BookOpen size={14} className="text-primary shrink-0" />
-                        <span className="font-semibold text-sm text-foreground truncate">{s.code} · {s.name}</span>
-                        <span className="ml-auto text-[11px] text-muted whitespace-nowrap">{sBlocks.length} temas</span>
-                      </button>
-                      {sOpen && (
-                        <div className="divide-y divide-border">
-                          {groups.map((g) => (
-                            <div key={g.id} className="bg-surface/40">
-                              <p className="flex items-center gap-2 px-3 py-1.5 pl-6 text-[12px] text-muted">
-                                <Layers size={12} className="shrink-0" /> {g.name} <span className="text-[10px]">· {g.list.length}</span>
-                              </p>
-                              <div className="divide-y divide-border">
-                                {g.list.map((b) => (
-                                  <div key={b.id} className="flex items-center gap-2 px-3 py-2 pl-10 text-sm">
+                      {/* Cabecera de materia (siempre visible) con anillo de avance */}
+                      <div className="flex items-center gap-2.5 px-3 py-2.5 bg-surface-2/30">
+                        <ProgressRing pct={avg} color={avg >= 0.99 ? "#0ea5e9" : avg >= 0.7 ? "#10b981" : avg >= 0.38 ? "#f59e0b" : "#ef4444"} size={26} />
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm text-foreground truncate">{s.code} · {s.name}</p>
+                          <p className="text-[11px] text-muted">{Math.round(avg * 100)}% de avance · {dominated}/{sBlocks.length} dominados</p>
+                        </div>
+                      </div>
+                      {/* Temas desplegados (sin colapsar) */}
+                      <div className="divide-y divide-border">
+                        {groups.map((g) => (
+                          <div key={g.id}>
+                            <p className="flex items-center gap-2 px-3 py-1.5 bg-surface/40 text-[12px] text-muted">
+                              <Layers size={12} className="shrink-0" /> {g.name} <span className="text-[10px]">· {g.list.length}</span>
+                            </p>
+                            <div className="divide-y divide-border">
+                              {g.list.map((b) => {
+                                const p = topicProgress(b.masteryLevel, b.reviewStage);
+                                return (
+                                  <div key={b.id} className="flex items-center gap-2.5 px-3 py-2 text-sm">
+                                    <ProgressRing pct={p.pct} color={p.color} />
                                     <div className="min-w-0 flex-1">
                                       <p className="text-foreground truncate" title={b.topic}>{b.topic}</p>
-                                      {(b.subtopic || b.importance >= 3) && (
-                                        <p className="text-[10px] text-muted truncate">
-                                          {b.subtopic}{b.subtopic && b.importance >= 3 ? " · " : ""}{b.importance >= 4 ? "muy importante" : b.importance === 3 ? "importante" : ""}
-                                        </p>
-                                      )}
+                                      <p className="text-[10px] text-muted truncate">
+                                        {Math.round(p.pct * 100)}%
+                                        {b.subtopic ? ` · ${b.subtopic}` : ""}
+                                        {b.importance >= 4 ? " · muy importante" : b.importance === 3 ? " · importante" : ""}
+                                      </p>
                                     </div>
                                     <button onClick={() => setEditing(b)} className="text-muted hover:text-foreground shrink-0" aria-label="Editar tema"><Pencil size={13} /></button>
                                     <button onClick={() => deleteBlocks([b.id])} disabled={deleting} className="text-muted hover:text-danger shrink-0" aria-label="Eliminar tema"><Trash2 size={13} /></button>
                                   </div>
-                                ))}
-                              </div>
+                                );
+                              })}
                             </div>
-                          ))}
-                        </div>
-                      )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   );
                 })}
@@ -1384,7 +1416,7 @@ export function StudySystemClient({
           ) : tablaView === "kanban" ? (
             <StudyKanban blocks={blocks} subjects={subjects} onCard={(b) => setClosing(b)} onEdit={(b) => setEditing(b)} />
           ) : tablaView === "mapa" ? (
-            <StudyHeatmap blocks={blocks} subjects={subjects} onReviewClick={(b) => setClosing(b)} />
+            <StudyHeatmap blocks={blocks} subjects={subjects} exams={exams} onReviewClick={(b) => setClosing(b)} />
           ) : blocks.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted">Todavía no cargaste bloques.</div>
           ) : (
