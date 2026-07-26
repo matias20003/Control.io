@@ -5,8 +5,11 @@ import { cn } from "@/lib/utils";
 import { buildSubjectColors } from "./colors";
 import type { BlockDTO, SubjectDTO } from "@/lib/db/study-system";
 
-const WEEKS = 9; // ~2 meses hacia adelante
-const DOW = ["L", "M", "M", "J", "V", "S", "D"];
+// Vista global tipo "contribuciones": semanas en columnas, días en filas.
+const WEEKS_BACK = 2;
+const WEEKS_FWD = 24; // ~medio año a la vista
+const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const ROW_LABEL = ["L", "", "M", "", "V", "", ""]; // Lun/Mié/Vie
 const MAST_DOT: Record<string, string> = { ROJO: "#ef4444", AMARILLO: "#f59e0b", VERDE: "#10b981", CONSOLIDADO: "#0ea5e9" };
 
 function keyOf(d: Date): string {
@@ -26,7 +29,6 @@ export function StudyHeatmap({
   const todayKey = keyOf(startToday);
   const [selected, setSelected] = useState<string>(todayKey);
 
-  // Índice día → { subjects: colores distintos, blocks: lista }
   const byDay = useMemo(() => {
     const map = new Map<string, { colors: string[]; blocks: BlockDTO[] }>();
     for (const b of blocks) {
@@ -42,12 +44,13 @@ export function StudyHeatmap({
     return map;
   }, [blocks, colors]);
 
-  // Grilla: arranca el lunes de esta semana; WEEKS semanas.
+  // Semanas (columnas). Arranca el lunes de (esta semana - WEEKS_BACK).
   const weeks = useMemo(() => {
-    const offset = (startToday.getDay() + 6) % 7; // lunes = 0
+    const offset = (startToday.getDay() + 6) % 7;
     const start = new Date(startToday);
-    start.setDate(startToday.getDate() - offset);
-    return Array.from({ length: WEEKS }, (_, w) =>
+    start.setDate(startToday.getDate() - offset - WEEKS_BACK * 7);
+    const total = WEEKS_BACK + WEEKS_FWD;
+    return Array.from({ length: total }, (_, w) =>
       Array.from({ length: 7 }, (_, d) => {
         const day = new Date(start);
         day.setDate(start.getDate() + w * 7 + d);
@@ -55,6 +58,16 @@ export function StudyHeatmap({
       })
     );
   }, [startToday]);
+
+  // Etiqueta de mes por columna (cuando cambia el mes respecto de la semana previa).
+  const monthLabels = useMemo(
+    () => weeks.map((week, i) => {
+      const m = week[0].getMonth();
+      const prev = i > 0 ? weeks[i - 1][0].getMonth() : -1;
+      return m !== prev ? MONTHS[m] : "";
+    }),
+    [weeks]
+  );
 
   const selDate = useMemo(() => {
     const [y, m, d] = selected.split("-").map(Number);
@@ -73,15 +86,22 @@ export function StudyHeatmap({
         ))}
       </div>
 
-      {/* Grilla */}
+      {/* Grilla global (scroll horizontal) */}
       <div className="rounded-2xl border border-border bg-surface p-3 overflow-x-auto">
-        <div className="min-w-[320px]">
-          <div className="grid grid-cols-7 gap-1 mb-1">
-            {DOW.map((d, i) => <div key={i} className="text-center text-[9px] font-semibold uppercase text-muted">{d}</div>)}
+        <div className="inline-flex flex-col gap-1">
+          {/* Meses */}
+          <div className="flex gap-[2px] pl-5">
+            {monthLabels.map((lbl, i) => (
+              <div key={i} className="w-3 text-[8px] text-muted overflow-visible whitespace-nowrap">{lbl}</div>
+            ))}
           </div>
-          <div className="space-y-1">
+          {/* Días (label) + columnas por semana */}
+          <div className="flex gap-[2px]">
+            <div className="flex flex-col gap-[2px] pr-1">
+              {ROW_LABEL.map((l, i) => <div key={i} className="h-3 w-2.5 text-[8px] leading-[12px] text-muted">{l}</div>)}
+            </div>
             {weeks.map((week, wi) => (
-              <div key={wi} className="grid grid-cols-7 gap-1">
+              <div key={wi} className="flex flex-col gap-[2px]">
                 {week.map((day) => {
                   const k = keyOf(day);
                   const entry = byDay.get(k);
@@ -92,26 +112,18 @@ export function StudyHeatmap({
                     <button
                       key={k}
                       onClick={() => setSelected(k)}
+                      title={`${day.toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short" })}${entry ? ` · ${entry.blocks.length} repaso(s)` : ""}`}
                       className={cn(
-                        "relative aspect-square rounded-md overflow-hidden border transition-all",
-                        isSel ? "ring-2 ring-primary border-transparent" : "border-border/60 hover:border-primary/50"
+                        "relative h-3 w-3 rounded-[2px] overflow-hidden border transition-all",
+                        entry ? "border-transparent" : "border-border/50 bg-surface-2/30",
+                        isSel && "ring-1 ring-primary ring-offset-1 ring-offset-surface",
+                        isToday && !isSel && "ring-1 ring-primary/60"
                       )}
-                      title={day.toLocaleDateString("es-AR", { weekday: "long", day: "2-digit", month: "short" })}
                     >
                       {entry && entry.colors.length > 0 && (
-                        <div className="absolute inset-0 flex" style={{ opacity: isPast ? 0.45 : 0.92 }}>
+                        <div className="absolute inset-0 flex" style={{ opacity: isPast ? 0.4 : 1 }}>
                           {entry.colors.map((c, i) => <div key={i} className="flex-1" style={{ background: c }} />)}
                         </div>
-                      )}
-                      <span className={cn(
-                        "absolute inset-0 grid place-items-center text-[10px] font-semibold",
-                        entry && entry.colors.length ? "text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.6)]" : isToday ? "text-primary" : "text-muted"
-                      )}>
-                        {day.getDate()}
-                      </span>
-                      {isToday && <span className="absolute inset-0 rounded-md ring-1 ring-inset ring-primary/70" />}
-                      {entry && entry.blocks.length > 1 && (
-                        <span className="absolute bottom-0 right-0.5 text-[7px] font-bold text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.7)]">{entry.blocks.length}</span>
                       )}
                     </button>
                   );
@@ -121,6 +133,7 @@ export function StudyHeatmap({
           </div>
         </div>
       </div>
+      <p className="text-[10px] text-muted">Cada cuadradito es un día; el color es la materia a repasar (varios colores = varias materias). Tocá un día para ver el detalle.</p>
 
       {/* Detalle del día seleccionado */}
       <div className="rounded-2xl border border-border bg-surface p-4 space-y-2">
