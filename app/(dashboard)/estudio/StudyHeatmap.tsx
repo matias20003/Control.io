@@ -109,18 +109,18 @@ export function StudyHeatmap({
       <div className="rounded-2xl border border-border bg-surface p-3 overflow-x-auto">
         <div className="inline-flex flex-col gap-1">
           {/* Meses */}
-          <div className="flex gap-[2px] pl-5">
+          <div className="flex gap-[2px] sm:gap-[3px] md:gap-1 pl-5">
             {monthLabels.map((lbl, i) => (
-              <div key={i} className="w-3 text-[8px] text-muted overflow-visible whitespace-nowrap">{lbl}</div>
+              <div key={i} className="w-3 sm:w-4 md:w-[22px] text-[8px] sm:text-[9px] md:text-[10px] text-muted overflow-visible whitespace-nowrap">{lbl}</div>
             ))}
           </div>
           {/* Días (label) + columnas por semana */}
-          <div className="flex gap-[2px]">
-            <div className="flex flex-col gap-[2px] pr-1">
-              {ROW_LABEL.map((l, i) => <div key={i} className="h-3 w-2.5 text-[8px] leading-[12px] text-muted">{l}</div>)}
+          <div className="flex gap-[2px] sm:gap-[3px] md:gap-1">
+            <div className="flex flex-col gap-[2px] sm:gap-[3px] md:gap-1 pr-1">
+              {ROW_LABEL.map((l, i) => <div key={i} className="grid place-items-center h-3 w-2.5 sm:h-4 sm:w-3 md:h-[22px] md:w-4 text-[8px] sm:text-[9px] md:text-[10px] text-muted">{l}</div>)}
             </div>
             {weeks.map((week, wi) => (
-              <div key={wi} className="flex flex-col gap-[2px]">
+              <div key={wi} className="flex flex-col gap-[2px] sm:gap-[3px] md:gap-1">
                 {week.map((day) => {
                   const k = keyOf(day);
                   const entry = byDay.get(k);
@@ -134,7 +134,7 @@ export function StudyHeatmap({
                       onClick={() => setSelected(k)}
                       title={`${day.toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short" })}${exam ? ` · 📝 ${exam.labels.join(", ")}` : ""}${entry ? ` · ${entry.blocks.length} repaso(s)` : ""}`}
                       className={cn(
-                        "relative h-3 w-3 rounded-[2px] overflow-hidden border transition-all",
+                        "relative h-3 w-3 sm:h-4 sm:w-4 md:h-[22px] md:w-[22px] rounded-[2px] sm:rounded md:rounded-md overflow-hidden border transition-all",
                         entry || exam ? "border-transparent" : "border-border/50 bg-surface-2/30",
                         isSel ? "ring-1 ring-primary ring-offset-1 ring-offset-surface"
                           : exam ? "ring-2 ring-red-500"
