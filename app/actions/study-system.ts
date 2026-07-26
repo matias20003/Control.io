@@ -331,6 +331,61 @@ export async function updateBlockAction(blockId: string, input: z.infer<typeof u
   }
 }
 
+// Carga el apunte de UN tema (texto y/o fotos/PDF subidos a Storage), lo resume
+// con IA (solo del contenido) y lo guarda como resumen del tema.
+export async function loadTopicMaterialAction(input: { blockId: string; text?: string; files?: { path: string; type: string }[] }) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  const blockId = input.blockId;
+  const files = input.files ?? [];
+  for (const f of files) if (!f.path.startsWith(`${userId}/`)) return { error: "Ruta inválida" };
+
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const admin = createAdminClient();
+  const download = async (p: string): Promise<Buffer> => {
+    const { data, error } = await admin.storage.from(STUDY_BUCKET).download(p);
+    if (error || !data) throw new Error("No pude leer el archivo subido");
+    return Buffer.from(await data.arrayBuffer());
+  };
+  const cleanup = async () => { if (files.length) await admin.storage.from(STUDY_BUCKET).remove(files.map((f) => f.path)).catch(() => {}); };
+
+  try {
+    const { prisma } = await import("@/lib/prisma");
+    const block = await prisma.studyBlock.findFirst({ where: { id: blockId, userId }, select: { topic: true } });
+    if (!block) return { error: "Tema no encontrado" };
+
+    let text = (input.text ?? "").trim();
+    const dataUrls: string[] = [];
+    const imgs = files.filter((f) => (f.type || "").startsWith("image/"));
+    const pdfs = files.filter((f) => !(f.type || "").startsWith("image/"));
+
+    for (const f of imgs) dataUrls.push(`data:${f.type};base64,${(await download(f.path)).toString("base64")}`);
+
+    if (pdfs.length) {
+      const { extractPdfText } = await import("@/lib/study/ingest");
+      const { renderPdfPages } = await import("@/lib/study/pdfpages");
+      const buf = await download(pdfs[0].path);
+      const pdfText = await extractPdfText(buf).catch(() => "");
+      if (pdfText.trim().length >= 40) text = `${text}\n${pdfText}`.trim();
+      else dataUrls.push(...(await renderPdfPages(buf, 0, 8))); // manuscrito → rasterizo
+    }
+
+    if (!text && dataUrls.length === 0) return { error: "Pegá el apunte o subí una foto/PDF." };
+
+    const { summarizeToStudyPoints } = await import("@/lib/study/material");
+    const summary = await summarizeToStudyPoints(text, dataUrls, block.topic);
+    if (!summary || summary.length < 20) return { error: "No pude leer el apunte. Probá con más texto o una foto más nítida." };
+
+    await updateBlock(userId, blockId, { summary });
+    revalidatePath("/estudio");
+    return { success: true, summary };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "No se pudo cargar el apunte" };
+  } finally {
+    await cleanup();
+  }
+}
+
 export async function reorderTopicsAction(orderedIds: string[]) {
   const userId = await requireOwner();
   if (!userId) return { error: "No autorizado" };

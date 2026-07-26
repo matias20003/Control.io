@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   CalendarClock, BookOpen, Table2, Plus, Loader2, X, Timer,
   Clock, Target, ChevronRight, ChevronDown, CheckCircle2, AlertCircle, Settings2,
-  GraduationCap, ListChecks, RefreshCw, Trash2, CalendarDays, Database, Layers, Pencil, ChevronUp, BrainCircuit,
+  GraduationCap, ListChecks, RefreshCw, Trash2, CalendarDays, Database, Layers, Pencil, ChevronUp, BrainCircuit, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -29,6 +29,7 @@ import { StudyCalendar } from "./StudyCalendar";
 import { StudyKanban } from "./StudyKanban";
 import { StudyHeatmap } from "./StudyHeatmap";
 import { FlashcardPractice } from "./FlashcardPractice";
+import { LoadMaterialModal } from "./LoadMaterialModal";
 import { FocusMode } from "./FocusMode";
 import { StudyChat } from "./StudyChat";
 
@@ -1011,6 +1012,7 @@ export function StudySystemClient({
   const [closing, setClosing] = useState<PlanItem | BlockDTO | null>(null);
   const [editing, setEditing] = useState<BlockDTO | null>(null);
   const [practicing, setPracticing] = useState<BlockDTO | null>(null);
+  const [loadingMat, setLoadingMat] = useState<BlockDTO | null>(null);
   const [focusBlock, setFocusBlock] = useState<PlanItem | BlockDTO | null>(null);
   const [recallBlock, setRecallBlock] = useState<PlanItem | BlockDTO | null>(null);
   const [showAvail, setShowAvail] = useState(false);
@@ -1397,6 +1399,7 @@ export function StudySystemClient({
                                           {b.importance >= 4 ? " · muy importante" : b.importance === 3 ? " · importante" : ""}
                                         </p>
                                       </div>
+                                      <button onClick={() => setLoadingMat(b)} className={cn("shrink-0", b.summary ? "text-emerald-500 hover:text-emerald-400" : "text-muted hover:text-foreground")} aria-label="Cargar apunte" title={b.summary ? "Tiene apunte cargado — tocá para editar/reemplazar" : "Cargar apunte (para generar preguntas)"}><FileText size={14} /></button>
                                       <button onClick={() => setPracticing(b)} className="text-muted hover:text-primary shrink-0" aria-label="Practicar con preguntas" title="Practicar (preguntas de tu apunte)"><BrainCircuit size={14} /></button>
                                       <button onClick={() => setEditing(b)} className="text-muted hover:text-foreground shrink-0" aria-label="Editar tema"><Pencil size={13} /></button>
                                       <button onClick={() => deleteBlocks([b.id])} disabled={deleting} className="text-muted hover:text-danger shrink-0" aria-label="Eliminar tema"><Trash2 size={13} /></button>
@@ -1560,6 +1563,7 @@ export function StudySystemClient({
       {closing && <CloseSessionModal block={closing} onClose={() => setClosing(null)} onDone={applyClosed} />}
       {editing && <EditBlockModal block={editing} onClose={() => setEditing(null)} onDone={applyClosed} />}
       {practicing && <FlashcardPractice block={practicing} onClose={() => setPracticing(null)} />}
+      {loadingMat && <LoadMaterialModal block={loadingMat} onClose={() => setLoadingMat(null)} onDone={(summary) => setBlocks((prev) => prev.map((x) => (x.id === loadingMat.id ? { ...x, summary } : x)))} />}
       {recallBlock && <RecallModal block={recallBlock} onClose={() => setRecallBlock(null)} onDone={applyClosed} />}
       {focusBlock && <FocusMode block={focusBlock} onClose={() => setFocusBlock(null)} onDone={applyClosed} />}
       <StudyChat />
