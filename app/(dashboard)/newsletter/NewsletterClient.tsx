@@ -180,7 +180,7 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
   };
 
   return (
-    <div className="max-w-3xl mx-auto pb-24 px-4 space-y-6">
+    <div className="max-w-3xl mx-auto px-4 space-y-6 overflow-x-hidden">
       {/* Nameplate editorial */}
       <header className="pt-2">
         <div className="flex items-start justify-between gap-3">
@@ -253,7 +253,7 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
                     return (
                       <span
                         key={t}
-                        className={`inline-flex items-center gap-1 rounded-full pl-1 pr-1.5 py-1 text-sm border transition-colors ${
+                        className={`inline-flex items-center gap-1 rounded-full pl-1 pr-1.5 py-1 text-sm border transition-colors max-w-full ${
                           isPrio
                             ? "bg-warning/10 border-warning/30 text-foreground"
                             : "bg-surface-2 border-transparent text-foreground"
@@ -276,7 +276,7 @@ export function NewsletterClient({ initialConfig, initialEditions }: Props) {
                             }
                           />
                         </button>
-                        <span className="px-0.5">{t}</span>
+                        <span className="px-0.5 min-w-0 break-words">{t}</span>
                         <button
                           onClick={() => removeTopic(t)}
                           className="rounded-full p-0.5 hover:bg-surface-3 text-muted hover:text-foreground transition-colors"
@@ -562,7 +562,7 @@ function TopicSection({ group, index }: { group: TopicGroup; index: number }) {
     >
       {/* Encabezado de sección: tema · regla · prioridad · conteo */}
       <div className="flex items-center gap-3 mb-4">
-        <h3 className="text-[13px] font-bold uppercase tracking-[0.14em] text-foreground shrink-0">
+        <h3 className="text-[13px] font-bold uppercase tracking-[0.14em] text-foreground min-w-0 break-words">
           {topic}
         </h3>
         {priority && (

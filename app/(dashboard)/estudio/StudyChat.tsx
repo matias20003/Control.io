@@ -59,7 +59,7 @@ export function StudyChat() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-24 right-4 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-primary/30 transition-transform active:scale-95 md:bottom-6"
+          className="fixed bottom-[calc(6.5rem+env(safe-area-inset-bottom))] right-4 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-primary/30 transition-transform active:scale-95 md:bottom-6"
           aria-label="Asistente de estudio"
         >
           <Sparkles size={18} /> <span className="hidden sm:inline">Asistente</span>
