@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { X, Loader2, RefreshCw, Check, RotateCcw, Sparkles, BrainCircuit } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generateFlashcardsAction, getBlockFlashcardsAction, gradeFlashcardAction } from "@/app/actions/flashcards";
+import { MathText } from "./MathText";
 import type { BlockDTO } from "@/lib/db/study-system";
 
 type Card = { id: string; question: string; answer: string; box: number };
@@ -88,7 +89,7 @@ export function FlashcardPractice({ block, onClose, onCount }: { block: BlockDTO
             </div>
             <button onClick={() => setFlipped((f) => !f)} className="w-full min-h-[150px] rounded-2xl border border-border bg-surface-2/40 p-5 text-left transition-colors hover:border-primary/40">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted mb-2">{flipped ? "Respuesta" : "Pregunta"}</p>
-              <p className="text-[15px] leading-relaxed text-foreground whitespace-pre-wrap">{flipped ? current.answer : current.question}</p>
+              <MathText text={flipped ? current.answer : current.question} className="text-[15px] leading-relaxed text-foreground" />
               <p className="mt-3 text-[11px] text-muted">{flipped ? "Tocá para ver la pregunta" : "Tocá para ver la respuesta"}</p>
             </button>
             {!flipped ? (

@@ -28,7 +28,9 @@ export async function summarizeToStudyPoints(
     `Resumí el CONTENIDO para estudiar: puntos clave, definiciones, fórmulas y ` +
     `procedimientos que APAREZCAN. Markdown con viñetas y **negritas** en lo importante. ` +
     `REGLA: usá SOLO el contenido, NO inventes ni agregues datos externos. Conciso pero ` +
-    `completo (para "pegar una leída"). ${topicHint ? `Tema: ${topicHint}.` : ""}`;
+    `completo (para "pegar una leída"). MATEMÁTICA: escribí toda fórmula/símbolo en LaTeX entre ` +
+    `signos $ — inline $x^2$ y en bloque $$\\int_a^b f(x)\\,dx$$ (comandos \\int, \\sum, \\frac, ` +
+    `\\lim, \\Delta, _{}, ^{}). ${topicHint ? `Tema: ${topicHint}.` : ""}`;
 
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
     method: "POST",

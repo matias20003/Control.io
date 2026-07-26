@@ -35,6 +35,9 @@ export async function generateFlashcards(userId: string, blockId: string): Promi
     `Si el contenido es escaso, generá MENOS tarjetas (está perfecto). Cubrí definiciones, ` +
     `conceptos clave, fórmulas y procedimientos que SÍ aparezcan. Pregunta clara y corta; ` +
     `respuesta breve y correcta según el contenido. Máximo 12 tarjetas. ` +
+    `MATEMÁTICA: escribí TODA fórmula/símbolo en LaTeX entre signos $ — inline como $x^2$ y en ` +
+    `bloque como $$\\int_a^b f(x)\\,dx$$. Usá comandos LaTeX (\\int, \\sum, \\lim, \\frac, \\Delta, ` +
+    `subíndices _{} y superíndices ^{}). NO uses texto plano para la matemática. ` +
     `Respondé SOLO JSON: {"cards":[{"q":"pregunta","a":"respuesta"}]}. Tema: ${block.topic}.`;
 
   let cards: { q: string; a: string }[] = [];

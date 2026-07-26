@@ -30,6 +30,7 @@ import { StudyKanban } from "./StudyKanban";
 import { StudyHeatmap } from "./StudyHeatmap";
 import { FlashcardPractice } from "./FlashcardPractice";
 import { LoadMaterialModal } from "./LoadMaterialModal";
+import { MathText } from "./MathText";
 import { FocusMode } from "./FocusMode";
 import { StudyChat } from "./StudyChat";
 
@@ -375,7 +376,7 @@ function RecallModal({
             <div className="rounded-xl border border-border bg-surface-2/30 p-4">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted mb-1.5">Tus puntos clave</p>
               {block.summary ? (
-                <p className="text-sm text-foreground/90 whitespace-pre-wrap">{block.summary}</p>
+                <MathText text={block.summary} className="text-sm text-foreground/90" />
               ) : (
                 <p className="text-sm text-muted">No guardaste puntos clave de este tema — comparalo con tu apunte real y calificate honesto.</p>
               )}
