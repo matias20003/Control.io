@@ -26,6 +26,8 @@ import type {
 import { suggestedActivity } from "@/lib/study/spaced";
 import { NotionCalendar } from "./NotionCalendar";
 import { StudyCalendar } from "./StudyCalendar";
+import { StudyKanban } from "./StudyKanban";
+import { StudyHeatmap } from "./StudyHeatmap";
 import { FocusMode } from "./FocusMode";
 import { StudyChat } from "./StudyChat";
 
@@ -983,7 +985,7 @@ export function StudySystemClient({
   const [focusBlock, setFocusBlock] = useState<PlanItem | BlockDTO | null>(null);
   const [recallBlock, setRecallBlock] = useState<PlanItem | BlockDTO | null>(null);
   const [showAvail, setShowAvail] = useState(false);
-  const [tablaView, setTablaView] = useState<"lista" | "calendario">("lista");
+  const [tablaView, setTablaView] = useState<"lista" | "kanban" | "mapa" | "calendario">("lista");
   const [tablaSubject, setTablaSubject] = useState<string>(""); // "" = todas
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reprogramming, startReprogram] = useTransition();
@@ -1361,20 +1363,28 @@ export function StudySystemClient({
       {tab === "tabla" && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">Tabla maestra · {blocks.length} bloques</h2>
-            {/* Toggle Lista / Calendario: la misma info en grilla mensual */}
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">Repasos · {blocks.length} bloques</h2>
+            {/* Vistas: Lista · Kanban (por día) · Mapa (heatmap por materia) · Calendario */}
             <div className="flex gap-1 rounded-lg border border-border bg-surface p-0.5">
-              <button onClick={() => setTablaView("lista")} className={cn("inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors", tablaView === "lista" ? "bg-primary text-white" : "text-muted hover:text-foreground")}>
-                <Table2 size={12} /> Lista
-              </button>
-              <button onClick={() => setTablaView("calendario")} className={cn("inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors", tablaView === "calendario" ? "bg-primary text-white" : "text-muted hover:text-foreground")}>
-                <CalendarDays size={12} /> Calendario
-              </button>
+              {([
+                { k: "lista", label: "Lista", icon: Table2 },
+                { k: "kanban", label: "Kanban", icon: ListChecks },
+                { k: "mapa", label: "Mapa", icon: Layers },
+                { k: "calendario", label: "Mes", icon: CalendarDays },
+              ] as const).map((v) => (
+                <button key={v.k} onClick={() => setTablaView(v.k)} className={cn("inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors", tablaView === v.k ? "bg-primary text-white" : "text-muted hover:text-foreground")}>
+                  <v.icon size={12} /> {v.label}
+                </button>
+              ))}
             </div>
           </div>
 
           {tablaView === "calendario" ? (
             <StudyCalendar blocks={blocks} exams={exams} onReviewClick={(b) => setClosing(b)} />
+          ) : tablaView === "kanban" ? (
+            <StudyKanban blocks={blocks} subjects={subjects} onCard={(b) => setClosing(b)} onEdit={(b) => setEditing(b)} />
+          ) : tablaView === "mapa" ? (
+            <StudyHeatmap blocks={blocks} subjects={subjects} onReviewClick={(b) => setClosing(b)} />
           ) : blocks.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted">Todavía no cargaste bloques.</div>
           ) : (
