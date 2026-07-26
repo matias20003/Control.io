@@ -24,10 +24,6 @@ export async function generateFlashcards(userId: string, blockId: string): Promi
   const material = (decrypt(block.summary) ?? "").trim();
   if (material.length < 40) return { ok: false, error: "Este tema no tiene apunte/material cargado. Agregá el resumen (editá el tema) y volvé a generar.", created: 0 };
 
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return { ok: false, error: "Falta configurar la IA", created: 0 };
-  const model = process.env.GEMINI_MODEL ?? "gemini-flash-latest";
-
   const system =
     `Sos un generador de tarjetas de estudio (flashcards) para recuperación activa. ` +
     `Generá preguntas y respuestas USANDO EXCLUSIVAMENTE el CONTENIDO que te paso abajo. ` +
@@ -42,30 +38,16 @@ export async function generateFlashcards(userId: string, blockId: string): Promi
 
   let cards: { q: string; a: string }[] = [];
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: "CONTENIDO:\n" + material.slice(0, 20000) }] }],
-        generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
-      }),
-    });
-    if (!res.ok) {
-      const b = await res.text().catch(() => "");
-      if (res.status === 429) return { ok: false, error: "La IA está sin cupo ahora (429). Probá en unos minutos.", created: 0 };
-      console.error("[flashcards] gemini", res.status, b.slice(0, 200));
-      return { ok: false, error: `La IA falló (${res.status})`, created: 0 };
-    }
-    const j = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-    const txt = (j.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("") || "{}";
+    const { studyGenerate } = await import("@/lib/ai/generate");
+    const txt = await studyGenerate({ system, userText: "CONTENIDO:\n" + material.slice(0, 20000), json: true }) || "{}";
     const parsed = JSON.parse(txt) as { cards?: { q?: string; a?: string }[] };
     cards = (parsed.cards ?? [])
       .map((c) => ({ q: (c.q ?? "").toString().trim().slice(0, 500), a: (c.a ?? "").toString().trim().slice(0, 1000) }))
       .filter((c) => c.q && c.a)
       .slice(0, 12);
-  } catch {
-    return { ok: false, error: "No se pudieron generar las preguntas", created: 0 };
+  } catch (e) {
+    const msg = e instanceof Error && /429/.test(e.message) ? "La IA está sin cupo ahora. Probá en unos minutos." : "No se pudieron generar las preguntas";
+    return { ok: false, error: msg, created: 0 };
   }
   if (!cards.length) return { ok: false, error: "No pude extraer preguntas de este material. Probá con un resumen más completo.", created: 0 };
 
