@@ -689,6 +689,7 @@ model StudyBlock {
   code             String // AM2-P2-03
   unit             String? // unidad (texto legacy; se reemplaza por unitId)
   topic            String // tema
+  orderIndex       Int       @default(0) @map("order_index") // orden manual dentro de la materia/unidad
   initialSessions  Int       @default(1) @map("initial_sessions") // sesiones de estudio inicial del tema
   initialDone      Int       @default(0) @map("initial_done") // cuántas ya se hicieron
   subtopic         String?

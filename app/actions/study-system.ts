@@ -10,6 +10,7 @@ import {
   closeSession,
   updateBlockStatus,
   updateBlock,
+  reorderBlocks,
   postponeBlock,
   postponeTodayForward,
   deleteBlocks,
@@ -327,6 +328,19 @@ export async function updateBlockAction(blockId: string, input: z.infer<typeof u
     return { success: true, block };
   } catch {
     return { error: "No se pudo editar el bloque" };
+  }
+}
+
+export async function reorderTopicsAction(orderedIds: string[]) {
+  const userId = await requireOwner();
+  if (!userId) return { error: "No autorizado" };
+  if (!Array.isArray(orderedIds) || !orderedIds.length) return { error: "Nada para ordenar" };
+  try {
+    await reorderBlocks(userId, orderedIds.slice(0, 500));
+    revalidatePath("/estudio");
+    return { success: true };
+  } catch {
+    return { error: "No se pudo reordenar" };
   }
 }
 

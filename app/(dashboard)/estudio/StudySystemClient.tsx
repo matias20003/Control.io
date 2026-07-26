@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   CalendarClock, BookOpen, Table2, Plus, Loader2, X, Timer,
   Clock, Target, ChevronRight, ChevronDown, CheckCircle2, AlertCircle, Settings2,
-  GraduationCap, ListChecks, RefreshCw, Trash2, CalendarDays, Database, Layers, Pencil,
+  GraduationCap, ListChecks, RefreshCw, Trash2, CalendarDays, Database, Layers, Pencil, ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -16,7 +16,7 @@ import {
   setAvailabilityAction, reprogramarAction,
   setStudyNotifyAction, postponeBlockAction, postponeTodayAction, deleteBlocksAction,
   createUnitAction, archiveAllBlocksAction, setGroupLabelAction, createTopicsListAction,
-  updateBlockAction,
+  updateBlockAction, reorderTopicsAction,
 } from "@/app/actions/study-system";
 
 const GROUP_LABELS = ["Unidad", "Capítulo", "Módulo", "Bolilla", "Tema"];
@@ -1047,6 +1047,18 @@ export function StudySystemClient({
     });
   };
 
+  // Reordena un tema dentro de su grupo (materia/unidad) con las flechas ▲▼.
+  const moveTopic = (groupBlocks: BlockDTO[], id: string, dir: -1 | 1) => {
+    const ordered = [...groupBlocks].sort((a, b) => a.orderIndex - b.orderIndex);
+    const idx = ordered.findIndex((b) => b.id === id);
+    const j = idx + dir;
+    if (idx < 0 || j < 0 || j >= ordered.length) return;
+    [ordered[idx], ordered[j]] = [ordered[j], ordered[idx]];
+    const orderMap = new Map(ordered.map((b, i) => [b.id, i + 1]));
+    setBlocks((prev) => prev.map((b) => (orderMap.has(b.id) ? { ...b, orderIndex: orderMap.get(b.id)! } : b)));
+    reorderTopicsAction(ordered.map((b) => b.id)).then((r) => { if (r.error) toast.error(r.error); });
+  };
+
   const applyClosed = (b: BlockDTO) => {
     setBlocks((prev) => prev.map((x) => (x.id === b.id ? b : x)));
     router.refresh(); // recalcula plan de hoy en el server
@@ -1363,24 +1375,32 @@ export function StudySystemClient({
                               <Layers size={12} className="shrink-0" /> {g.name} <span className="text-[10px]">· {g.list.length}</span>
                             </p>
                             <div className="divide-y divide-border">
-                              {g.list.map((b) => {
-                                const p = topicProgress(b.masteryLevel, b.reviewStage, b.reviewCount);
-                                return (
-                                  <div key={b.id} className="flex items-center gap-2.5 px-3 py-2 text-sm">
-                                    <ProgressRing pct={p.pct} color={p.color} />
-                                    <div className="min-w-0 flex-1">
-                                      <p className="text-foreground truncate" title={b.topic}>{b.topic}</p>
-                                      <p className="text-[10px] text-muted truncate">
-                                        {p.pct <= 0 ? "sin empezar" : `${Math.round(p.pct * 100)}%`}
-                                        {b.subtopic ? ` · ${b.subtopic}` : ""}
-                                        {b.importance >= 4 ? " · muy importante" : b.importance === 3 ? " · importante" : ""}
-                                      </p>
+                              {(() => {
+                                const gl = [...g.list].sort((a, b) => a.orderIndex - b.orderIndex);
+                                return gl.map((b, i) => {
+                                  const p = topicProgress(b.masteryLevel, b.reviewStage, b.reviewCount);
+                                  return (
+                                    <div key={b.id} className="flex items-center gap-2 px-3 py-2 text-sm">
+                                      {/* Flechas para reordenar */}
+                                      <div className="flex flex-col shrink-0 -my-1">
+                                        <button onClick={() => moveTopic(g.list, b.id, -1)} disabled={i === 0} className="text-muted hover:text-foreground disabled:opacity-25 leading-none" aria-label="Subir"><ChevronUp size={14} /></button>
+                                        <button onClick={() => moveTopic(g.list, b.id, 1)} disabled={i === gl.length - 1} className="text-muted hover:text-foreground disabled:opacity-25 leading-none" aria-label="Bajar"><ChevronDown size={14} /></button>
+                                      </div>
+                                      <ProgressRing pct={p.pct} color={p.color} />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-foreground truncate" title={b.topic}>{b.topic}</p>
+                                        <p className="text-[10px] text-muted truncate">
+                                          {p.pct <= 0 ? "sin empezar" : `${Math.round(p.pct * 100)}%`}
+                                          {b.subtopic ? ` · ${b.subtopic}` : ""}
+                                          {b.importance >= 4 ? " · muy importante" : b.importance === 3 ? " · importante" : ""}
+                                        </p>
+                                      </div>
+                                      <button onClick={() => setEditing(b)} className="text-muted hover:text-foreground shrink-0" aria-label="Editar tema"><Pencil size={13} /></button>
+                                      <button onClick={() => deleteBlocks([b.id])} disabled={deleting} className="text-muted hover:text-danger shrink-0" aria-label="Eliminar tema"><Trash2 size={13} /></button>
                                     </div>
-                                    <button onClick={() => setEditing(b)} className="text-muted hover:text-foreground shrink-0" aria-label="Editar tema"><Pencil size={13} /></button>
-                                    <button onClick={() => deleteBlocks([b.id])} disabled={deleting} className="text-muted hover:text-danger shrink-0" aria-label="Eliminar tema"><Trash2 size={13} /></button>
-                                  </div>
-                                );
-                              })}
+                                  );
+                                });
+                              })()}
                             </div>
                           </div>
                         ))}

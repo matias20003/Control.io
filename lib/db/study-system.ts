@@ -52,6 +52,7 @@ export type BlockDTO = {
   masteryLevel: Mastery;
   reviewStage: Stage;
   reviewDuration: number;
+  orderIndex: number; // orden manual dentro de la materia/unidad
   initialSessions: number; // sesiones de estudio inicial del tema
   initialDone: number;     // cuántas ya se hicieron (al completarlas entra al repaso)
   nextReviewDate: string | null;
@@ -167,6 +168,7 @@ function toBlockDTO(b: {
   id: string; subjectId: string; unitId: string | null; code: string; unit: string | null; topic: string;
   subtopic: string | null; summary: string | null; source: string | null; importance: number;
   difficulty: number; masteryLevel: string; reviewStage: string; reviewDuration: number;
+  orderIndex: number;
   initialSessions: number; initialDone: number;
   nextReviewDate: Date | null; lastStudyDate: Date | null; reviewCount: number;
   successCount: number; errorCount: number; status: string;
@@ -187,6 +189,7 @@ function toBlockDTO(b: {
     masteryLevel: b.masteryLevel as Mastery,
     reviewStage: b.reviewStage as Stage,
     reviewDuration: b.reviewDuration,
+    orderIndex: b.orderIndex,
     initialSessions: b.initialSessions,
     initialDone: b.initialDone,
     nextReviewDate: b.nextReviewDate ? b.nextReviewDate.toISOString() : null,
@@ -551,6 +554,15 @@ export async function closeSession(
 
 export async function updateBlockStatus(userId: string, blockId: string, status: string): Promise<void> {
   await prisma.studyBlock.updateMany({ where: { id: blockId, userId }, data: { status } });
+}
+
+/** Reordena temas: setea order_index = posición en la lista recibida. */
+export async function reorderBlocks(userId: string, orderedIds: string[]): Promise<void> {
+  await prisma.$transaction(
+    orderedIds.map((id, i) =>
+      prisma.studyBlock.updateMany({ where: { id, userId }, data: { orderIndex: i + 1 } })
+    )
+  );
 }
 
 /** Edita los datos de un bloque (tema): título, subtema, resumen, importancia y dificultad. */
