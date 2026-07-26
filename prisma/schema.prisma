@@ -768,6 +768,22 @@ model StudyExam {
   @@map("study_exams")
 }
 
+model StudyFlashcard {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  blockId    String   @map("block_id")
+  question   String
+  answer     String // cifrado
+  box        Int      @default(0) // Leitner: 0..5
+  nextReview DateTime @default(now()) @map("next_review")
+  reviews    Int      @default(0)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([blockId])
+  @@index([userId, nextReview])
+  @@map("study_flashcards")
+}
+
 model SupportTicket {
   id          String    @id @default(cuid())
   userId      String    @map("user_id")
