@@ -77,15 +77,17 @@ function MasteryBadge({ level, reviewCount }: { level: string; reviewCount?: num
   );
 }
 
-// Avance de un tema (0–1) + color, según nivel de dominio (y afina con la etapa).
-function topicProgress(level: string, reviewStage?: string): { pct: number; color: string } {
-  const STAGE_BONUS: Record<string, number> = { "D0": 0, "D+1": 0.04, "D+3": 0.08, "D+7": 0.12, "D+16": 0.16, "MANT_SEM": 0.2, "MANT_QUIN": 0.2 };
+// Avance de un tema (0–1) + color. Un tema SIN estudiar (0 repasos) = 0% (gris);
+// se va pintando a medida que se estudia y sube el dominio y la etapa.
+function topicProgress(level: string, reviewStage?: string, reviewCount?: number): { pct: number; color: string } {
+  if (!reviewCount || reviewCount <= 0) return { pct: 0, color: "#9ca3af" }; // sin empezar
+  const STAGE_BONUS: Record<string, number> = { "D0": 0, "D+1": 0.05, "D+3": 0.1, "D+7": 0.15, "D+16": 0.2, "MANT_SEM": 0.25, "MANT_QUIN": 0.25 };
   const bonus = STAGE_BONUS[reviewStage ?? "D0"] ?? 0;
   switch (level) {
     case "CONSOLIDADO": return { pct: 1, color: "#0ea5e9" };
-    case "VERDE": return { pct: Math.min(0.95, 0.7 + bonus), color: "#10b981" };
+    case "VERDE": return { pct: Math.min(0.95, 0.68 + bonus), color: "#10b981" };
     case "AMARILLO": return { pct: Math.min(0.6, 0.38 + bonus), color: "#f59e0b" };
-    default: return { pct: Math.min(0.3, 0.1 + bonus), color: "#ef4444" };
+    default: return { pct: Math.min(0.3, 0.15 + bonus), color: "#ef4444" };
   }
 }
 
@@ -96,7 +98,7 @@ function ProgressRing({ pct, color, size = 22 }: { pct: number; color: string; s
   const c = 2 * Math.PI * r;
   return (
     <svg width={size} height={size} className="shrink-0 -rotate-90">
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-surface-2)" strokeWidth={sw} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-border)" strokeWidth={sw} />
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round"
         strokeDasharray={c} strokeDashoffset={c * (1 - Math.max(0, Math.min(1, pct)))} />
     </svg>
@@ -1341,7 +1343,7 @@ export function StudySystemClient({
                     { id: "__none", name: `Sin ${label.toLowerCase()}`, list: sBlocks.filter((b) => !b.unitId) },
                   ].filter((g) => g.list.length > 0);
                   // Avance de la materia = promedio del avance de sus temas.
-                  const avg = sBlocks.reduce((a, b) => a + topicProgress(b.masteryLevel, b.reviewStage).pct, 0) / sBlocks.length;
+                  const avg = sBlocks.reduce((a, b) => a + topicProgress(b.masteryLevel, b.reviewStage, b.reviewCount).pct, 0) / sBlocks.length;
                   const dominated = sBlocks.filter((b) => b.masteryLevel === "VERDE" || b.masteryLevel === "CONSOLIDADO").length;
                   return (
                     <div key={s.id} className="rounded-2xl border border-border overflow-hidden">
@@ -1362,14 +1364,14 @@ export function StudySystemClient({
                             </p>
                             <div className="divide-y divide-border">
                               {g.list.map((b) => {
-                                const p = topicProgress(b.masteryLevel, b.reviewStage);
+                                const p = topicProgress(b.masteryLevel, b.reviewStage, b.reviewCount);
                                 return (
                                   <div key={b.id} className="flex items-center gap-2.5 px-3 py-2 text-sm">
                                     <ProgressRing pct={p.pct} color={p.color} />
                                     <div className="min-w-0 flex-1">
                                       <p className="text-foreground truncate" title={b.topic}>{b.topic}</p>
                                       <p className="text-[10px] text-muted truncate">
-                                        {Math.round(p.pct * 100)}%
+                                        {p.pct <= 0 ? "sin empezar" : `${Math.round(p.pct * 100)}%`}
                                         {b.subtopic ? ` · ${b.subtopic}` : ""}
                                         {b.importance >= 4 ? " · muy importante" : b.importance === 3 ? " · importante" : ""}
                                       </p>
