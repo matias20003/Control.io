@@ -728,18 +728,19 @@ export async function advanceNotebookPointer(userId: string, subjectId: string, 
 // ─────────────────────────────────────────────
 export async function studyStats(userId: string, now = new Date()) {
   const blocks = await prisma.studyBlock.findMany({
-    where: { userId, status: { not: "ARCHIVADO" } },
+    where: { userId, status: "ACTIVO" },
     select: { masteryLevel: true, nextReviewDate: true },
   });
-  const endOfToday = new Date(now);
-  endOfToday.setUTCHours(23, 59, 59, 999);
+  // Día de hoy en horario de Argentina (no UTC) — para que coincida con el Plan.
+  const endOfToday = endOfTodayArg();
+  const startOfToday = startOfTodayArg();
   const byLevel: Record<string, number> = { ROJO: 0, AMARILLO: 0, VERDE: 0, CONSOLIDADO: 0 };
   let dueToday = 0;
   let overdue = 0;
   for (const b of blocks) {
     byLevel[b.masteryLevel] = (byLevel[b.masteryLevel] ?? 0) + 1;
     if (b.nextReviewDate) {
-      if (b.nextReviewDate < now && b.nextReviewDate.toDateString() !== now.toDateString()) overdue++;
+      if (b.nextReviewDate < startOfToday) overdue++;
       if (b.nextReviewDate <= endOfToday) dueToday++;
     }
   }
