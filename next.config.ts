@@ -17,7 +17,7 @@ const securityHeaders = [
     value: [
       "default-src 'self'",
       // unsafe-* requerido por Next.js; us-assets.i.posthog.com sirve los scripts de PostHog
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://us-assets.i.posthog.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://us-assets.i.posthog.com https://www.instagram.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self'",
@@ -26,7 +26,7 @@ const securityHeaders = [
       // Session replay de PostHog usa web workers (blob)
       "worker-src 'self' blob:",
       // Música de enfoque embebida (YouTube) en el Modo Enfoque de /estudio
-      "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com",
+      "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://www.instagram.com https://platform.instagram.com",
       "frame-ancestors 'self'",
     ].join("; "),
   },
