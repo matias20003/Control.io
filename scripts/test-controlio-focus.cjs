@@ -227,7 +227,7 @@ async function main() {
           source: "controlio-web",
           type: "CONTROLIO_FOCUS_OPEN",
           correlationId: "smoke-open",
-          durationSeconds: 10,
+          durationSeconds: 12,
           handle: "francopisso"
         }, window.location.origin);
       })
@@ -248,6 +248,54 @@ async function main() {
       `Boolean(document.getElementById("controlio-focus-bar"))`
     );
     assert.equal(focusBarExists, true, "No se activó la capa enfocada.");
+
+    await instagram.evaluate(`
+      (() => {
+        const anchor = document.createElement("a");
+        anchor.href = "https://www.instagram.com/reel/CONTROLIO_PROFILE_REEL_123/";
+        anchor.textContent = "Reel del perfil elegido";
+        document.body.append(anchor);
+      })()
+    `);
+    await delay(700);
+    targets = await readTargets(port, 1);
+    const workerTarget = targets.find(
+      (target) =>
+        target.type === "service_worker" &&
+        target.url.endsWith("/service-worker.js")
+    );
+    assert.ok(workerTarget, "No se encontró el service worker de la extensión.");
+    const worker = await connectToTarget(workerTarget);
+    const registeredPaths = await worker.evaluate(`
+      chrome.storage.session.get("activeFocusSession").then(
+        (stored) => stored.activeFocusSession?.allowedContentPaths || []
+      )
+    `);
+    worker.close();
+    assert.equal(
+      registeredPaths.includes("/reel/CONTROLIO_PROFILE_REEL_123"),
+      true,
+      "La extensión no registró el reel visible del perfil elegido."
+    );
+    await instagram.evaluate(`
+      history.pushState(
+        {},
+        "",
+        "/reel/CONTROLIO_PROFILE_REEL_123/"
+      )
+    `);
+    await delay(900);
+    targets = await readTargets(port, 1);
+    assert.equal(
+      targets.some(
+        (target) =>
+          target.type === "page" &&
+          target.url.includes("/reel/CONTROLIO_PROFILE_REEL_123/")
+      ),
+      true,
+      "La extensión bloqueó un reel registrado desde el perfil elegido."
+    );
+
     await instagram.evaluate(
       `window.location.href = "https://www.instagram.com/instagram/"`
     );
@@ -265,7 +313,7 @@ async function main() {
       "La extensión permitió salir del perfil autorizado."
     );
 
-    await delay(7000);
+    await delay(8000);
     targets = await readTargets(port, 1);
     assert.equal(
       targets.some(

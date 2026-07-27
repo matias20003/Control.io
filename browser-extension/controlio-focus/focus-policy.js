@@ -66,11 +66,6 @@
       .filter(Boolean);
   }
 
-  function canonicalPath(url) {
-    const normalized = url.pathname.replace(/\/+$/, "");
-    return normalized || "/";
-  }
-
   function contentDescriptorFromUrl(value) {
     const url = parseInstagramUrl(value);
     if (!url) return null;
@@ -97,7 +92,7 @@
     ) {
       return {
         ownerHandle,
-        path: `/${ownerHandle}/${segments[1]}/${segments[2]}`,
+        path: `/${segments[1]}/${segments[2]}`,
       };
     }
 

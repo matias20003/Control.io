@@ -1,6 +1,6 @@
-importScripts("focus-policy.js");
-
 "use strict";
+
+importScripts("focus-policy.js");
 
 const {
   contentOwnerHandleFromUrl,
@@ -13,6 +13,7 @@ const {
 
 const SESSION_KEY = "activeFocusSession";
 const EXPIRE_ALARM = "controlio-focus-expire";
+const MAX_ALLOWED_CONTENT_PATHS = 120;
 const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 const CONTROLIO_HOSTS = new Set([
   "controlio.site",
@@ -155,6 +156,44 @@ async function getPublicSession(sender) {
   };
 }
 
+async function addAllowedContentPaths(session, paths) {
+  const allowedContentPaths = Array.from(
+    new Set([...session.allowedContentPaths, ...paths])
+  ).slice(-MAX_ALLOWED_CONTENT_PATHS);
+  await saveSession({ ...session, allowedContentPaths });
+  return allowedContentPaths;
+}
+
+async function registerProfileContent(message, sender) {
+  const session = await getSession();
+  if (!session || sender.tab?.id !== session.tabId) {
+    throw new Error("La sesión enfocada ya no está activa.");
+  }
+
+  const sourceUrl = parseInstagramUrl(sender.url || "");
+  if (!sourceUrl || !isOwnProfileNavigation(sourceUrl, session.handle)) {
+    throw new Error("Solo se puede preparar contenido desde el perfil elegido.");
+  }
+
+  const paths = (Array.isArray(message.urls) ? message.urls : [])
+    .slice(0, MAX_ALLOWED_CONTENT_PATHS)
+    .flatMap((value) => {
+      const contentPath = contentPathFromUrl(value);
+      const contentOwner = contentOwnerHandleFromUrl(value);
+      if (
+        !contentPath ||
+        (contentOwner && contentOwner !== session.handle)
+      ) {
+        return [];
+      }
+      return [contentPath];
+    });
+
+  return {
+    allowedContentPaths: await addAllowedContentPaths(session, paths),
+  };
+}
+
 async function allowContentAndNavigate(message, sender) {
   const session = await getSession();
   if (!session || sender.tab?.id !== session.tabId) {
@@ -173,11 +212,9 @@ async function allowContentAndNavigate(message, sender) {
     throw new Error("Esa publicación pertenece a otro perfil.");
   }
 
-  const allowedContentPaths = Array.from(
-    new Set([...session.allowedContentPaths, contentPath])
-  ).slice(-30);
-  const updated = { ...session, allowedContentPaths };
-  await saveSession(updated);
+  const allowedContentPaths = await addAllowedContentPaths(session, [
+    contentPath,
+  ]);
   await chrome.tabs.update(session.tabId, { url: message.url });
   return { allowedContentPaths };
 }
@@ -213,6 +250,12 @@ async function handleMessage(message, sender) {
       return {
         ok: true,
         ...(await allowContentAndNavigate(message, sender)),
+      };
+
+    case "CONTROLIO_FOCUS_REGISTER_PROFILE_CONTENT":
+      return {
+        ok: true,
+        ...(await registerProfileContent(message, sender)),
       };
 
     case "CONTROLIO_FOCUS_CLOSE_SELF": {

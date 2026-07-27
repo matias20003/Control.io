@@ -7,7 +7,8 @@
   let session = null;
   let timerId = null;
   let observer = null;
-  let restrictionFrame = null;
+  let restrictionsScheduled = false;
+  let registrationInFlight = false;
 
   function sendMessage(message) {
     return chrome.runtime.sendMessage(message).catch(() => ({
@@ -138,9 +139,45 @@
     }
   }
 
+  function registerVisibleProfileContent() {
+    const currentUrl = policy.parseInstagramUrl(window.location.href);
+    const sourceIsOwnProfile = Boolean(
+      currentUrl &&
+        policy.isOwnProfileNavigation(currentUrl, session.handle)
+    );
+    if (registrationInFlight || !sourceIsOwnProfile) {
+      return;
+    }
+
+    const knownPaths = new Set(session.allowedContentPaths);
+    const urls = Array.from(document.querySelectorAll("a[href]"))
+      .map((anchor) => anchor.href)
+      .filter((url) => {
+        const path = policy.contentPathFromUrl(url);
+        return path && !knownPaths.has(path);
+      })
+      .slice(0, 120);
+
+    if (urls.length === 0) return;
+
+    registrationInFlight = true;
+    void sendMessage({
+      type: "CONTROLIO_FOCUS_REGISTER_PROFILE_CONTENT",
+      urls,
+    }).then((response) => {
+      registrationInFlight = false;
+      if (response.ok && Array.isArray(response.allowedContentPaths)) {
+        session.allowedContentPaths = response.allowedContentPaths;
+        scheduleRestrictions();
+      }
+    });
+  }
+
   function applyRestrictions() {
-    restrictionFrame = null;
+    restrictionsScheduled = false;
     if (!session) return;
+
+    registerVisibleProfileContent();
 
     document.querySelectorAll("a[href]").forEach((anchor) => {
       anchor.classList.toggle(
@@ -160,8 +197,9 @@
   }
 
   function scheduleRestrictions() {
-    if (restrictionFrame !== null) return;
-    restrictionFrame = window.requestAnimationFrame(applyRestrictions);
+    if (restrictionsScheduled) return;
+    restrictionsScheduled = true;
+    queueMicrotask(applyRestrictions);
   }
 
   function handleClick(event) {

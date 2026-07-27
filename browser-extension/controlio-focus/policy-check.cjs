@@ -44,8 +44,20 @@ assert.equal(policy.classifyLink(post, handle, []), "allow-content");
 assert.equal(policy.classifyLink(prefixedPost, handle, []), "allow-content");
 assert.equal(policy.classifyLink(pluralReel, handle, []), "allow-content");
 assert.equal(
+  policy.contentPathFromUrl(prefixedPluralReel),
+  "/reels/PREFIXED_REEL_123"
+);
+assert.equal(
   policy.classifyLink(prefixedPluralReel, handle, []),
   "allow-content"
+);
+assert.equal(
+  policy.isAllowedNavigation(
+    "https://www.instagram.com/reels/PREFIXED_REEL_123/",
+    handle,
+    [policy.contentPathFromUrl(prefixedPluralReel)]
+  ),
+  true
 );
 assert.equal(policy.classifyLink(otherPrefixedPost, handle, []), "block");
 assert.equal(

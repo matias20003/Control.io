@@ -67,7 +67,7 @@ type InstagramWindow = Window & {
 const CIRCLE_STORAGE_KEY = "controlio:my-circle:v1";
 const FOCUS_PAGE_SOURCE = "controlio-web";
 const FOCUS_EXTENSION_SOURCE = "controlio-focus-extension";
-const FOCUS_EXTENSION_MIN_VERSION = "0.1.3";
+const FOCUS_EXTENSION_MIN_VERSION = "0.1.4";
 
 type FocusExtensionStatus = "checking" | "ready" | "missing" | "outdated";
 
@@ -981,7 +981,7 @@ function CircleView({
                     type="button"
                     onClick={() => setViewingPerson(person)}
                     className="absolute inset-0 z-10 cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/70"
-                    aria-label={`Abrir el perfil de ${person.name} durante dos minutos`}
+                    aria-label={`Abrir el modo enfocado de ${person.name} durante dos minutos`}
                   />
                 </div>
                 <button
@@ -990,7 +990,7 @@ function CircleView({
                   className="mx-auto mt-2 flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-primary transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                 >
                   <Clock3 size={14} />
-                  Ver perfil durante 2 min
+                  Abrir modo enfocado · 2 min
                 </button>
               </div>
             </article>
@@ -1044,8 +1044,9 @@ function TimedProfileDialog({
   const [focusSessionActive, setFocusSessionActive] = useState(false);
   const pendingOpenRef = useRef<string | null>(null);
   const openRequestTimeoutRef = useRef<number | null>(null);
+  const autoOpenRequestedRef = useRef(false);
 
-  const openInteractiveProfile = () => {
+  const openInteractiveProfile = useCallback(() => {
     if (extensionStatus !== "ready") {
       toast.error(
         extensionStatus === "outdated"
@@ -1070,7 +1071,19 @@ function TimedProfileDialog({
       pendingOpenRef.current = null;
       toast.error("La extensión no respondió. Recargá Control.io e intentá nuevamente.");
     }, 1800);
-  };
+  }, [extensionStatus, person.handle, person.id, remainingSeconds]);
+
+  useEffect(() => {
+    if (
+      extensionStatus !== "ready" ||
+      autoOpenRequestedRef.current
+    ) {
+      return;
+    }
+
+    autoOpenRequestedRef.current = true;
+    openInteractiveProfile();
+  }, [extensionStatus, openInteractiveProfile]);
 
   useEffect(() => {
     const handleBridgeMessage = (event: MessageEvent) => {
@@ -1118,6 +1131,7 @@ function TimedProfileDialog({
 
       if (message.type === "CONTROLIO_FOCUS_SESSION_CLOSED") {
         setFocusSessionActive(false);
+        onClose();
       }
     };
 
@@ -1140,7 +1154,7 @@ function TimedProfileDialog({
         correlationId: `focus-close-${person.id}-${Date.now()}`,
       });
     };
-  }, [person.handle, person.id]);
+  }, [onClose, person.handle, person.id]);
 
   useEffect(() => {
     const expiresAt = Date.now() + 120_000;
@@ -1309,7 +1323,7 @@ function FocusExtensionInstaller({ isUpdate }: { isUpdate: boolean }) {
           </p>
           <p className="mt-1.5 text-xs leading-relaxed text-muted">
             {isUpdate
-              ? "Tenés una versión anterior. Esta actualización habilita las rutas nuevas de publicaciones y reels."
+              ? "Tenés una versión anterior. Esta actualización habilita la navegación entre reels del perfil elegido."
               : "Es una instalación privada y se hace una sola vez en esta computadora."}
           </p>
         </div>

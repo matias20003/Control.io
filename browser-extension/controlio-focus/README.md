@@ -6,7 +6,8 @@ una ventana enfocada de hasta dos minutos.
 ## Qué hace
 
 - Abre únicamente el perfil solicitado por Control.io.
-- Permite entrar a sus publicaciones, reels e historias.
+- Permite entrar a sus publicaciones, historias y recorrer los reels cargados
+  desde ese perfil.
 - Bloquea otros perfiles, Explorar, el feed general, mensajes y búsqueda.
 - Cierra la ventana cuando vence el contador o cuando se cierra el modal.
 - Usa la sesión de Instagram que ya existe en Chrome.
