@@ -177,8 +177,9 @@
       return;
     }
 
+    const destinationUrl = anchor.href;
     const classification = policy.classifyLink(
-      anchor.href,
+      destinationUrl,
       session.handle,
       session.allowedContentPaths
     );
@@ -191,7 +192,7 @@
     if (classification === "allow-content") {
       void sendMessage({
         type: "CONTROLIO_FOCUS_ALLOW_CONTENT",
-        url: anchor.href,
+        url: destinationUrl,
       }).then((response) => {
         if (response.ok && Array.isArray(response.allowedContentPaths)) {
           session.allowedContentPaths = response.allowedContentPaths;

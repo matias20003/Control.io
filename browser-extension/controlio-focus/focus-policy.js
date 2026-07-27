@@ -78,7 +78,7 @@
     const segments = pathSegments(url.pathname);
     if (
       segments.length >= 2 &&
-      ["p", "reel", "tv"].includes(segments[0]) &&
+      ["p", "reel", "reels", "tv"].includes(segments[0]) &&
       /^[a-zA-Z0-9_-]+$/.test(segments[1])
     ) {
       return {
@@ -92,7 +92,7 @@
       ownerHandle &&
       !RESERVED_ROOTS.has(ownerHandle) &&
       segments.length >= 3 &&
-      ["p", "reel", "tv"].includes(segments[1]) &&
+      ["p", "reel", "reels", "tv"].includes(segments[1]) &&
       /^[a-zA-Z0-9_-]+$/.test(segments[2])
     ) {
       return {

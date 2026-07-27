@@ -67,8 +67,9 @@ type InstagramWindow = Window & {
 const CIRCLE_STORAGE_KEY = "controlio:my-circle:v1";
 const FOCUS_PAGE_SOURCE = "controlio-web";
 const FOCUS_EXTENSION_SOURCE = "controlio-focus-extension";
+const FOCUS_EXTENSION_MIN_VERSION = "0.1.3";
 
-type FocusExtensionStatus = "checking" | "ready" | "missing";
+type FocusExtensionStatus = "checking" | "ready" | "missing" | "outdated";
 
 type FocusExtensionMessage = {
   correlationId?: string;
@@ -77,6 +78,7 @@ type FocusExtensionMessage = {
   reason?: string;
   source?: string;
   type?: string;
+  version?: string;
 };
 
 const TABS: Array<{
@@ -108,6 +110,18 @@ function postFocusExtensionMessage(
     },
     window.location.origin
   );
+}
+
+function isCurrentFocusExtension(version: string | undefined): boolean {
+  if (!version || !/^\d+(?:\.\d+){2}$/.test(version)) return false;
+
+  const current = version.split(".").map(Number);
+  const required = FOCUS_EXTENSION_MIN_VERSION.split(".").map(Number);
+  for (let index = 0; index < required.length; index += 1) {
+    if (current[index] > required[index]) return true;
+    if (current[index] < required[index]) return false;
+  }
+  return true;
 }
 
 function normalizeInstagramHandle(value: string): string | null {
@@ -1034,7 +1048,9 @@ function TimedProfileDialog({
   const openInteractiveProfile = () => {
     if (extensionStatus !== "ready") {
       toast.error(
-        "No detecté Control.io Focus. Instalá la extensión privada y recargá esta página."
+        extensionStatus === "outdated"
+          ? "Actualizá Control.io Focus para poder reproducir publicaciones y reels."
+          : "No detecté Control.io Focus. Instalá la extensión privada y recargá esta página."
       );
       return;
     }
@@ -1069,7 +1085,13 @@ function TimedProfileDialog({
       if (message?.source !== FOCUS_EXTENSION_SOURCE) return;
 
       if (message.type === "CONTROLIO_FOCUS_PING_RESULT") {
-        setExtensionStatus(message.ok ? "ready" : "missing");
+        setExtensionStatus(
+          !message.ok
+            ? "missing"
+            : isCurrentFocusExtension(message.version)
+              ? "ready"
+              : "outdated"
+        );
         return;
       }
 
@@ -1230,8 +1252,8 @@ function TimedProfileDialog({
           </div>
         </div>
 
-        {extensionStatus === "missing" ? (
-          <FocusExtensionInstaller />
+        {extensionStatus === "missing" || extensionStatus === "outdated" ? (
+          <FocusExtensionInstaller isUpdate={extensionStatus === "outdated"} />
         ) : (
           <footer className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
             <p
@@ -1265,7 +1287,7 @@ function TimedProfileDialog({
   );
 }
 
-function FocusExtensionInstaller() {
+function FocusExtensionInstaller({ isUpdate }: { isUpdate: boolean }) {
   const [downloadStarted, setDownloadStarted] = useState(false);
 
   const downloadExtension = () => {
@@ -1281,16 +1303,23 @@ function FocusExtensionInstaller() {
             <span className="inline-flex size-7 items-center justify-center rounded-full bg-primary/12 text-primary">
               <Download size={15} aria-hidden="true" />
             </span>
-            Instalar Control.io Focus
+            {isUpdate
+              ? `Actualizar Control.io Focus a v${FOCUS_EXTENSION_MIN_VERSION}`
+              : "Instalar Control.io Focus"}
           </p>
           <p className="mt-1.5 text-xs leading-relaxed text-muted">
-            Es una instalación privada y se hace una sola vez en esta
-            computadora.
+            {isUpdate
+              ? "Tenés una versión anterior. Esta actualización habilita las rutas nuevas de publicaciones y reels."
+              : "Es una instalación privada y se hace una sola vez en esta computadora."}
           </p>
         </div>
         <Button onClick={downloadExtension} className="shrink-0">
           <Download size={16} />
-          {downloadStarted ? "Descargar nuevamente" : "Descargar extensión"}
+          {downloadStarted
+            ? "Descargar nuevamente"
+            : isUpdate
+              ? "Descargar actualización"
+              : "Descargar extensión"}
         </Button>
       </div>
 
@@ -1313,10 +1342,14 @@ function FocusExtensionInstaller() {
           </span>
           <p className="text-xs leading-relaxed text-muted">
             <strong className="block text-foreground">
-              Abrí las extensiones de Chrome
+              {isUpdate
+                ? "Quitá la versión anterior"
+                : "Abrí las extensiones de Chrome"}
             </strong>
-            Escribí <code>chrome://extensions</code> en la barra y activá “Modo
-            de desarrollador”.
+            Escribí <code>chrome://extensions</code> en la barra y{" "}
+            {isUpdate
+              ? "presioná “Quitar” en Control.io Focus."
+              : "activá “Modo de desarrollador”."}
           </p>
         </li>
         <li className="grid grid-cols-[28px_1fr] gap-3 py-3">
@@ -1325,7 +1358,9 @@ function FocusExtensionInstaller() {
           </span>
           <p className="text-xs leading-relaxed text-muted">
             <strong className="block text-foreground">
-              Cargá la carpeta descomprimida
+              {isUpdate
+                ? "Cargá la carpeta actualizada"
+                : "Cargá la carpeta descomprimida"}
             </strong>
             Presioná “Cargar extensión sin empaquetar” y seleccioná la carpeta
             <code className="ml-1">controlio-focus</code>.
