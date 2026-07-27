@@ -12,6 +12,10 @@ const story = `https://www.instagram.com/stories/${handle}/123/`;
 const profileReels = `https://www.instagram.com/${handle}/reels/`;
 const post = "https://www.instagram.com/p/ABC_123/";
 const reel = "https://www.instagram.com/reel/REEL_123/";
+const prefixedPost =
+  "https://www.instagram.com/francopisso/p/PREFIXED_123/";
+const otherPrefixedPost =
+  "https://www.instagram.com/otra-persona/p/OTHER_123/";
 
 assert.equal(policy.isAllowedNavigation(profile, handle, []), true);
 assert.equal(policy.isAllowedNavigation(story, handle, []), true);
@@ -28,6 +32,8 @@ assert.equal(
   false
 );
 assert.equal(policy.classifyLink(post, handle, []), "allow-content");
+assert.equal(policy.classifyLink(prefixedPost, handle, []), "allow-content");
+assert.equal(policy.classifyLink(otherPrefixedPost, handle, []), "block");
 assert.equal(
   policy.classifyLink("https://www.instagram.com/otra-persona/", handle, []),
   "block"

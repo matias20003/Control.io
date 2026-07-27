@@ -121,16 +121,18 @@
   }
 
   function shouldHideLink(anchor) {
-    const classification = policy.classifyLink(
-      anchor.href,
-      session.handle,
-      session.allowedContentPaths
-    );
-    if (classification !== "block") return false;
-
     try {
-      const url = new URL(anchor.href);
-      return url.hostname.endsWith("instagram.com");
+      const url = policy.parseInstagramUrl(anchor.href);
+      if (!url) return false;
+
+      const pathname = url.pathname.replace(/\/+$/, "") || "/";
+      return (
+        pathname === "/" ||
+        pathname === "/create" ||
+        pathname.startsWith("/direct") ||
+        pathname.startsWith("/explore") ||
+        pathname === "/reels"
+      );
     } catch {
       return false;
     }

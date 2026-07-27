@@ -3,6 +3,7 @@ importScripts("focus-policy.js");
 "use strict";
 
 const {
+  contentOwnerHandleFromUrl,
   contentPathFromUrl,
   isAllowedNavigation,
   isOwnProfileNavigation,
@@ -167,6 +168,10 @@ async function allowContentAndNavigate(message, sender) {
 
   const contentPath = contentPathFromUrl(message.url);
   if (!contentPath) throw new Error("Ese destino no pertenece a una publicación.");
+  const contentOwner = contentOwnerHandleFromUrl(message.url);
+  if (contentOwner && contentOwner !== session.handle) {
+    throw new Error("Esa publicación pertenece a otro perfil.");
+  }
 
   const allowedContentPaths = Array.from(
     new Set([...session.allowedContentPaths, contentPath])

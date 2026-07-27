@@ -71,7 +71,7 @@
     return normalized || "/";
   }
 
-  function contentPathFromUrl(value) {
+  function contentDescriptorFromUrl(value) {
     const url = parseInstagramUrl(value);
     if (!url) return null;
 
@@ -81,10 +81,35 @@
       ["p", "reel", "tv"].includes(segments[0]) &&
       /^[a-zA-Z0-9_-]+$/.test(segments[1])
     ) {
-      return `/${segments[0]}/${segments[1]}`;
+      return {
+        ownerHandle: null,
+        path: `/${segments[0]}/${segments[1]}`,
+      };
+    }
+
+    const ownerHandle = normalizeHandle(segments[0]);
+    if (
+      ownerHandle &&
+      !RESERVED_ROOTS.has(ownerHandle) &&
+      segments.length >= 3 &&
+      ["p", "reel", "tv"].includes(segments[1]) &&
+      /^[a-zA-Z0-9_-]+$/.test(segments[2])
+    ) {
+      return {
+        ownerHandle,
+        path: `/${ownerHandle}/${segments[1]}/${segments[2]}`,
+      };
     }
 
     return null;
+  }
+
+  function contentPathFromUrl(value) {
+    return contentDescriptorFromUrl(value)?.path || null;
+  }
+
+  function contentOwnerHandleFromUrl(value) {
+    return contentDescriptorFromUrl(value)?.ownerHandle || null;
   }
 
   function profileHandleFromUrl(value) {
@@ -134,9 +159,12 @@
     if (isOwnStory(url, normalizedHandle)) return true;
     if (isLoginFlow(url)) return true;
 
-    const contentPath = contentPathFromUrl(url.href);
+    const content = contentDescriptorFromUrl(url.href);
+    if (content?.ownerHandle && content.ownerHandle !== normalizedHandle) {
+      return false;
+    }
     return Boolean(
-      contentPath && new Set(allowedContentPaths || []).has(contentPath)
+      content && new Set(allowedContentPaths || []).has(content.path)
     );
   }
 
@@ -149,9 +177,12 @@
     if (isOwnStory(url, normalizedHandle)) return "allow";
     if (isLoginFlow(url)) return "allow";
 
-    const contentPath = contentPathFromUrl(url.href);
-    if (contentPath) {
-      return new Set(allowedContentPaths || []).has(contentPath)
+    const content = contentDescriptorFromUrl(url.href);
+    if (content) {
+      if (content.ownerHandle && content.ownerHandle !== normalizedHandle) {
+        return "block";
+      }
+      return new Set(allowedContentPaths || []).has(content.path)
         ? "allow"
         : "allow-content";
     }
@@ -164,6 +195,7 @@
 
   return Object.freeze({
     classifyLink,
+    contentOwnerHandleFromUrl,
     contentPathFromUrl,
     isAllowedNavigation,
     isOwnProfileNavigation,
