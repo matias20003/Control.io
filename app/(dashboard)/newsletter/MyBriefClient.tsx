@@ -19,6 +19,7 @@ import {
   ChevronDown,
   CircleUserRound,
   Clock3,
+  Download,
   ExternalLink,
   History,
   MessageCircle,
@@ -1229,36 +1230,123 @@ function TimedProfileDialog({
           </div>
         </div>
 
-        <footer className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-          <p
-            className="flex items-start gap-2 text-xs leading-relaxed text-muted"
-            aria-live="polite"
-          >
-            <ShieldCheck
-              size={14}
-              className="mt-0.5 shrink-0 text-success/80"
-            />
-            {extensionStatus === "ready"
-              ? "Control.io Focus está activo: limita la navegación y respeta este contador."
-              : extensionStatus === "checking"
-                ? "Comprobando la extensión privada de Control.io…"
-                : "Instalá Control.io Focus en Chrome para navegar este perfil de forma limitada."}
-          </p>
-          <Button
-            variant="secondary"
-            onClick={openInteractiveProfile}
-            disabled={extensionStatus === "checking"}
-            className="shrink-0"
-          >
-            <ExternalLink size={15} />
-            {focusSessionActive
-              ? "Volver a la ventana enfocada"
-              : "Abrir modo enfocado"}
-          </Button>
-        </footer>
+        {extensionStatus === "missing" ? (
+          <FocusExtensionInstaller />
+        ) : (
+          <footer className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <p
+              className="flex items-start gap-2 text-xs leading-relaxed text-muted"
+              aria-live="polite"
+            >
+              <ShieldCheck
+                size={14}
+                className="mt-0.5 shrink-0 text-success/80"
+              />
+              {extensionStatus === "ready"
+                ? "Control.io Focus está activo: limita la navegación y respeta este contador."
+                : "Comprobando la extensión privada de Control.io…"}
+            </p>
+            <Button
+              variant="secondary"
+              onClick={openInteractiveProfile}
+              disabled={extensionStatus === "checking"}
+              className="shrink-0"
+            >
+              <ExternalLink size={15} />
+              {focusSessionActive
+                ? "Volver a la ventana enfocada"
+                : "Abrir modo enfocado"}
+            </Button>
+          </footer>
+        )}
       </section>
     </div>,
     document.body
+  );
+}
+
+function FocusExtensionInstaller() {
+  const [downloadStarted, setDownloadStarted] = useState(false);
+
+  const downloadExtension = () => {
+    setDownloadStarted(true);
+    window.location.assign("/api/my-brief/focus-extension");
+  };
+
+  return (
+    <footer className="max-h-[48dvh] overflow-y-auto border-t border-border bg-surface-2 px-4 py-4 sm:px-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="max-w-[52ch]">
+          <p className="flex items-center gap-2 text-sm font-bold text-foreground">
+            <span className="inline-flex size-7 items-center justify-center rounded-full bg-primary/12 text-primary">
+              <Download size={15} aria-hidden="true" />
+            </span>
+            Instalar Control.io Focus
+          </p>
+          <p className="mt-1.5 text-xs leading-relaxed text-muted">
+            Es una instalación privada y se hace una sola vez en esta
+            computadora.
+          </p>
+        </div>
+        <Button onClick={downloadExtension} className="shrink-0">
+          <Download size={16} />
+          {downloadStarted ? "Descargar nuevamente" : "Descargar extensión"}
+        </Button>
+      </div>
+
+      <ol className="mt-4 divide-y divide-border border-y border-border">
+        <li className="grid grid-cols-[28px_1fr] gap-3 py-3">
+          <span className="flex size-7 items-center justify-center rounded-full bg-background text-xs font-bold text-foreground">
+            1
+          </span>
+          <p className="text-xs leading-relaxed text-muted">
+            <strong className="block text-foreground">
+              Buscá el archivo en Descargas
+            </strong>
+            Se llama <code>controlio-focus.zip</code>. Hacé clic derecho y
+            elegí “Extraer todo”.
+          </p>
+        </li>
+        <li className="grid grid-cols-[28px_1fr] gap-3 py-3">
+          <span className="flex size-7 items-center justify-center rounded-full bg-background text-xs font-bold text-foreground">
+            2
+          </span>
+          <p className="text-xs leading-relaxed text-muted">
+            <strong className="block text-foreground">
+              Abrí las extensiones de Chrome
+            </strong>
+            Escribí <code>chrome://extensions</code> en la barra y activá “Modo
+            de desarrollador”.
+          </p>
+        </li>
+        <li className="grid grid-cols-[28px_1fr] gap-3 py-3">
+          <span className="flex size-7 items-center justify-center rounded-full bg-background text-xs font-bold text-foreground">
+            3
+          </span>
+          <p className="text-xs leading-relaxed text-muted">
+            <strong className="block text-foreground">
+              Cargá la carpeta descomprimida
+            </strong>
+            Presioná “Cargar extensión sin empaquetar” y seleccioná la carpeta
+            <code className="ml-1">controlio-focus</code>.
+          </p>
+        </li>
+      </ol>
+
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs leading-relaxed text-muted">
+          Cuando Chrome confirme la instalación, volvé acá y recargá.
+        </p>
+        <Button
+          variant="secondary"
+          onClick={() => window.location.reload()}
+          className="shrink-0"
+        >
+          <RefreshCw size={15} />
+          Ya la instalé: recargar
+        </Button>
+      </div>
+    </footer>
   );
 }
 

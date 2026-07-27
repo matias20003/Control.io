@@ -42,6 +42,9 @@ const nextConfig: NextConfig = {
   // rasteriza PDFs (el file tracing a veces no incluye los .wasm solo).
   outputFileTracingIncludes: {
     "/api/estudio/analyze": ["./node_modules/mupdf/dist/*.wasm"],
+    "/api/my-brief/focus-extension": [
+      "./browser-extension/controlio-focus.zip",
+    ],
     // La rasterización también corre como server action bajo la página /estudio.
     "/estudio": ["./node_modules/mupdf/dist/*.wasm"],
     "/estudio/**": ["./node_modules/mupdf/dist/*.wasm"],

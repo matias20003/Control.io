@@ -16,11 +16,17 @@ cookies y no envía datos de Instagram a Control.io.
 
 ## Instalación privada
 
-1. Abrí `chrome://extensions` en Chrome.
-2. Activá **Modo de desarrollador**.
-3. Elegí **Cargar extensión sin empaquetar**.
-4. Seleccioná esta carpeta: `browser-extension/controlio-focus`.
-5. Recargá `https://controlio.site/newsletter`.
+1. Descomprimí `controlio-focus.zip`. En Windows: clic derecho y
+   **Extraer todo**.
+2. Abrí `chrome://extensions` en Chrome.
+3. Activá **Modo de desarrollador**.
+4. Elegí **Cargar extensión sin empaquetar**.
+5. Seleccioná la carpeta descomprimida `controlio-focus`, que contiene
+   `manifest.json`.
+6. Recargá `https://controlio.site/newsletter`.
+
+Si estás trabajando directamente desde el repositorio, podés seleccionar
+`browser-extension/controlio-focus` sin descargar el ZIP.
 
 La función web solamente se muestra para `yorismatias372@gmail.com`.
 
