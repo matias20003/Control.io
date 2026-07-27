@@ -827,9 +827,9 @@ function CircleView({
           </p>
         </div>
       ) : (
-        <div className="space-y-10">
+        <div className="grid items-start gap-x-6 gap-y-10 md:grid-cols-2">
           {people.map((person) => (
-            <article key={person.id} className="space-y-4">
+            <article key={person.id} className="min-w-0 space-y-3">
               <div className="flex items-center justify-between gap-3 border-b border-border pb-3">
                 <div className="min-w-0">
                   <h3 className="truncate text-base font-bold text-foreground">
@@ -851,33 +851,41 @@ function CircleView({
                 </Button>
               </div>
 
-              <div className="mx-auto min-h-32 max-w-[540px] overflow-hidden rounded-xl bg-surface-2">
-                <blockquote
-                  className="instagram-media !m-0 !min-w-0 !max-w-[540px] !w-full"
-                  data-instgrm-permalink={`https://www.instagram.com/${person.handle}/`}
-                  data-instgrm-version="14"
-                  style={
-                    {
-                      width: "100%",
-                      minWidth: 0,
-                      margin: 0,
-                    } as CSSProperties
-                  }
-                >
-                  <div className="flex min-h-32 flex-col items-center justify-center gap-3 p-5 text-center">
-                    <p className="text-sm text-muted">
-                      Cargando el perfil público de @{person.handle}…
-                    </p>
-                    <a
-                      href={`https://www.instagram.com/${person.handle}/`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-semibold text-primary hover:underline"
+              <div
+                className="mx-auto w-full max-w-[380px]"
+                aria-label={`Vista protegida del perfil de ${person.name}`}
+              >
+                <div className="relative h-[420px] overflow-hidden rounded-xl bg-surface-2">
+                  <div
+                    inert
+                    aria-hidden="true"
+                    className="pointer-events-none select-none [&_iframe]:!min-w-0 [&_iframe]:!w-full"
+                  >
+                    <blockquote
+                      className="instagram-media !m-0 !min-w-0 !max-w-[380px] !w-full"
+                      data-instgrm-permalink={`https://www.instagram.com/${person.handle}/`}
+                      data-instgrm-version="14"
+                      style={
+                        {
+                          width: "100%",
+                          minWidth: 0,
+                          margin: 0,
+                        } as CSSProperties
+                      }
                     >
-                      Verificar perfil en Instagram
-                    </a>
+                      <div className="flex min-h-32 items-center justify-center p-5 text-center">
+                        <p className="text-sm text-muted">
+                          Cargando el perfil público de @{person.handle}…
+                        </p>
+                      </div>
+                    </blockquote>
                   </div>
-                </blockquote>
+                  <div className="absolute inset-0 z-10 cursor-default" />
+                </div>
+                <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-muted">
+                  <ShieldCheck size={13} className="shrink-0 text-success/80" />
+                  Vista protegida, sin enlaces a Instagram
+                </p>
               </div>
             </article>
           ))}
