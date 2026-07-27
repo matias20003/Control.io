@@ -16,6 +16,7 @@ const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 const CONTROLIO_HOSTS = new Set([
   "controlio.site",
   "www.controlio.site",
+  "control-io.vercel.app",
   "localhost",
   "127.0.0.1",
 ]);
