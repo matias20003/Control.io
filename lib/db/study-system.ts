@@ -264,6 +264,10 @@ export async function createBlock(
   const code = await nextBlockCode(userId, subject.code, input.parcial);
   const now = new Date();
   const initialSessions = Math.max(1, Math.min(6, Math.round(input.initialSessions ?? 1)));
+  // El D0 NO se mete siempre en hoy: se ubica en el primer día con capacidad libre
+  // (respeta las horas disponibles y saltea descansos). Así, cargar temas uno por uno
+  // desde el chat/manual no sobrecarga el día de hoy.
+  const day = await pickFirstAvailableDay(userId, 30, now);
   const b = await prisma.studyBlock.create({
     data: {
       userId,
@@ -283,7 +287,7 @@ export async function createBlock(
       initialSessions,
       initialDone: 0,
       incorporationDate: now,
-      nextReviewDate: now, // el D0 es hoy: entra al plan de una
+      nextReviewDate: day,
     },
   });
   await balanceUpcoming(userId).catch(() => {});
@@ -303,6 +307,39 @@ async function upcomingExamDaysBySubject(userId: string, now: Date): Promise<Map
     if (prev == null || days < prev) map.set(e.subjectId, days);
   }
   return map;
+}
+
+/**
+ * Primer día (desde hoy) con capacidad libre para meter un bloque de `dur` minutos,
+ * respetando las horas disponibles por día y salteando descansos. Considera la carga
+ * ya comprometida (bloques activos con repaso futuro). Fallback: primer día con
+ * cualquier capacidad; en último caso, hoy. Se usa al crear bloques sueltos.
+ */
+async function pickFirstAvailableDay(userId: string, dur: number, now = new Date()): Promise<Date> {
+  const availability = await getAvailabilityMap(userId);
+  const startOfToday = startOfTodayArg();
+  const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+  const future = await prisma.studyBlock.findMany({
+    where: { userId, status: "ACTIVO", nextReviewDate: { gte: startOfToday } },
+    select: { nextReviewDate: true, reviewDuration: true },
+  });
+  const usedByDay = new Map<string, number>();
+  for (const f of future) if (f.nextReviewDate) usedByDay.set(dayKey(f.nextReviewDate), (usedByDay.get(dayKey(f.nextReviewDate)) ?? 0) + f.reviewDuration);
+
+  let cursor = new Date(startOfToday.getTime() + 15 * 3600 * 1000); // ~12:00 ARG
+  for (let i = 0; i < 90; i++) {
+    const cap = availability[cursor.getDay()] ?? 0;
+    const used = usedByDay.get(dayKey(cursor)) ?? 0;
+    if (cap > 0 && used + dur <= cap) return cursor;
+    cursor = new Date(cursor.getTime() + 86_400_000);
+    cursor.setHours(12, 0, 0, 0);
+  }
+  let c = new Date(startOfToday.getTime() + 15 * 3600 * 1000);
+  for (let i = 0; i < 14; i++) {
+    if ((availability[c.getDay()] ?? 0) > 0) return c;
+    c = new Date(c.getTime() + 86_400_000); c.setHours(12, 0, 0, 0);
+  }
+  return new Date(startOfToday.getTime() + 15 * 3600 * 1000);
 }
 
 /**
