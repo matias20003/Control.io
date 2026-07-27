@@ -843,8 +843,19 @@ function CircleView({
   onRemove: (personId: string) => void;
   onEmbedsReady: () => void;
 }) {
-  const [viewingPerson, setViewingPerson] = useState<CirclePerson | null>(null);
-  const closeTimedProfile = useCallback(() => setViewingPerson(null), []);
+  const [focusLaunch, setFocusLaunch] = useState<{
+    person: CirclePerson;
+    requestId: number;
+  } | null>(null);
+  const launchSequenceRef = useRef(0);
+  const closeFocusLauncher = useCallback(() => setFocusLaunch(null), []);
+  const openFocusedProfile = useCallback((person: CirclePerson) => {
+    launchSequenceRef.current += 1;
+    setFocusLaunch({
+      person,
+      requestId: launchSequenceRef.current,
+    });
+  }, []);
 
   return (
     <section className="space-y-8">
@@ -979,14 +990,14 @@ function CircleView({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setViewingPerson(person)}
+                    onClick={() => openFocusedProfile(person)}
                     className="absolute inset-0 z-10 cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/70"
                     aria-label={`Abrir el modo enfocado de ${person.name} durante dos minutos`}
                   />
                 </div>
                 <button
                   type="button"
-                  onClick={() => setViewingPerson(person)}
+                  onClick={() => openFocusedProfile(person)}
                   className="mx-auto mt-2 flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-primary transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                 >
                   <Clock3 size={14} />
@@ -1021,10 +1032,11 @@ function CircleView({
         />
       )}
 
-      {viewingPerson && (
+      {focusLaunch && (
         <TimedProfileDialog
-          person={viewingPerson}
-          onClose={closeTimedProfile}
+          key={focusLaunch.requestId}
+          person={focusLaunch.person}
+          onClose={closeFocusLauncher}
         />
       )}
     </section>
@@ -1038,10 +1050,8 @@ function TimedProfileDialog({
   person: CirclePerson;
   onClose: () => void;
 }) {
-  const [remainingSeconds, setRemainingSeconds] = useState(120);
   const [extensionStatus, setExtensionStatus] =
     useState<FocusExtensionStatus>("checking");
-  const [focusSessionActive, setFocusSessionActive] = useState(false);
   const pendingOpenRef = useRef<string | null>(null);
   const openRequestTimeoutRef = useRef<number | null>(null);
   const autoOpenRequestedRef = useRef(false);
@@ -1062,7 +1072,7 @@ function TimedProfileDialog({
     pendingOpenRef.current = correlationId;
     postFocusExtensionMessage("CONTROLIO_FOCUS_OPEN", {
       correlationId,
-      durationSeconds: remainingSeconds,
+      durationSeconds: 120,
       handle: person.handle,
     });
 
@@ -1070,8 +1080,9 @@ function TimedProfileDialog({
       if (pendingOpenRef.current !== correlationId) return;
       pendingOpenRef.current = null;
       toast.error("La extensión no respondió. Recargá Control.io e intentá nuevamente.");
+      onClose();
     }, 1800);
-  }, [extensionStatus, person.handle, person.id, remainingSeconds]);
+  }, [extensionStatus, onClose, person.handle, person.id]);
 
   useEffect(() => {
     if (
@@ -1118,19 +1129,17 @@ function TimedProfileDialog({
           openRequestTimeoutRef.current = null;
         }
 
-        if (message.ok) {
-          setFocusSessionActive(true);
-          toast.success(`Modo enfocado activo para @${person.handle}.`);
-        } else {
+        if (!message.ok) {
           toast.error(
             message.error || "No se pudo abrir la ventana enfocada."
           );
+          onClose();
         }
         return;
       }
 
       if (message.type === "CONTROLIO_FOCUS_SESSION_CLOSED") {
-        setFocusSessionActive(false);
+        if (message.reason === "replaced" && pendingOpenRef.current) return;
         onClose();
       }
     };
@@ -1150,45 +1159,34 @@ function TimedProfileDialog({
         window.clearTimeout(openRequestTimeoutRef.current);
       }
       window.removeEventListener("message", handleBridgeMessage);
-      postFocusExtensionMessage("CONTROLIO_FOCUS_CLOSE", {
-        correlationId: `focus-close-${person.id}-${Date.now()}`,
-      });
     };
   }, [onClose, person.handle, person.id]);
 
   useEffect(() => {
-    const expiresAt = Date.now() + 120_000;
+    if (
+      extensionStatus !== "missing" &&
+      extensionStatus !== "outdated"
+    ) {
+      return;
+    }
+
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    processInstagramEmbeds();
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
 
-    const timer = window.setInterval(() => {
-      const remaining = Math.max(
-        0,
-        Math.ceil((expiresAt - Date.now()) / 1000)
-      );
-      setRemainingSeconds(remaining);
-      if (remaining === 0) {
-        window.clearInterval(timer);
-        toast.info("Terminó tu ventana de 2 minutos.");
-        onClose();
-      }
-    }, 1000);
-
     window.addEventListener("keydown", handleKeyDown);
     return () => {
-      window.clearInterval(timer);
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousOverflow;
     };
-  }, [onClose, person.id]);
+  }, [extensionStatus, onClose]);
 
-  const minutes = Math.floor(remainingSeconds / 60);
-  const seconds = String(remainingSeconds % 60).padStart(2, "0");
+  if (extensionStatus === "checking" || extensionStatus === "ready") {
+    return null;
+  }
 
   return createPortal(
     <div
@@ -1201,100 +1199,33 @@ function TimedProfileDialog({
       <section
         role="dialog"
         aria-modal="true"
-        aria-labelledby="timed-profile-title"
+        aria-labelledby="focus-extension-title"
         className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl sm:max-h-[calc(100dvh-3rem)]"
       >
         <header className="flex items-center justify-between gap-4 border-b border-border px-4 py-3 sm:px-5">
           <div className="min-w-0">
             <h2
-              id="timed-profile-title"
+              id="focus-extension-title"
               className="truncate text-base font-bold text-foreground"
             >
-              {person.name}
+              Preparar Control.io Focus
             </h2>
-            <p className="truncate text-xs text-muted">@{person.handle}</p>
+            <p className="truncate text-xs text-muted">
+              Necesario para abrir @{person.handle} con restricciones.
+            </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <span
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-surface-2 px-3 font-mono text-sm font-semibold text-foreground"
-              aria-label={`${minutes} minutos y ${remainingSeconds % 60} segundos restantes`}
-            >
-              <Clock3 size={15} className="text-primary" />
-              {minutes}:{seconds}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              aria-label="Cerrar perfil"
-              title="Cerrar"
-            >
-              <X size={18} />
-            </Button>
-          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            aria-label="Cerrar instalación"
+            title="Cerrar"
+          >
+            <X size={18} />
+          </Button>
         </header>
 
-        <div className="overflow-y-auto p-3 sm:p-5">
-          <div
-            className="mx-auto w-full max-w-[540px]"
-            aria-label={`Vista protegida del perfil de ${person.name}`}
-          >
-            <div
-              inert
-              aria-hidden="true"
-              className="pointer-events-none select-none overflow-hidden rounded-xl bg-surface-2 [&_iframe]:!min-w-0 [&_iframe]:!w-full"
-            >
-              <blockquote
-                className="instagram-media !m-0 !min-w-0 !max-w-[540px] !w-full"
-                data-instgrm-permalink={`https://www.instagram.com/${person.handle}/`}
-                data-instgrm-version="14"
-                style={
-                  {
-                    width: "100%",
-                    minWidth: 0,
-                    margin: 0,
-                  } as CSSProperties
-                }
-              >
-                <div className="flex min-h-40 items-center justify-center p-5 text-center">
-                  <p className="text-sm text-muted">
-                    Cargando el perfil público de @{person.handle}…
-                  </p>
-                </div>
-              </blockquote>
-            </div>
-          </div>
-        </div>
-
-        {extensionStatus === "missing" || extensionStatus === "outdated" ? (
-          <FocusExtensionInstaller isUpdate={extensionStatus === "outdated"} />
-        ) : (
-          <footer className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-            <p
-              className="flex items-start gap-2 text-xs leading-relaxed text-muted"
-              aria-live="polite"
-            >
-              <ShieldCheck
-                size={14}
-                className="mt-0.5 shrink-0 text-success/80"
-              />
-              {extensionStatus === "ready"
-                ? "Control.io Focus está activo: limita la navegación y respeta este contador."
-                : "Comprobando la extensión privada de Control.io…"}
-            </p>
-            <Button
-              variant="secondary"
-              onClick={openInteractiveProfile}
-              disabled={extensionStatus === "checking"}
-              className="shrink-0"
-            >
-              <ExternalLink size={15} />
-              {focusSessionActive
-                ? "Volver a la ventana enfocada"
-                : "Abrir modo enfocado"}
-            </Button>
-          </footer>
-        )}
+        <FocusExtensionInstaller isUpdate={extensionStatus === "outdated"} />
       </section>
     </div>,
     document.body
