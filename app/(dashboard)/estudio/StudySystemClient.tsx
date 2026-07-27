@@ -1199,8 +1199,11 @@ export function StudySystemClient({
             </div>
           ) : (
             <>
+              {initialPlan.budgetMin <= 0 && (
+                <p className="rounded-lg bg-surface-2/40 px-3 py-2 text-[11px] text-muted">😴 Hoy es tu día de descanso, pero tenés estos pendientes de otros días. Hacelos, o tocá <b>“Pasar lo de hoy a otro día”</b>.</p>
+              )}
               <div className="flex items-center justify-between px-1">
-                <p className="text-xs text-muted">{planItems.length} bloque(s) · ~{initialPlan.totalMin}/{initialPlan.budgetMin} min</p>
+                <p className="text-xs text-muted">{planItems.length} bloque(s) · ~{initialPlan.totalMin} min{initialPlan.budgetMin > 0 ? `/${initialPlan.budgetMin} min` : ""}</p>
                 <div className="flex items-center gap-3">
                   {stats.overdue > 0 && (
                     <button onClick={reprogramar} disabled={reprogramming} className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline disabled:opacity-50">

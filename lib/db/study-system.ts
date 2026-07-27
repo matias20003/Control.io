@@ -439,20 +439,23 @@ export async function getTodayPlan(
     })
     .sort((a, b) => b.score - a.score);
 
-  // En día de descanso no cargamos nada nuevo; todo queda como overflow.
+  // Regla: lo que YA vence hoy (o antes) SIEMPRE se muestra — incluso en día de
+  // descanso — para no esconderle pendientes al usuario. El "descanso" solo evita
+  // meterle carga extra; el tope de minutos aplica solo si hay disponibilidad.
   const items: PlanItem[] = [];
   const overflow: PlanItem[] = [];
   let totalMin = 0;
   for (const it of scored) {
     const fits = totalMin + it.reviewDuration <= todayMinutes;
-    if (!rest && (fits || items.length === 0)) {
+    if (rest || fits || items.length === 0) {
       items.push(it);
       totalMin += it.reviewDuration;
     } else {
       overflow.push(it);
     }
   }
-  return { items, totalMin, budgetMin: todayMinutes, overflow, isRestDay: rest };
+  // Sigue siendo "descanso" solo si NO hay nada que vencía hoy.
+  return { items, totalMin, budgetMin: todayMinutes, overflow, isRestDay: rest && items.length === 0 };
 }
 
 // ─────────────────────────────────────────────
