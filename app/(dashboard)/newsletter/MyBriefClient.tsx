@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
   type CSSProperties,
@@ -63,6 +64,19 @@ type InstagramWindow = Window & {
 };
 
 const CIRCLE_STORAGE_KEY = "controlio:my-circle:v1";
+const FOCUS_PAGE_SOURCE = "controlio-web";
+const FOCUS_EXTENSION_SOURCE = "controlio-focus-extension";
+
+type FocusExtensionStatus = "checking" | "ready" | "missing";
+
+type FocusExtensionMessage = {
+  correlationId?: string;
+  error?: string;
+  ok?: boolean;
+  reason?: string;
+  source?: string;
+  type?: string;
+};
 
 const TABS: Array<{
   id: BriefTab;
@@ -79,6 +93,20 @@ function processInstagramEmbeds() {
   window.setTimeout(() => {
     (window as InstagramWindow).instgrm?.Embeds?.process();
   }, 0);
+}
+
+function postFocusExtensionMessage(
+  type: string,
+  payload: Record<string, unknown> = {}
+) {
+  window.postMessage(
+    {
+      source: FOCUS_PAGE_SOURCE,
+      type,
+      ...payload,
+    },
+    window.location.origin
+  );
 }
 
 function normalizeInstagramHandle(value: string): string | null {
@@ -185,6 +213,13 @@ export function MyBriefClient({ initialConfig, initialEditions }: Props) {
       (edition) => argentinaDateKey(new Date(edition.date)) === todayKey
     ) ?? null;
   const history = editions.filter((edition) => edition.id !== today?.id);
+
+  useEffect(() => {
+    document.documentElement.dataset.controlioFocusAuthorized = "true";
+    return () => {
+      delete document.documentElement.dataset.controlioFocusAuthorized;
+    };
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -989,6 +1024,100 @@ function TimedProfileDialog({
   onClose: () => void;
 }) {
   const [remainingSeconds, setRemainingSeconds] = useState(120);
+  const [extensionStatus, setExtensionStatus] =
+    useState<FocusExtensionStatus>("checking");
+  const [focusSessionActive, setFocusSessionActive] = useState(false);
+  const pendingOpenRef = useRef<string | null>(null);
+  const openRequestTimeoutRef = useRef<number | null>(null);
+
+  const openInteractiveProfile = () => {
+    if (extensionStatus !== "ready") {
+      toast.error(
+        "No detecté Control.io Focus. Instalá la extensión privada y recargá esta página."
+      );
+      return;
+    }
+
+    if (pendingOpenRef.current) return;
+
+    const correlationId = `focus-open-${person.id}-${Date.now()}`;
+    pendingOpenRef.current = correlationId;
+    postFocusExtensionMessage("CONTROLIO_FOCUS_OPEN", {
+      correlationId,
+      durationSeconds: remainingSeconds,
+      handle: person.handle,
+    });
+
+    openRequestTimeoutRef.current = window.setTimeout(() => {
+      if (pendingOpenRef.current !== correlationId) return;
+      pendingOpenRef.current = null;
+      toast.error("La extensión no respondió. Recargá Control.io e intentá nuevamente.");
+    }, 1800);
+  };
+
+  useEffect(() => {
+    const handleBridgeMessage = (event: MessageEvent) => {
+      if (
+        event.source !== window ||
+        event.origin !== window.location.origin
+      ) {
+        return;
+      }
+
+      const message = event.data as FocusExtensionMessage;
+      if (message?.source !== FOCUS_EXTENSION_SOURCE) return;
+
+      if (message.type === "CONTROLIO_FOCUS_PING_RESULT") {
+        setExtensionStatus(message.ok ? "ready" : "missing");
+        return;
+      }
+
+      if (
+        message.type === "CONTROLIO_FOCUS_OPEN_RESULT" &&
+        message.correlationId === pendingOpenRef.current
+      ) {
+        pendingOpenRef.current = null;
+        if (openRequestTimeoutRef.current !== null) {
+          window.clearTimeout(openRequestTimeoutRef.current);
+          openRequestTimeoutRef.current = null;
+        }
+
+        if (message.ok) {
+          setFocusSessionActive(true);
+          toast.success(`Modo enfocado activo para @${person.handle}.`);
+        } else {
+          toast.error(
+            message.error || "No se pudo abrir la ventana enfocada."
+          );
+        }
+        return;
+      }
+
+      if (message.type === "CONTROLIO_FOCUS_SESSION_CLOSED") {
+        setFocusSessionActive(false);
+      }
+    };
+
+    window.addEventListener("message", handleBridgeMessage);
+    const correlationId = `focus-ping-${person.id}-${Date.now()}`;
+    postFocusExtensionMessage("CONTROLIO_FOCUS_PING", { correlationId });
+    const availabilityTimer = window.setTimeout(() => {
+      setExtensionStatus((current) =>
+        current === "checking" ? "missing" : current
+      );
+    }, 900);
+
+    return () => {
+      window.clearTimeout(availabilityTimer);
+      if (openRequestTimeoutRef.current !== null) {
+        window.clearTimeout(openRequestTimeoutRef.current);
+      }
+      window.removeEventListener("message", handleBridgeMessage);
+      postFocusExtensionMessage("CONTROLIO_FOCUS_CLOSE", {
+        correlationId: `focus-close-${person.id}-${Date.now()}`,
+      });
+    };
+  }, [person.handle, person.id]);
 
   useEffect(() => {
     const expiresAt = Date.now() + 120_000;
@@ -1100,9 +1229,32 @@ function TimedProfileDialog({
           </div>
         </div>
 
-        <footer className="flex items-center gap-2 border-t border-border px-4 py-3 text-xs leading-relaxed text-muted sm:px-5">
-          <ShieldCheck size={14} className="shrink-0 text-success/80" />
-          Vista protegida dentro de Control.io, sin enlaces externos.
+        <footer className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <p
+            className="flex items-start gap-2 text-xs leading-relaxed text-muted"
+            aria-live="polite"
+          >
+            <ShieldCheck
+              size={14}
+              className="mt-0.5 shrink-0 text-success/80"
+            />
+            {extensionStatus === "ready"
+              ? "Control.io Focus está activo: limita la navegación y respeta este contador."
+              : extensionStatus === "checking"
+                ? "Comprobando la extensión privada de Control.io…"
+                : "Instalá Control.io Focus en Chrome para navegar este perfil de forma limitada."}
+          </p>
+          <Button
+            variant="secondary"
+            onClick={openInteractiveProfile}
+            disabled={extensionStatus === "checking"}
+            className="shrink-0"
+          >
+            <ExternalLink size={15} />
+            {focusSessionActive
+              ? "Volver a la ventana enfocada"
+              : "Abrir modo enfocado"}
+          </Button>
         </footer>
       </section>
     </div>,

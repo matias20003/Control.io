@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Control.io Focus",
+  "version": "0.1.0",
+  "description": "Abre Instagram en una ventana enfocada, limitada al perfil elegido desde Mi círculo.",
+  "minimum_chrome_version": "102",
+  "permissions": [
+    "alarms",
+    "storage",
+    "tabs",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "https://www.instagram.com/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_title": "Control.io Focus"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://controlio.site/*",
+        "https://www.controlio.site/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "controlio-bridge.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.instagram.com/*"
+      ],
+      "css": [
+        "instagram-focus.css"
+      ],
+      "js": [
+        "focus-policy.js",
+        "instagram-focus.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}
