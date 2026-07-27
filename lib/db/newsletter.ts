@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import { startOfTodayArg, startOfDayArg } from "@/lib/timezone";
+import {
+  startOfTodayArg,
+  startOfDayArg,
+  todayStringArg,
+} from "@/lib/timezone";
 import type { AnalyzedArticle } from "@/lib/services/newsletter-ai";
 
 export type SerializedConfig = {
@@ -9,6 +13,7 @@ export type SerializedConfig = {
   country: string;
   isActive: boolean;
   sendHour: number;
+  sendHours: number[];
   notifyOnReady: boolean;
   notifyPush: boolean;
   notifyWhatsapp: boolean;
@@ -30,10 +35,31 @@ const DEFAULT_CONFIG: SerializedConfig = {
   country: "ar",
   isActive: true,
   sendHour: 8,
+  sendHours: [8],
   notifyOnReady: true,
   notifyPush: true,
   notifyWhatsapp: true,
 };
+
+function normalizeSendHours(
+  primary: number,
+  second?: number | null,
+  third?: number | null
+): number[] {
+  return Array.from(
+    new Set(
+      [primary, second, third].filter(
+        (hour): hour is number =>
+          typeof hour === "number" &&
+          Number.isInteger(hour) &&
+          hour >= 0 &&
+          hour <= 23
+      )
+    )
+  )
+    .sort((a, b) => a - b)
+    .slice(0, 3);
+}
 
 export async function getConfig(userId: string): Promise<SerializedConfig> {
   const row = await prisma.newsletterConfig.findUnique({ where: { userId } });
@@ -45,6 +71,7 @@ export async function getConfig(userId: string): Promise<SerializedConfig> {
     country: row.country,
     isActive: row.isActive,
     sendHour: row.sendHour,
+    sendHours: normalizeSendHours(row.sendHour, row.sendHour2, row.sendHour3),
     notifyOnReady: row.notifyOnReady,
     notifyPush: row.notifyPush,
     notifyWhatsapp: row.notifyWhatsapp,
@@ -66,10 +93,19 @@ export async function upsertConfig(
     .map((t) => t.trim())
     .filter((t) => t.length > 0 && topics.includes(t));
 
-  const sendHour =
-    data.sendHour == null
+  const requestedSendHours =
+    data.sendHours === undefined
       ? undefined
-      : Math.min(23, Math.max(0, Math.trunc(data.sendHour)));
+      : normalizeSendHours(
+          data.sendHours[0] ?? 8,
+          data.sendHours[1],
+          data.sendHours[2]
+        );
+  const sendHour =
+    requestedSendHours?.[0] ??
+    (data.sendHour == null
+      ? undefined
+      : Math.min(23, Math.max(0, Math.trunc(data.sendHour))));
 
   const row = await prisma.newsletterConfig.upsert({
     where: { userId },
@@ -81,6 +117,8 @@ export async function upsertConfig(
       country: data.country ?? "ar",
       isActive: data.isActive ?? true,
       sendHour: sendHour ?? 8,
+      sendHour2: requestedSendHours?.[1] ?? null,
+      sendHour3: requestedSendHours?.[2] ?? null,
       notifyOnReady: data.notifyOnReady ?? true,
       notifyPush: data.notifyPush ?? true,
       notifyWhatsapp: data.notifyWhatsapp ?? true,
@@ -94,6 +132,12 @@ export async function upsertConfig(
       ...(data.country !== undefined ? { country: data.country } : {}),
       ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
       ...(sendHour !== undefined ? { sendHour } : {}),
+      ...(requestedSendHours !== undefined
+        ? {
+            sendHour2: requestedSendHours[1] ?? null,
+            sendHour3: requestedSendHours[2] ?? null,
+          }
+        : {}),
       ...(data.notifyOnReady !== undefined
         ? { notifyOnReady: data.notifyOnReady }
         : {}),
@@ -109,6 +153,7 @@ export async function upsertConfig(
     country: row.country,
     isActive: row.isActive,
     sendHour: row.sendHour,
+    sendHours: normalizeSendHours(row.sendHour, row.sendHour2, row.sendHour3),
     notifyOnReady: row.notifyOnReady,
     notifyPush: row.notifyPush,
     notifyWhatsapp: row.notifyWhatsapp,
@@ -209,6 +254,7 @@ export type ActiveConfig = {
   language: string;
   country: string;
   sendHour: number;
+  sendHours: number[];
   notifyOnReady: boolean;
   notifyPush: boolean;
   notifyWhatsapp: boolean;
@@ -226,6 +272,8 @@ export async function getActiveConfigs(): Promise<ActiveConfig[]> {
       language: true,
       country: true,
       sendHour: true,
+      sendHour2: true,
+      sendHour3: true,
       notifyOnReady: true,
       notifyPush: true,
       notifyWhatsapp: true,
@@ -241,6 +289,7 @@ export async function getActiveConfigs(): Promise<ActiveConfig[]> {
       language: r.language,
       country: r.country,
       sendHour: r.sendHour,
+      sendHours: normalizeSendHours(r.sendHour, r.sendHour2, r.sendHour3),
       notifyOnReady: r.notifyOnReady,
       notifyPush: r.notifyPush,
       notifyWhatsapp: r.notifyWhatsapp,
@@ -251,5 +300,24 @@ export async function getActiveConfigs(): Promise<ActiveConfig[]> {
 /** Configs activas cuyo horario de envío coincide con `hour` (0–23, ARG). */
 export async function getConfigsForHour(hour: number): Promise<ActiveConfig[]> {
   const all = await getActiveConfigs();
-  return all.filter((c) => c.sendHour === hour);
+  return all.filter((c) => c.sendHours.includes(hour));
+}
+
+/**
+ * Reserva de forma atómica una ventana de aviso para evitar duplicados si el
+ * pinger horario reintenta. La clave cambia por día y hora de Argentina.
+ */
+export async function claimDeliveryWindow(
+  userId: string,
+  hour: number
+): Promise<boolean> {
+  const key = `${todayStringArg()}:${String(hour).padStart(2, "0")}`;
+  const result = await prisma.newsletterConfig.updateMany({
+    where: {
+      userId,
+      OR: [{ lastDeliveryKey: null }, { lastDeliveryKey: { not: key } }],
+    },
+    data: { lastDeliveryKey: key },
+  });
+  return result.count === 1;
 }

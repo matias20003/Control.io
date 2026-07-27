@@ -1,12 +1,14 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
   useTransition,
   type CSSProperties,
 } from "react";
+import { createPortal } from "react-dom";
 import Script from "next/script";
 import {
   BadgeCheck,
@@ -138,6 +140,16 @@ function selectBriefArticles(articles: AnalyzedArticle[], limit = 8) {
   return { essentials, remaining };
 }
 
+function resizeDeliveryHours(current: number[], count: number): number[] {
+  const next = Array.from(new Set(current)).sort((a, b) => a - b);
+  const suggestions = [12, 18, 8, 21, 15, 10];
+  for (const hour of suggestions) {
+    if (next.length >= count) break;
+    if (!next.includes(hour)) next.push(hour);
+  }
+  return next.sort((a, b) => a - b).slice(0, count);
+}
+
 export function MyBriefClient({ initialConfig, initialEditions }: Props) {
   const [config, setConfig] = useState(initialConfig);
   const [editions, setEditions] = useState(initialEditions);
@@ -148,7 +160,7 @@ export function MyBriefClient({ initialConfig, initialEditions }: Props) {
   const [topics, setTopics] = useState(initialConfig.topics);
   const [priority, setPriority] = useState(initialConfig.priorityTopics);
   const [isActive, setIsActive] = useState(initialConfig.isActive);
-  const [sendHour, setSendHour] = useState(initialConfig.sendHour);
+  const [sendHours, setSendHours] = useState(initialConfig.sendHours);
   const [notifyPush, setNotifyPush] = useState(initialConfig.notifyPush);
   const [notifyWhatsapp, setNotifyWhatsapp] = useState(
     initialConfig.notifyWhatsapp
@@ -209,14 +221,14 @@ export function MyBriefClient({ initialConfig, initialEditions }: Props) {
       JSON.stringify(priority) !==
         JSON.stringify(config.priorityTopics) ||
       isActive !== config.isActive ||
-      sendHour !== config.sendHour ||
+      JSON.stringify(sendHours) !== JSON.stringify(config.sendHours) ||
       notifyPush !== config.notifyPush ||
       notifyWhatsapp !== config.notifyWhatsapp,
     [
       topics,
       priority,
       isActive,
-      sendHour,
+      sendHours,
       notifyPush,
       notifyWhatsapp,
       config,
@@ -251,6 +263,27 @@ export function MyBriefClient({ initialConfig, initialEditions }: Props) {
     );
   };
 
+  const changeDeliveryCount = (count: number) => {
+    setSendHours((current) => resizeDeliveryHours(current, count));
+  };
+
+  const changeDeliveryHour = (index: number, hour: number) => {
+    setSendHours((current) => {
+      if (
+        current.some(
+          (currentHour, currentIndex) =>
+            currentIndex !== index && currentHour === hour
+        )
+      ) {
+        toast.error("Elegí horarios distintos para cada ventana.");
+        return current;
+      }
+      const next = [...current];
+      next[index] = hour;
+      return next.sort((a, b) => a - b);
+    });
+  };
+
   const saveConfig = () => {
     startSave(async () => {
       const result = await saveNewsletterConfigAction({
@@ -259,7 +292,8 @@ export function MyBriefClient({ initialConfig, initialEditions }: Props) {
         language: config.language,
         country: config.country,
         isActive,
-        sendHour,
+        sendHour: sendHours[0],
+        sendHours,
         notifyOnReady: notifyPush || notifyWhatsapp,
         notifyPush,
         notifyWhatsapp,
@@ -275,7 +309,7 @@ export function MyBriefClient({ initialConfig, initialEditions }: Props) {
         setTopics(result.config.topics);
         setPriority(result.config.priorityTopics);
         setIsActive(result.config.isActive);
-        setSendHour(result.config.sendHour);
+        setSendHours(result.config.sendHours);
         setNotifyPush(result.config.notifyPush);
         setNotifyWhatsapp(result.config.notifyWhatsapp);
         toast.success("Preferencias guardadas.");
@@ -447,7 +481,7 @@ export function MyBriefClient({ initialConfig, initialEditions }: Props) {
           onGenerate={generateNow}
           onConfigure={() => setActiveTab("preferences")}
           onComplete={completeToday}
-          nextHour={sendHour}
+          deliveryHours={sendHours}
         />
       )}
 
@@ -473,7 +507,7 @@ export function MyBriefClient({ initialConfig, initialEditions }: Props) {
           priority={priority}
           topicInput={topicInput}
           isActive={isActive}
-          sendHour={sendHour}
+          sendHours={sendHours}
           notifyPush={notifyPush}
           notifyWhatsapp={notifyWhatsapp}
           dirty={dirty}
@@ -483,7 +517,8 @@ export function MyBriefClient({ initialConfig, initialEditions }: Props) {
           onRemoveTopic={removeTopic}
           onTogglePriority={togglePriority}
           onActiveChange={setIsActive}
-          onSendHourChange={setSendHour}
+          onDeliveryCountChange={changeDeliveryCount}
+          onDeliveryHourChange={changeDeliveryHour}
           onNotifyPushChange={setNotifyPush}
           onNotifyWhatsappChange={setNotifyWhatsapp}
           onSave={saveConfig}
@@ -509,7 +544,7 @@ function TodayBrief({
   onGenerate,
   onConfigure,
   onComplete,
-  nextHour,
+  deliveryHours,
 }: {
   edition: SerializedEdition | null;
   topicsConfigured: boolean;
@@ -518,7 +553,7 @@ function TodayBrief({
   onGenerate: () => void;
   onConfigure: () => void;
   onComplete: () => void;
-  nextHour: number;
+  deliveryHours: number[];
 }) {
   if (!edition) {
     return (
@@ -546,6 +581,15 @@ function TodayBrief({
   const { essentials, remaining } = selectBriefArticles(edition.articles);
   const visibleCount = essentials.length + remaining.length;
   const estimatedMinutes = Math.max(3, Math.ceil(visibleCount * 0.7));
+  const currentArgentinaHour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).format(new Date())
+  );
+  const nextToday = deliveryHours.find((hour) => hour > currentArgentinaHour);
+  const nextHour = nextToday ?? deliveryHours[0] ?? 8;
 
   if (edition.isRead) {
     return (
@@ -557,7 +601,7 @@ function TodayBrief({
           Ya estás al día
         </h2>
         <p className="mt-2 text-sm text-muted">
-          Tu próxima edición se prepara mañana a las{" "}
+          Tu próxima edición se prepara {nextToday ? "hoy" : "mañana"} a las{" "}
           {String(nextHour).padStart(2, "0")}:00.
         </p>
       </section>
@@ -749,6 +793,9 @@ function CircleView({
   onRemove: (personId: string) => void;
   onEmbedsReady: () => void;
 }) {
+  const [viewingPerson, setViewingPerson] = useState<CirclePerson | null>(null);
+  const closeTimedProfile = useCallback(() => setViewingPerson(null), []);
+
   return (
     <section className="space-y-8">
       <div>
@@ -880,12 +927,21 @@ function CircleView({
                       </div>
                     </blockquote>
                   </div>
-                  <div className="absolute inset-0 z-10 cursor-default" />
+                  <button
+                    type="button"
+                    onClick={() => setViewingPerson(person)}
+                    className="absolute inset-0 z-10 cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/70"
+                    aria-label={`Abrir el perfil de ${person.name} durante dos minutos`}
+                  />
                 </div>
-                <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-muted">
-                  <ShieldCheck size={13} className="shrink-0 text-success/80" />
-                  Vista protegida, sin enlaces a Instagram
-                </p>
+                <button
+                  type="button"
+                  onClick={() => setViewingPerson(person)}
+                  className="mx-auto mt-2 flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-primary transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                >
+                  <Clock3 size={14} />
+                  Ver perfil durante 2 min
+                </button>
               </div>
             </article>
           ))}
@@ -914,7 +970,143 @@ function CircleView({
           }
         />
       )}
+
+      {viewingPerson && (
+        <TimedProfileDialog
+          person={viewingPerson}
+          onClose={closeTimedProfile}
+        />
+      )}
     </section>
+  );
+}
+
+function TimedProfileDialog({
+  person,
+  onClose,
+}: {
+  person: CirclePerson;
+  onClose: () => void;
+}) {
+  const [remainingSeconds, setRemainingSeconds] = useState(120);
+
+  useEffect(() => {
+    const expiresAt = Date.now() + 120_000;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    processInstagramEmbeds();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    const timer = window.setInterval(() => {
+      const remaining = Math.max(
+        0,
+        Math.ceil((expiresAt - Date.now()) / 1000)
+      );
+      setRemainingSeconds(remaining);
+      if (remaining === 0) {
+        window.clearInterval(timer);
+        toast.info("Terminó tu ventana de 2 minutos.");
+        onClose();
+      }
+    }, 1000);
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [onClose, person.id]);
+
+  const minutes = Math.floor(remainingSeconds / 60);
+  const seconds = String(remainingSeconds % 60).padStart(2, "0");
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-background/90 p-3 sm:p-6"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="timed-profile-title"
+        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl sm:max-h-[calc(100dvh-3rem)]"
+      >
+        <header className="flex items-center justify-between gap-4 border-b border-border px-4 py-3 sm:px-5">
+          <div className="min-w-0">
+            <h2
+              id="timed-profile-title"
+              className="truncate text-base font-bold text-foreground"
+            >
+              {person.name}
+            </h2>
+            <p className="truncate text-xs text-muted">@{person.handle}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <span
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-surface-2 px-3 font-mono text-sm font-semibold text-foreground"
+              aria-label={`${minutes} minutos y ${remainingSeconds % 60} segundos restantes`}
+            >
+              <Clock3 size={15} className="text-primary" />
+              {minutes}:{seconds}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              aria-label="Cerrar perfil"
+              title="Cerrar"
+            >
+              <X size={18} />
+            </Button>
+          </div>
+        </header>
+
+        <div className="overflow-y-auto p-3 sm:p-5">
+          <div
+            className="mx-auto w-full max-w-[540px]"
+            aria-label={`Vista protegida del perfil de ${person.name}`}
+          >
+            <div
+              inert
+              aria-hidden="true"
+              className="pointer-events-none select-none overflow-hidden rounded-xl bg-surface-2 [&_iframe]:!min-w-0 [&_iframe]:!w-full"
+            >
+              <blockquote
+                className="instagram-media !m-0 !min-w-0 !max-w-[540px] !w-full"
+                data-instgrm-permalink={`https://www.instagram.com/${person.handle}/`}
+                data-instgrm-version="14"
+                style={
+                  {
+                    width: "100%",
+                    minWidth: 0,
+                    margin: 0,
+                  } as CSSProperties
+                }
+              >
+                <div className="flex min-h-40 items-center justify-center p-5 text-center">
+                  <p className="text-sm text-muted">
+                    Cargando el perfil público de @{person.handle}…
+                  </p>
+                </div>
+              </blockquote>
+            </div>
+          </div>
+        </div>
+
+        <footer className="flex items-center gap-2 border-t border-border px-4 py-3 text-xs leading-relaxed text-muted sm:px-5">
+          <ShieldCheck size={14} className="shrink-0 text-success/80" />
+          Vista protegida dentro de Control.io, sin enlaces externos.
+        </footer>
+      </section>
+    </div>,
+    document.body
   );
 }
 
@@ -923,7 +1115,7 @@ function PreferencesView({
   priority,
   topicInput,
   isActive,
-  sendHour,
+  sendHours,
   notifyPush,
   notifyWhatsapp,
   dirty,
@@ -933,7 +1125,8 @@ function PreferencesView({
   onRemoveTopic,
   onTogglePriority,
   onActiveChange,
-  onSendHourChange,
+  onDeliveryCountChange,
+  onDeliveryHourChange,
   onNotifyPushChange,
   onNotifyWhatsappChange,
   onSave,
@@ -942,7 +1135,7 @@ function PreferencesView({
   priority: string[];
   topicInput: string;
   isActive: boolean;
-  sendHour: number;
+  sendHours: number[];
   notifyPush: boolean;
   notifyWhatsapp: boolean;
   dirty: boolean;
@@ -952,7 +1145,8 @@ function PreferencesView({
   onRemoveTopic: (topic: string) => void;
   onTogglePriority: (topic: string) => void;
   onActiveChange: (value: boolean) => void;
-  onSendHourChange: (value: number) => void;
+  onDeliveryCountChange: (count: number) => void;
+  onDeliveryHourChange: (index: number, hour: number) => void;
   onNotifyPushChange: (value: boolean) => void;
   onNotifyWhatsappChange: (value: boolean) => void;
   onSave: () => void;
@@ -1056,30 +1250,59 @@ function PreferencesView({
           <span>
             <span className="font-semibold">Preparar una edición cada día</span>
             <span className="mt-0.5 block text-xs text-muted">
-              Se genera automáticamente a la hora que elijas.
+              Se actualiza automáticamente en las ventanas que elijas.
             </span>
           </span>
         </label>
 
         {isActive && (
-          <label className="flex flex-wrap items-center gap-2 text-sm text-foreground">
-            <Clock3 size={15} className="text-muted" />
-            Hora de entrega
-            <Select
-              value={String(sendHour)}
-              onChange={(event) =>
-                onSendHourChange(Number(event.target.value))
-              }
-              className="w-24"
-            >
-              {Array.from({ length: 24 }, (_, hour) => (
-                <option key={hour} value={hour}>
-                  {String(hour).padStart(2, "0")}:00
-                </option>
+          <div className="space-y-4 rounded-xl bg-surface-2 p-4">
+            <label className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+              <Clock3 size={15} className="text-muted" />
+              Ventanas por día
+              <Select
+                value={String(sendHours.length)}
+                onChange={(event) =>
+                  onDeliveryCountChange(Number(event.target.value))
+                }
+                className="w-36"
+              >
+                <option value="1">1 entrega</option>
+                <option value="2">2 entregas</option>
+                <option value="3">3 entregas</option>
+              </Select>
+            </label>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              {sendHours.map((hour, index) => (
+                <label
+                  key={`delivery-${index}`}
+                  className="space-y-1.5 text-xs font-medium text-muted"
+                >
+                  Ventana {index + 1}
+                  <Select
+                    value={String(hour)}
+                    onChange={(event) =>
+                      onDeliveryHourChange(index, Number(event.target.value))
+                    }
+                    className="w-full text-sm text-foreground"
+                    aria-label={`Horario de la ventana ${index + 1}`}
+                  >
+                    {Array.from({ length: 24 }, (_, optionHour) => (
+                      <option key={optionHour} value={optionHour}>
+                        {String(optionHour).padStart(2, "0")}:00
+                      </option>
+                    ))}
+                  </Select>
+                </label>
               ))}
-            </Select>
-            <span className="text-xs text-muted">Argentina</span>
-          </label>
+            </div>
+
+            <p className="text-xs leading-relaxed text-muted">
+              Horario de Argentina. Cada ventana refresca el brief del día y
+              puede enviarte un aviso.
+            </p>
+          </div>
         )}
       </div>
 
@@ -1088,10 +1311,10 @@ function PreferencesView({
           <div>
             <h3 className="flex items-center gap-2 text-sm font-bold text-foreground">
               <Bell size={15} className="text-primary" />
-              Avisarme una sola vez
+              Avisarme en cada ventana
             </h3>
             <p className="mt-1 text-xs text-muted">
-              Elegí por dónde querés recibir el aviso diario.
+              Elegí por dónde querés recibir cada entrega.
             </p>
           </div>
 

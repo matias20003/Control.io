@@ -8,6 +8,7 @@ import {
   getActiveConfigs,
   getConfigsForHour,
   todayEditionExists,
+  claimDeliveryWindow,
   type SerializedEdition,
 } from "@/lib/db/newsletter";
 import { sendPushToUser } from "@/lib/push/send";
@@ -148,9 +149,12 @@ export async function generateEditionsForHour(hour: number): Promise<{
 
   for (const cfg of configs) {
     try {
-      // Si la edición de hoy ya existía, esto es una regeneración (el cron se
-      // disparó más de una vez esta hora): NO volvemos a avisar.
-      const alreadyExisted = await todayEditionExists(cfg.userId);
+      // Una sola ventana conserva el comportamiento histórico: no repite el
+      // aviso si la edición del día ya existía.
+      const hasMultipleWindows = cfg.sendHours.length > 1;
+      const alreadyExisted = hasMultipleWindows
+        ? false
+        : await todayEditionExists(cfg.userId);
 
       const result = await generateEditionForUser(cfg.userId, {
         topics: cfg.topics,
@@ -164,9 +168,16 @@ export async function generateEditionsForHour(hour: number): Promise<{
       generated++;
       if (result.usedAI) aiUsed++;
 
-      // Avisamos solo la primera vez del día, si hay algo que leer y si el
-      // usuario tiene el recordatorio activado.
-      if ((cfg.notifyPush || cfg.notifyWhatsapp) && !alreadyExisted && result.count > 0) {
+      // Con varias ventanas, la clave atómica habilita un aviso por horario sin
+      // duplicarlo cuando el pinger reintenta durante la misma hora.
+      const shouldNotify =
+        (cfg.notifyPush || cfg.notifyWhatsapp) &&
+        result.count > 0 &&
+        (hasMultipleWindows
+          ? await claimDeliveryWindow(cfg.userId, hour)
+          : !alreadyExisted);
+
+      if (shouldNotify) {
         await notifyEditionReady(cfg.userId, result.edition, cfg.whatsappNumber, {
           push: cfg.notifyPush,
           whatsapp: cfg.notifyWhatsapp,

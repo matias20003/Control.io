@@ -10,6 +10,8 @@ import {
 } from "@/lib/db/newsletter";
 import { generateEditionForUser } from "@/lib/services/newsletter";
 
+const MY_BRIEF_EMAIL = "yorismatias372@gmail.com";
+
 const configSchema = z.object({
   topics: z.array(z.string().min(1).max(80)).max(12),
   priorityTopics: z.array(z.string().min(1).max(80)).max(12).optional(),
@@ -17,6 +19,14 @@ const configSchema = z.object({
   country: z.string().min(2).max(5).optional(),
   isActive: z.boolean().optional(),
   sendHour: z.number().int().min(0).max(23).optional(),
+  sendHours: z
+    .array(z.number().int().min(0).max(23))
+    .min(1)
+    .max(3)
+    .refine((hours) => new Set(hours).size === hours.length, {
+      message: "Los horarios de entrega no pueden repetirse",
+    })
+    .optional(),
   notifyOnReady: z.boolean().optional(),
   notifyPush: z.boolean().optional(),
   notifyWhatsapp: z.boolean().optional(),
@@ -29,6 +39,7 @@ export async function saveNewsletterConfigAction(input: {
   country?: string;
   isActive?: boolean;
   sendHour?: number;
+  sendHours?: number[];
   notifyOnReady?: boolean;
   notifyPush?: boolean;
   notifyWhatsapp?: boolean;
@@ -43,7 +54,13 @@ export async function saveNewsletterConfigAction(input: {
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   try {
-    const config = await upsertConfig(user.id, parsed.data);
+    const singleWindowConfig = { ...parsed.data, sendHours: undefined };
+    const config = await upsertConfig(
+      user.id,
+      user.email?.toLowerCase() === MY_BRIEF_EMAIL
+        ? parsed.data
+        : singleWindowConfig
+    );
     revalidatePath("/newsletter");
     return { success: true, config };
   } catch {

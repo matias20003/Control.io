@@ -868,6 +868,9 @@ model NewsletterConfig {
   country        String   @default("ar")
   isActive       Boolean  @default(true)
   sendHour       Int      @default(8) // hora ARG (0–23) de la generación automática diaria
+  sendHour2      Int?     // segunda ventana opcional (solo Mi Brief)
+  sendHour3      Int?     // tercera ventana opcional (solo Mi Brief)
+  lastDeliveryKey String? // evita repetir un aviso: "YYYY-MM-DD:HH"
   notifyOnReady  Boolean  @default(true) // (legacy) master del aviso; se conserva por compat
   notifyPush     Boolean  @default(true) // avisar por PUSH cuando la edición esté lista
   notifyWhatsapp Boolean  @default(true) // avisar por WHATSAPP cuando la edición esté lista
