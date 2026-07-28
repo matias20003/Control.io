@@ -5,6 +5,7 @@ export type RawArticle = {
   title: string;
   url: string;
   source: string;
+  sourceUrl?: string | null;
   topic: string;
   publishedAt: string | null; // ISO
   snippet: string;
@@ -66,9 +67,26 @@ const TAG_RE: Record<string, RegExp> = {
   description: /<description[^>]*>([\s\S]*?)<\/description>/i,
 };
 
+const SOURCE_URL_RE = /<source[^>]*\surl=["']([^"']+)["'][^>]*>/i;
+
 function pick(block: string, tag: keyof typeof TAG_RE): string {
   const m = block.match(TAG_RE[tag]);
   return m ? m[1] : "";
+}
+
+function pickSourceUrl(block: string): string | null {
+  const value = decodeEntities(block.match(SOURCE_URL_RE)?.[1] ?? "");
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol)) return null;
+    url.protocol = "https:";
+    url.hash = "";
+    url.search = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -138,6 +156,7 @@ export async function fetchNewsForTopic(
         title,
         url: link,
         source: finalSource,
+        sourceUrl: pickSourceUrl(block),
         topic,
         publishedAt,
         snippet,

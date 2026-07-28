@@ -67,7 +67,11 @@ export async function generateEditionForUser(
   });
   await generateRadarForUser(
     userId,
-    opts.discoveryLevel ?? "BALANCED"
+    opts.discoveryLevel ?? "BALANCED",
+    {
+      articles: raw,
+      priorityTopics,
+    }
   ).catch(() => {
     // Radar es secundario y nunca bloquea el Brief.
   });

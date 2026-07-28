@@ -16,6 +16,7 @@ import {
   sourceTypeForCategory,
 } from "@/lib/brief/source-normalization";
 import type { AnalyzedArticle } from "@/lib/services/newsletter-ai";
+import { normalizeRadarProfileUrl } from "@/lib/services/brief/radar-ranking";
 
 type SourceInput = {
   name: string;
@@ -24,6 +25,10 @@ type SourceInput = {
   category: BriefSourceCategory;
   priority: boolean;
 };
+
+function radarFeedbackTarget(profileUrl: string): string {
+  return normalizeRadarProfileUrl(profileUrl) ?? profileUrl;
+}
 
 function iso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : value;
@@ -321,7 +326,7 @@ export async function updateDiscoveryCandidate(
       name: candidate.sourceName,
       platform,
       handleOrUrl: candidate.handle ?? candidate.profileUrl,
-      category: "REFERENCE",
+      category: candidate.candidateType === "MEDIA" ? "MEDIA" : "REFERENCE",
       priority: false,
     });
     await prisma.discoveryCandidate.update({
@@ -333,14 +338,14 @@ export async function updateDiscoveryCandidate(
         userId_targetType_targetId_action: {
           userId,
           targetType: "DISCOVERY",
-          targetId: candidate.id,
+          targetId: radarFeedbackTarget(candidate.profileUrl),
           action: "ADDED",
         },
       },
       create: {
         userId,
         targetType: "DISCOVERY",
-        targetId: candidate.id,
+        targetId: radarFeedbackTarget(candidate.profileUrl),
         action: "ADDED",
       },
       update: {},
@@ -360,14 +365,14 @@ export async function updateDiscoveryCandidate(
         userId_targetType_targetId_action: {
           userId,
           targetType: "DISCOVERY",
-          targetId: candidate.id,
+            targetId: radarFeedbackTarget(candidate.profileUrl),
           action: feedbackAction,
         },
       },
       create: {
         userId,
         targetType: "DISCOVERY",
-        targetId: candidate.id,
+          targetId: radarFeedbackTarget(candidate.profileUrl),
         action: feedbackAction,
       },
       update: {},
@@ -424,6 +429,7 @@ export async function syncNewsBriefItems(
               : null,
           metadata: {
             source: article.source,
+            sourceUrl: article.sourceUrl ?? null,
             reputable: article.reputable,
             priority: article.priority,
           },
@@ -444,6 +450,7 @@ export async function syncNewsBriefItems(
               : null,
           metadata: {
             source: article.source,
+            sourceUrl: article.sourceUrl ?? null,
             reputable: article.reputable,
             priority: article.priority,
           },

@@ -1566,15 +1566,15 @@ function RadarView({
         Radar del día
       </h2>
       <p className="mt-2 max-w-[58ch] text-sm leading-relaxed text-muted">
-        Pocas sugerencias, con una razón visible. Nunca se encadenan con otras
-        recomendaciones.
+        Pocas sugerencias, con una razón visible. Se actualizan con cada edición
+        y nunca se encadenan con otras recomendaciones.
       </p>
 
       {candidates.length === 0 ? (
         <EmptyState
           icon={Radar}
           title="Hoy no encontramos nuevas fuentes que valga la pena sumar"
-          description="Preferimos dejar este espacio vacío antes que inventar métricas o mostrar recomendaciones débiles."
+          description="El Radar analiza las fuentes del relevamiento de hoy. Si no encuentra una señal suficientemente clara, prefiere no recomendar."
         />
       ) : (
         <div className="mt-6 space-y-4">
@@ -1612,6 +1612,24 @@ function RadarView({
               <p className="mt-3 text-sm leading-relaxed text-foreground">
                 {candidate.explanation}
               </p>
+              {(typeof candidate.signals?.articleCount === "number" ||
+                candidate.signals?.reputable === true) && (
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
+                  {typeof candidate.signals?.articleCount === "number" && (
+                    <span className="rounded-full bg-surface-2 px-2.5 py-1">
+                      {candidate.signals.articleCount}{" "}
+                      {candidate.signals.articleCount === 1
+                        ? "aparición hoy"
+                        : "apariciones hoy"}
+                    </span>
+                  )}
+                  {candidate.signals?.reputable === true && (
+                    <span className="rounded-full bg-success/10 px-2.5 py-1 text-success">
+                      Fuente reconocida
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 {candidate.status === "PENDING" && (
                   <>

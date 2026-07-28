@@ -55,9 +55,17 @@ el proveedor las entrega; nunca se inventan.
 
 ## Radar
 
-`lib/services/brief/radar.ts` mantiene un contrato separado. Hasta contar con un
-catálogo autorizado de cuentas candidatas y señales suficientes, devuelve
-`INSUFFICIENT_SIGNALS`. Producción muestra el estado vacío correspondiente.
+`lib/services/brief/radar.ts` genera candidatos reales a partir del relevamiento
+amplio de Google News. Agrupa las noticias por la URL declarada del medio,
+descarta las fuentes que el usuario ya sigue o rechazó y combina señales de
+afinidad temática, temas prioritarios, recencia, repetición y reputación. También
+penaliza titulares promocionales o sensacionalistas.
+
+El modo conservador exige una señal fuerte y devuelve como máximo una
+sugerencia; el equilibrado devuelve hasta dos y el explorador hasta tres. Cada
+candidato conserva las señales factuales que explican su inclusión. Si el
+relevamiento no alcanza el umbral correspondiente, devuelve
+`INSUFFICIENT_SIGNALS` y producción mantiene el estado vacío honesto.
 
 ## Persistencia y compatibilidad
 

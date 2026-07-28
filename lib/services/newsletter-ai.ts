@@ -8,6 +8,7 @@ export type AnalyzedArticle = {
   title: string;
   url: string;
   source: string;
+  sourceUrl?: string | null;
   topic: string;
   publishedAt: string | null;
   summary: string; // resumen de 1 línea
@@ -103,6 +104,7 @@ function heuristicAnalysis(
         title: a.title,
         url: a.url,
         source: a.source,
+        sourceUrl: a.sourceUrl,
         topic: a.topic,
         publishedAt: a.publishedAt,
         summary: a.snippet || "",
@@ -157,6 +159,7 @@ function buildFromAiItems(
         title: a.title,
         url: a.url,
         source: a.source,
+        sourceUrl: a.sourceUrl,
         topic: a.topic,
         publishedAt: a.publishedAt,
         summary: it.summary?.trim() || a.snippet || "",

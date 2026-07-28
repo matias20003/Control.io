@@ -227,6 +227,7 @@ function serializeEdition(row: {
               : null,
           metadata: {
             source: article.source,
+            sourceUrl: article.sourceUrl ?? null,
             reputable: article.reputable,
             priority: article.priority,
           },
