@@ -2,12 +2,10 @@ import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getConfig, getEditions } from "@/lib/db/newsletter";
-import { NewsletterClient } from "./NewsletterClient";
 import { MyBriefClient } from "./MyBriefClient";
+import { getBriefSources, getDiscoveryCandidates } from "@/lib/db/brief";
 
-export const metadata: Metadata = { title: "Newsletter" };
-
-const MY_BRIEF_EMAIL = "yorismatias372@gmail.com";
+export const metadata: Metadata = { title: "Mi Brief" };
 
 // "Generar ahora" puede esperar a un modelo free lento (hasta ~20s). Damos
 // margen para que la server action no corte antes de tiempo.
@@ -20,14 +18,19 @@ export default async function NewsletterPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [config, editions] = await Promise.all([
-    getConfig(user.id),
+  const config = await getConfig(user.id);
+  const [editions, sources, radar] = await Promise.all([
     getEditions(user.id, 30),
+    getBriefSources(user.id),
+    getDiscoveryCandidates(user.id, config.discoveryLevel),
   ]);
 
-  if (user.email?.toLowerCase() === MY_BRIEF_EMAIL) {
-    return <MyBriefClient initialConfig={config} initialEditions={editions} />;
-  }
-
-  return <NewsletterClient initialConfig={config} initialEditions={editions} />;
+  return (
+    <MyBriefClient
+      initialConfig={config}
+      initialEditions={editions}
+      initialSources={sources}
+      initialRadar={radar}
+    />
+  );
 }

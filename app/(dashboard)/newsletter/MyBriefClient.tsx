@@ -1,35 +1,40 @@
 "use client";
 
 import {
-  useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
   useTransition,
-  type CSSProperties,
+  type FormEvent,
 } from "react";
-import { createPortal } from "react-dom";
-import Script from "next/script";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
-  BadgeCheck,
-  Bell,
-  BookOpenCheck,
+  ArrowUpRight,
+  BookOpen,
   Check,
+  CheckCircle2,
   ChevronDown,
-  CircleUserRound,
-  Clock3,
-  Download,
+  ChevronUp,
+  CirclePause,
+  CirclePlay,
   ExternalLink,
   History,
-  MessageCircle,
+  Lightbulb,
+  Loader2,
+  Newspaper,
+  Pencil,
   Plus,
+  Radar,
   RefreshCw,
+  Search,
   Settings2,
-  ShieldCheck,
   Sparkles,
   Star,
   Trash2,
+  UsersRound,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -37,125 +42,128 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { EnablePushInline } from "@/components/push/EnablePushInline";
-import { formatDateLong } from "@/lib/utils";
 import {
+  createBriefSourceAction,
+  deleteBriefSourceAction,
   generateNewsletterNowAction,
   markNewsletterReadAction,
+  migrateLegacyBriefSourcesAction,
+  reopenBriefEditionAction,
   saveNewsletterConfigAction,
+  setBriefSourceActiveAction,
+  updateBriefSourceAction,
+  updateRadarCandidateAction,
 } from "@/app/actions/newsletter";
-import type { SerializedConfig, SerializedEdition } from "@/lib/db/newsletter";
-import type { AnalyzedArticle } from "@/lib/services/newsletter-ai";
+import type {
+  SerializedConfig,
+  SerializedEdition,
+} from "@/lib/db/newsletter";
+import {
+  BRIEF_LENGTH_LIMITS,
+  RADAR_LIMITS,
+  type BriefLength,
+  type BriefPlatform,
+  type BriefSourceCategory,
+  type DiscoveryLevel,
+  type SerializedBriefItem,
+  type SerializedBriefSource,
+  type SerializedDiscoveryCandidate,
+} from "@/lib/brief/types";
+import { selectBriefSections } from "@/lib/brief/editorial";
+
+type BriefSection = "today" | "sources" | "radar" | "settings";
 
 interface Props {
   initialConfig: SerializedConfig;
   initialEditions: SerializedEdition[];
+  initialSources: SerializedBriefSource[];
+  initialRadar: SerializedDiscoveryCandidate[];
 }
 
-type BriefTab = "today" | "circle" | "preferences" | "history";
-
-type CirclePerson = {
-  id: string;
+type SourceDraft = {
   name: string;
-  handle: string;
-  kind: "familiar" | "referente";
+  platform: BriefPlatform;
+  handleOrUrl: string;
+  category: BriefSourceCategory;
+  priority: boolean;
 };
 
-type InstagramWindow = Window & {
-  instgrm?: { Embeds?: { process: () => void } };
+const LEGACY_SOURCE_KEY = "controlio:my-circle:v1";
+const BRIEF_CACHE_KEY = "controlio:brief-offline:v1";
+const BRIEF_SECTION_KEY = "controlio:brief-section:v1";
+const BRIEF_RETURN_KEY = "controlio:brief-return:v1";
+
+const EMPTY_SOURCE: SourceDraft = {
+  name: "",
+  platform: "INSTAGRAM",
+  handleOrUrl: "",
+  category: "REFERENCE",
+  priority: false,
 };
 
-const CIRCLE_STORAGE_KEY = "controlio:my-circle:v1";
-const FOCUS_PAGE_SOURCE = "controlio-web";
-const FOCUS_EXTENSION_SOURCE = "controlio-focus-extension";
-const FOCUS_EXTENSION_MIN_VERSION = "0.1.4";
-
-type FocusExtensionStatus = "checking" | "ready" | "missing" | "outdated";
-
-type FocusExtensionMessage = {
-  correlationId?: string;
-  error?: string;
-  ok?: boolean;
-  reason?: string;
-  source?: string;
-  type?: string;
-  version?: string;
-};
-
-const TABS: Array<{
-  id: BriefTab;
+const SECTION_OPTIONS: Array<{
+  id: BriefSection;
   label: string;
   icon: typeof Sparkles;
 }> = [
   { id: "today", label: "Hoy", icon: Sparkles },
-  { id: "circle", label: "Mi círculo", icon: CircleUserRound },
-  { id: "preferences", label: "Ajustes", icon: Settings2 },
-  { id: "history", label: "Historial", icon: History },
+  { id: "sources", label: "Fuentes", icon: UsersRound },
+  { id: "radar", label: "Radar", icon: Radar },
+  { id: "settings", label: "Ajustes", icon: Settings2 },
 ];
 
-function processInstagramEmbeds() {
-  window.setTimeout(() => {
-    (window as InstagramWindow).instgrm?.Embeds?.process();
-  }, 0);
-}
+const PLATFORM_LABELS: Record<BriefPlatform, string> = {
+  INSTAGRAM: "Instagram",
+  YOUTUBE: "YouTube",
+  TIKTOK: "TikTok",
+  X: "X",
+  LINKEDIN: "LinkedIn",
+  WEB: "Sitio web",
+};
 
-function postFocusExtensionMessage(
-  type: string,
-  payload: Record<string, unknown> = {}
-) {
-  window.postMessage(
-    {
-      source: FOCUS_PAGE_SOURCE,
-      type,
-      ...payload,
-    },
-    window.location.origin
-  );
-}
+const CATEGORY_LABELS: Record<BriefSourceCategory, string> = {
+  CLOSE: "Cercano",
+  REFERENCE: "Referente",
+  MEDIA: "Medio",
+  COMPETITOR: "Competidor",
+  INSPIRATION: "Inspiración",
+};
 
-function isCurrentFocusExtension(version: string | undefined): boolean {
-  if (!version || !/^\d+(?:\.\d+){2}$/.test(version)) return false;
+const DISCOVERY_COPY: Record<
+  DiscoveryLevel,
+  { title: string; description: string }
+> = {
+  CONSERVATIVE: {
+    title: "Conservador",
+    description: "Como máximo 1 sugerencia y sólo con una señal clara.",
+  },
+  BALANCED: {
+    title: "Equilibrado",
+    description: "Hasta 2 sugerencias relevantes, separadas de tus fuentes.",
+  },
+  EXPLORER: {
+    title: "Explorador",
+    description: "Hasta 3 sugerencias. El Brief sigue teniendo un final.",
+  },
+};
 
-  const current = version.split(".").map(Number);
-  const required = FOCUS_EXTENSION_MIN_VERSION.split(".").map(Number);
-  for (let index = 0; index < required.length; index += 1) {
-    if (current[index] > required[index]) return true;
-    if (current[index] < required[index]) return false;
-  }
-  return true;
-}
-
-function normalizeInstagramHandle(value: string): string | null {
-  const normalized = value
-    .trim()
-    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, "")
-    .replace(/^@/, "")
-    .split(/[/?#]/)[0]
-    .trim();
-
-  if (!/^[a-zA-Z0-9._]{1,30}$/.test(normalized)) return null;
-  return normalized;
-}
-
-function timeAgo(iso: string | null): string {
-  if (!iso) return "";
-  const timestamp = Date.parse(iso);
-  if (Number.isNaN(timestamp)) return "";
-  const minutes = Math.floor((Date.now() - timestamp) / 60000);
-  if (minutes < 1) return "recién";
-  if (minutes < 60) return `hace ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `hace ${hours} h`;
-  return `hace ${Math.floor(hours / 24)} d`;
-}
-
-function dateline(date: string): string {
-  return new Intl.DateTimeFormat("es-AR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(new Date(date));
-}
+const LENGTH_COPY: Record<
+  BriefLength,
+  { title: string; description: string }
+> = {
+  SHORT: {
+    title: "Breve",
+    description: "Hasta 6 contenidos, 2 noticias por tema y 3 publicaciones.",
+  },
+  NORMAL: {
+    title: "Normal",
+    description: "Hasta 10 contenidos, 3 noticias por tema y 5 publicaciones.",
+  },
+  WIDE: {
+    title: "Amplio",
+    description: "Hasta 15 contenidos, 3 noticias por tema y 8 publicaciones.",
+  },
+};
 
 function argentinaDateKey(date: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -166,61 +174,135 @@ function argentinaDateKey(date: Date): string {
   }).format(date);
 }
 
-function selectBriefArticles(articles: AnalyzedArticle[], limit = 8) {
-  const highlights = articles
-    .filter((article) => article.highlight)
-    .sort((a, b) => Number(b.priority) - Number(a.priority))
-    .slice(0, 3);
-  const essentials = highlights.length > 0 ? highlights : articles.slice(0, 3);
-  const selectedUrls = new Set(essentials.map((article) => article.url));
-  const remaining = articles
-    .filter((article) => !selectedUrls.has(article.url))
-    .sort((a, b) => {
-      if (a.priority !== b.priority) return a.priority ? -1 : 1;
-      return a.rank - b.rank;
-    })
-    .slice(0, Math.max(0, limit - essentials.length));
-  return { essentials, remaining };
+function fullDate(date: string): string {
+  return new Intl.DateTimeFormat("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(new Date(date));
+}
+
+function shortDate(date: string): string {
+  return new Intl.DateTimeFormat("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(date));
+}
+
+function updateTime(date: string): string {
+  return new Intl.DateTimeFormat("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(date));
+}
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return "sin fecha";
+  const timestamp = Date.parse(iso);
+  if (Number.isNaN(timestamp)) return "sin fecha";
+  const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60_000));
+  if (minutes < 1) return "recién";
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  return `hace ${Math.floor(hours / 24)} d`;
+}
+
+function nextDeliveryLabel(hours: number[]): string {
+  const formatter = new Intl.DateTimeFormat("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    hour: "2-digit",
+    hour12: false,
+  });
+  const currentHour = Number(formatter.format(new Date()).slice(0, 2));
+  const next = [...hours].sort((a, b) => a - b).find((hour) => hour > currentHour);
+  const hour = next ?? [...hours].sort((a, b) => a - b)[0] ?? 8;
+  return `${next == null ? "Mañana" : "Hoy"} a las ${String(hour).padStart(2, "0")}:00`;
 }
 
 function resizeDeliveryHours(current: number[], count: number): number[] {
   const next = Array.from(new Set(current)).sort((a, b) => a - b);
-  const suggestions = [12, 18, 8, 21, 15, 10];
-  for (const hour of suggestions) {
+  for (const suggestion of [8, 12, 18, 21, 15, 10]) {
     if (next.length >= count) break;
-    if (!next.includes(hour)) next.push(hour);
+    if (!next.includes(suggestion)) next.push(suggestion);
   }
   return next.sort((a, b) => a - b).slice(0, count);
 }
 
-export function MyBriefClient({ initialConfig, initialEditions }: Props) {
+function sourceDraft(source: SerializedBriefSource): SourceDraft {
+  return {
+    name: source.name,
+    platform: source.account?.platform ?? "WEB",
+    handleOrUrl:
+      source.account?.platform === "WEB"
+        ? source.account.profileUrl
+        : `@${source.account?.handle ?? ""}`,
+    category: source.category,
+    priority: source.priority,
+  };
+}
+
+function metadataText(
+  metadata: Record<string, unknown> | null,
+  key: string
+): string | null {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function validHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function MyBriefClient({
+  initialConfig,
+  initialEditions,
+  initialSources,
+  initialRadar,
+}: Props) {
+  const router = useRouter();
+  const [section, setSection] = useState<BriefSection>(
+    initialConfig.topics.length ? "today" : "settings"
+  );
   const [config, setConfig] = useState(initialConfig);
   const [editions, setEditions] = useState(initialEditions);
-  const [activeTab, setActiveTab] = useState<BriefTab>(
-    initialConfig.topics.length > 0 ? "today" : "preferences"
-  );
-
-  const [topics, setTopics] = useState(initialConfig.topics);
-  const [priority, setPriority] = useState(initialConfig.priorityTopics);
-  const [isActive, setIsActive] = useState(initialConfig.isActive);
-  const [sendHours, setSendHours] = useState(initialConfig.sendHours);
-  const [notifyPush, setNotifyPush] = useState(initialConfig.notifyPush);
-  const [notifyWhatsapp, setNotifyWhatsapp] = useState(
-    initialConfig.notifyWhatsapp
-  );
-  const [topicInput, setTopicInput] = useState("");
-
-  const [circlePeople, setCirclePeople] = useState<CirclePerson[]>([]);
-  const [circleHydrated, setCircleHydrated] = useState(false);
-  const [circleName, setCircleName] = useState("");
-  const [circleHandle, setCircleHandle] = useState("");
-  const [circleKind, setCircleKind] =
-    useState<CirclePerson["kind"]>("familiar");
-
-  const [expandedEdition, setExpandedEdition] = useState<string | null>(null);
-  const [isSaving, startSave] = useTransition();
+  const [sources, setSources] = useState(initialSources);
+  const [radar, setRadar] = useState(initialRadar);
   const [isGenerating, startGenerate] = useTransition();
   const [isCompleting, startComplete] = useTransition();
+  const [isReopening, startReopen] = useTransition();
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const saved = sessionStorage.getItem(
+          BRIEF_SECTION_KEY
+        ) as BriefSection | null;
+        if (saved && SECTION_OPTIONS.some((option) => option.id === saved)) {
+          setSection(saved);
+        }
+      } catch {
+        // La navegación sigue funcionando aunque el almacenamiento esté bloqueado.
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(BRIEF_SECTION_KEY, section);
+    } catch {
+      // no-op
+    }
+  }, [section]);
 
   const todayKey = argentinaDateKey(new Date());
   const today =
@@ -230,60 +312,1396 @@ export function MyBriefClient({ initialConfig, initialEditions }: Props) {
   const history = editions.filter((edition) => edition.id !== today?.id);
 
   useEffect(() => {
-    document.documentElement.dataset.controlioFocusAuthorized = "true";
-    return () => {
-      delete document.documentElement.dataset.controlioFocusAuthorized;
-    };
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      try {
-        const stored = window.localStorage.getItem(CIRCLE_STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored) as CirclePerson[];
-          if (Array.isArray(parsed)) setCirclePeople(parsed.slice(0, 20));
-        }
-      } catch {
-        toast.error("No pudimos recuperar tu círculo en este dispositivo.");
-      } finally {
-        setCircleHydrated(true);
-      }
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (!circleHydrated) return;
-    window.localStorage.setItem(
-      CIRCLE_STORAGE_KEY,
-      JSON.stringify(circlePeople)
-    );
-    if (activeTab === "circle" && circlePeople.length > 0) {
-      processInstagramEmbeds();
+    if (!today) return;
+    try {
+      localStorage.setItem(
+        BRIEF_CACHE_KEY,
+        JSON.stringify({
+          cachedAt: new Date().toISOString(),
+          date: today.date,
+          summary: today.summary,
+          items: today.items.slice(0, 15),
+          isRead: today.isRead,
+          reviewedCount: today.reviewedCount,
+        })
+      );
+    } catch {
+      // El cache offline es una mejora; la edición en DB sigue siendo la fuente real.
     }
-  }, [activeTab, circleHydrated, circlePeople]);
+  }, [today]);
 
-  const dirty = useMemo(
-    () =>
-      JSON.stringify(topics) !== JSON.stringify(config.topics) ||
-      JSON.stringify(priority) !==
-        JSON.stringify(config.priorityTopics) ||
-      isActive !== config.isActive ||
-      JSON.stringify(sendHours) !== JSON.stringify(config.sendHours) ||
-      notifyPush !== config.notifyPush ||
-      notifyWhatsapp !== config.notifyWhatsapp,
-    [
-      topics,
-      priority,
-      isActive,
-      sendHours,
-      notifyPush,
-      notifyWhatsapp,
-      config,
-    ]
+  useEffect(() => {
+    const restore = () => {
+      try {
+        const raw = sessionStorage.getItem(BRIEF_RETURN_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw) as { y?: number; at?: number };
+        if (
+          typeof saved.y === "number" &&
+          typeof saved.at === "number" &&
+          Date.now() - saved.at < 30 * 60_000
+        ) {
+          requestAnimationFrame(() =>
+            window.scrollTo({ top: saved.y, behavior: "auto" })
+          );
+        }
+        sessionStorage.removeItem(BRIEF_RETURN_KEY);
+      } catch {
+        // no-op
+      }
+    };
+    window.addEventListener("pageshow", restore);
+    if (document.visibilityState === "visible") restore();
+    return () => window.removeEventListener("pageshow", restore);
+  }, []);
+
+  useEffect(() => {
+    if (config.localSourcesMigrated) return;
+    const timer = window.setTimeout(async () => {
+      let legacy: unknown = [];
+      try {
+        const raw = localStorage.getItem(LEGACY_SOURCE_KEY);
+        legacy = raw ? JSON.parse(raw) : [];
+      } catch {
+        toast.error(
+          "No pudimos leer tu lista anterior. No se borró ningún dato."
+        );
+        return;
+      }
+
+      const result = await migrateLegacyBriefSourcesAction(legacy);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      if ("sources" in result) setSources(result.sources);
+      setConfig((current) => ({ ...current, localSourcesMigrated: true }));
+      if ("imported" in result && result.imported > 0) {
+        toast.success(
+          `${result.imported} ${result.imported === 1 ? "fuente migrada" : "fuentes migradas"} desde Mi círculo.`
+        );
+      }
+      try {
+        localStorage.removeItem(LEGACY_SOURCE_KEY);
+      } catch {
+        // Ya está persistido en DB; conservar una copia local no duplica la fuente.
+      }
+      router.refresh();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [config.localSourcesMigrated, router]);
+
+  const generateNow = () => {
+    if (config.topics.length === 0) {
+      setSection("settings");
+      toast.error("Agregá al menos un tema antes de crear tu Brief.");
+      return;
+    }
+    startGenerate(async () => {
+      const result = await generateNewsletterNowAction();
+      if (result.error || !result.edition) {
+        toast.error(
+          result.error ?? "No pudimos actualizar el Brief. Probá de nuevo."
+        );
+        return;
+      }
+      setEditions((current) => [
+        result.edition!,
+        ...current.filter((edition) => edition.id !== result.edition!.id),
+      ]);
+      setSection("today");
+      toast.success(
+        result.usedAI
+          ? "Mi Brief quedó actualizado y priorizado."
+          : "Mi Brief quedó actualizado."
+      );
+    });
+  };
+
+  const completeToday = () => {
+    if (!today || today.isRead) return;
+    startComplete(async () => {
+      const result = await markNewsletterReadAction(today.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      const completedAt = new Date().toISOString();
+      setEditions((current) =>
+        current.map((edition) =>
+          edition.id === today.id
+            ? { ...edition, isRead: true, completedAt }
+            : edition
+        )
+      );
+      toast.success("Listo. Llegaste al final de hoy.");
+    });
+  };
+
+  const reopenToday = () => {
+    if (!today) return;
+    startReopen(async () => {
+      const result = await reopenBriefEditionAction(today.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setEditions((current) =>
+        current.map((edition) =>
+          edition.id === today.id
+            ? { ...edition, isRead: false, completedAt: null }
+            : edition
+        )
+      );
+    });
+  };
+
+  const openBriefItem = (edition: SerializedEdition, item: SerializedBriefItem) => {
+    if (!validHttpsUrl(item.url)) {
+      toast.error("Este contenido no tiene un enlace HTTPS seguro.");
+      return;
+    }
+
+    try {
+      sessionStorage.setItem(
+        BRIEF_RETURN_KEY,
+        JSON.stringify({ y: window.scrollY, at: Date.now() })
+      );
+    } catch {
+      // no-op
+    }
+
+    const alreadyOpened = (() => {
+      try {
+        const key = `controlio:brief-opened:${edition.id}:${item.contentKey}`;
+        if (sessionStorage.getItem(key)) return true;
+        sessionStorage.setItem(key, "1");
+        return false;
+      } catch {
+        return false;
+      }
+    })();
+    if (!alreadyOpened) {
+      setEditions((current) =>
+        current.map((candidate) =>
+          candidate.id === edition.id
+            ? { ...candidate, reviewedCount: candidate.reviewedCount + 1 }
+            : candidate
+        )
+      );
+    }
+
+    void fetch("/api/brief/progress", {
+      method: "POST",
+      keepalive: true,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ editionId: edition.id, url: item.url }),
+    }).catch(() => {});
+    window.location.assign(item.url);
+  };
+
+  const navigate = (next: BriefSection) => {
+    setSection(next);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  return (
+    <div className="mx-auto w-full max-w-[760px] overflow-x-hidden px-4 pb-8 pt-3 [--text-sm:0.875rem] sm:px-5 md:pb-12 md:pt-7">
+      <header className="border-b border-border pb-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted">
+              Control.io
+            </p>
+            <h1 className="mt-1 font-news text-[32px] font-medium leading-none text-foreground md:text-[38px]">
+              Mi Brief
+            </h1>
+            <p className="mt-2 max-w-[48ch] text-sm leading-relaxed text-muted">
+              Lo importante del día, sin perderte en el feed.
+            </p>
+          </div>
+          {section === "today" && (
+            <button
+              type="button"
+              onClick={generateNow}
+              disabled={isGenerating}
+              aria-label={isGenerating ? "Actualizando Mi Brief" : "Actualizar Mi Brief"}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-foreground transition-colors hover:bg-surface-2 disabled:opacity-50"
+            >
+              {isGenerating ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <RefreshCw size={16} />
+              )}
+              <span className="hidden min-[370px]:inline">
+                {isGenerating ? "Actualizando" : "Actualizar"}
+              </span>
+            </button>
+          )}
+        </div>
+      </header>
+
+      <nav
+        aria-label="Secciones de Mi Brief"
+        className="-mx-4 flex snap-x gap-1 overflow-x-auto border-b border-border px-4 py-2 sm:-mx-5 sm:px-5"
+      >
+        {SECTION_OPTIONS.map((option) => {
+          const Icon = option.icon;
+          const selected = section === option.id;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              aria-current={selected ? "page" : undefined}
+              onClick={() => navigate(option.id)}
+              className={`inline-flex min-h-11 min-w-[92px] snap-start items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold transition-colors min-[390px]:min-w-0 min-[390px]:flex-1 ${
+                selected
+                  ? "bg-primary text-background"
+                  : "text-muted hover:bg-surface-2 hover:text-foreground"
+              }`}
+            >
+              <Icon size={16} />
+              {option.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      <main className="pt-5">
+        {section === "today" && (
+          <TodayView
+            edition={today}
+            config={config}
+            sources={sources}
+            radar={radar}
+            isGenerating={isGenerating}
+            isCompleting={isCompleting}
+            isReopening={isReopening}
+            onGenerate={generateNow}
+            onComplete={completeToday}
+            onReopen={reopenToday}
+            onOpenItem={openBriefItem}
+            onNavigate={navigate}
+          />
+        )}
+
+        {section === "sources" && (
+          <SourcesView
+            sources={sources}
+            onSourcesChange={setSources}
+          />
+        )}
+
+        {section === "radar" && (
+          <RadarView
+            candidates={radar}
+            onCandidatesChange={setRadar}
+            onSourceAdded={(source) =>
+              setSources((current) => [source, ...current])
+            }
+          />
+        )}
+
+        {section === "settings" && (
+          <SettingsView
+            config={config}
+            history={history}
+            onConfigChange={(nextConfig) => {
+              setConfig(nextConfig);
+              setRadar((current) =>
+                current.slice(0, RADAR_LIMITS[nextConfig.discoveryLevel])
+              );
+            }}
+            onGenerate={generateNow}
+            onOpenItem={openBriefItem}
+          />
+        )}
+      </main>
+    </div>
   );
+}
+
+function TodayView({
+  edition,
+  config,
+  sources,
+  radar,
+  isGenerating,
+  isCompleting,
+  isReopening,
+  onGenerate,
+  onComplete,
+  onReopen,
+  onOpenItem,
+  onNavigate,
+}: {
+  edition: SerializedEdition | null;
+  config: SerializedConfig;
+  sources: SerializedBriefSource[];
+  radar: SerializedDiscoveryCandidate[];
+  isGenerating: boolean;
+  isCompleting: boolean;
+  isReopening: boolean;
+  onGenerate: () => void;
+  onComplete: () => void;
+  onReopen: () => void;
+  onOpenItem: (edition: SerializedEdition, item: SerializedBriefItem) => void;
+  onNavigate: (section: BriefSection) => void;
+}) {
+  if (config.topics.length === 0) {
+    return (
+      <EmptyState
+        icon={BookOpen}
+        title="Armemos tu primer Brief"
+        description="Elegí los temas que te importan y, si querés, agregá personas o medios. Después vas a recibir una edición corta y con final."
+        action="Configurar mis temas"
+        onAction={() => onNavigate("settings")}
+      />
+    );
+  }
+
+  if (!edition) {
+    return (
+      <EmptyState
+        icon={Newspaper}
+        title="Todavía no hay una edición para hoy"
+        description="Tus temas ya están guardados. Podés crear el Brief ahora o esperar la próxima hora programada."
+        action={isGenerating ? "Creando el Brief…" : "Crear Mi Brief"}
+        onAction={onGenerate}
+        disabled={isGenerating}
+      />
+    );
+  }
+
+  if (edition.isRead) {
+    return (
+      <section className="py-8 text-center" aria-live="polite">
+        <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-success/12 text-success">
+          <CheckCircle2 size={24} />
+        </span>
+        <p className="mt-4 text-xs font-semibold uppercase tracking-[0.15em] text-success">
+          Edición terminada
+        </p>
+        <h2 className="mt-2 font-news text-3xl font-medium text-foreground">
+          Ya estás al día
+        </h2>
+        <p className="mx-auto mt-3 max-w-[42ch] text-sm leading-relaxed text-muted">
+          Revisaste {edition.reviewedCount}{" "}
+          {edition.reviewedCount === 1 ? "contenido" : "contenidos"}. No hay nada
+          más para cargar. Próxima actualización:{" "}
+          {nextDeliveryLabel(config.sendHours).toLowerCase()}.
+        </p>
+        <button
+          type="button"
+          onClick={onReopen}
+          disabled={isReopening}
+          className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:opacity-50"
+        >
+          {isReopening && <Loader2 size={16} className="animate-spin" />}
+          Volver al contenido de hoy
+        </button>
+      </section>
+    );
+  }
+
+  const selection = selectBriefSections(edition.items, config.briefLength);
+  const keys = selection.keys;
+  const socialItems = selection.social;
+  const topicGroups = selection.topics;
+  const visibleCount =
+    keys.length +
+    socialItems.length +
+    topicGroups.reduce((sum, group) => sum + group.items.length, 0) +
+    radar.length;
+  const readingMinutes = Math.max(2, Math.min(5, Math.ceil(visibleCount * 0.45)));
+
+  return (
+    <div className="space-y-9">
+      <section aria-labelledby="today-status">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+          <p id="today-status" className="capitalize text-foreground">
+            {fullDate(edition.date)}
+          </p>
+          <span aria-hidden="true">·</span>
+          <span>Actualizado {updateTime(edition.updatedAt)}</span>
+          <span aria-hidden="true">·</span>
+          <span>{readingMinutes} min de lectura</span>
+        </div>
+      </section>
+
+      <section aria-labelledby="brief-summary">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
+          En 30 segundos
+        </p>
+        <h2 id="brief-summary" className="sr-only">
+          Resumen general
+        </h2>
+        <p className="mt-3 max-w-[62ch] font-news text-[21px] leading-[1.5] text-foreground sm:text-[23px]">
+          {edition.summary}
+        </p>
+      </section>
+
+      <EditorialSection
+        eyebrow="Prioridad"
+        title="Las claves de hoy"
+        description="Hasta tres piezas para entender qué importa."
+      >
+        {keys.length > 0 ? (
+          <div className="divide-y divide-border border-y border-border">
+            {keys.map((item) => (
+              <BriefItemRow
+                key={item.id}
+                item={item}
+                onOpen={() => onOpenItem(edition, item)}
+              />
+            ))}
+          </div>
+        ) : (
+          <InlineEmpty text="Hoy no encontramos claves suficientemente sólidas para destacar." />
+        )}
+      </EditorialSection>
+
+      <EditorialSection
+        eyebrow="Elegidas por vos"
+        title="De tus fuentes"
+        description="Publicaciones recientes de las personas y cuentas que agregaste."
+        action={
+          <button
+            type="button"
+            onClick={() => onNavigate("sources")}
+            className="min-h-11 rounded-lg px-2 text-sm font-semibold text-primary hover:bg-primary/8"
+          >
+            Administrar
+          </button>
+        }
+      >
+        {socialItems.length > 0 ? (
+          <div className="divide-y divide-border border-y border-border">
+            {socialItems.map((item) => (
+              <BriefItemRow
+                key={item.id}
+                item={item}
+                onOpen={() => onOpenItem(edition, item)}
+              />
+            ))}
+          </div>
+        ) : sources.length === 0 ? (
+          <InlineEmpty
+            text="Todavía no agregaste fuentes. Sumá personas o medios y aparecerán acá cuando haya contenido disponible."
+            action="Agregar una fuente"
+            onAction={() => onNavigate("sources")}
+          />
+        ) : (
+          <InlineEmpty
+            text="No llegaron publicaciones verificables de tus fuentes en esta edición. Podés abrir sus perfiles desde Fuentes; las noticias siguen disponibles."
+            action="Ver mis fuentes"
+            onAction={() => onNavigate("sources")}
+          />
+        )}
+      </EditorialSection>
+
+      <EditorialSection
+        eyebrow="Noticias"
+        title="Tus temas"
+        description={`Una selección finita: hasta ${BRIEF_LENGTH_LIMITS[config.briefLength].perTopic} noticias por tema.`}
+      >
+        {topicGroups.length > 0 ? (
+          <div className="space-y-7">
+            {topicGroups.map((group) => (
+              <div key={group.topic}>
+                <h3 className="mb-1 text-sm font-semibold text-foreground">
+                  {group.topic}
+                </h3>
+                <div className="divide-y divide-border border-y border-border">
+                  {group.items.map((item) => (
+                    <BriefItemRow
+                      key={item.id}
+                      item={item}
+                      compact
+                      onOpen={() => onOpenItem(edition, item)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <InlineEmpty text="No encontramos más noticias confiables para tus temas hoy." />
+        )}
+      </EditorialSection>
+
+      <EditorialSection
+        eyebrow="Descubrimiento limitado"
+        title="Radar del día"
+        description="Sugerencias explicadas y separadas de las fuentes que elegiste."
+        action={
+          <button
+            type="button"
+            onClick={() => onNavigate("radar")}
+            className="min-h-11 rounded-lg px-2 text-sm font-semibold text-primary hover:bg-primary/8"
+          >
+            Ver Radar
+          </button>
+        }
+      >
+        {radar.length > 0 ? (
+          <div className="space-y-3">
+            {radar.slice(0, 2).map((candidate) => (
+              <div
+                key={candidate.id}
+                className="rounded-xl border border-border bg-surface px-4 py-4"
+              >
+                <p className="text-sm font-semibold text-foreground">
+                  {candidate.sourceName}
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-muted">
+                  {candidate.explanation}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <InlineEmpty text="Hoy no encontramos nuevas fuentes que valga la pena sumar." />
+        )}
+      </EditorialSection>
+
+      <section
+        className="border-t border-border pb-3 pt-7 text-center"
+        aria-labelledby="edition-end"
+      >
+        <span className="mx-auto grid h-10 w-10 place-items-center rounded-full bg-success/12 text-success">
+          <Check size={20} />
+        </span>
+        <h2
+          id="edition-end"
+          className="mt-3 font-news text-2xl font-medium text-foreground"
+        >
+          Llegaste al final
+        </h2>
+        <p className="mx-auto mt-2 max-w-[42ch] text-sm leading-relaxed text-muted">
+          Revisaste {edition.reviewedCount}{" "}
+          {edition.reviewedCount === 1 ? "contenido" : "contenidos"}. Próxima
+          actualización: {nextDeliveryLabel(config.sendHours).toLowerCase()}.
+        </p>
+        <Button
+          onClick={onComplete}
+          disabled={isCompleting}
+          className="mt-5 w-full sm:w-auto"
+        >
+          {isCompleting ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <CheckCircle2 size={16} />
+          )}
+          {isCompleting ? "Cerrando…" : "Terminé por hoy"}
+        </Button>
+        <p className="mt-3 text-xs text-muted">
+          No vamos a cargar más contenido después de esto.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+function EditorialSection({
+  eyebrow,
+  title,
+  description,
+  action,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.13em] text-muted">
+            {eyebrow}
+          </p>
+          <h2 className="mt-1 font-news text-[25px] font-medium leading-tight text-foreground">
+            {title}
+          </h2>
+        </div>
+        {action}
+      </div>
+      <p className="mb-4 mt-1 text-sm leading-relaxed text-muted">
+        {description}
+      </p>
+      {children}
+    </section>
+  );
+}
+
+function BriefItemRow({
+  item,
+  compact = false,
+  onOpen,
+}: {
+  item: SerializedBriefItem;
+  compact?: boolean;
+  onOpen: () => void;
+}) {
+  const source =
+    metadataText(item.metadata, "source") ??
+    metadataText(item.metadata, "author") ??
+    item.sourceType;
+  const handle = metadataText(item.metadata, "handle");
+  const thumbnail = metadataText(item.metadata, "thumbnailUrl");
+  const isSocial = item.kind === "SOCIAL";
+
+  return (
+    <article className={compact ? "py-4" : "py-5"}>
+      <div className="flex gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+            <span className="font-semibold uppercase tracking-[0.08em] text-primary">
+              {isSocial ? item.sourceType : "Noticia"}
+            </span>
+            {item.topic && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{item.topic}</span>
+              </>
+            )}
+          </div>
+          <h3
+            className={`mt-2 text-foreground ${
+              compact
+                ? "text-[15px] font-semibold leading-snug"
+                : "font-news text-xl font-medium leading-snug"
+            }`}
+          >
+            {item.title}
+          </h3>
+          {item.summary && item.summary !== item.title && (
+            <p className="mt-2 text-sm leading-relaxed text-muted">
+              {item.summary}
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+            <span className="font-medium text-foreground">{source}</span>
+            {handle && <span>@{handle}</span>}
+            <span aria-hidden="true">·</span>
+            <span>{timeAgo(item.publishedAt)}</span>
+          </div>
+          {item.inclusionReason && (
+            <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-muted">
+              <Lightbulb size={13} className="mt-0.5 shrink-0 text-warning" />
+              {item.inclusionReason}
+            </p>
+          )}
+        </div>
+        {thumbnail && (
+          // El proveedor entrega una URL HTTPS validada. Evitamos next/image
+          // porque las plataformas admitidas no tienen un host fijo.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={thumbnail}
+            alt=""
+            loading="lazy"
+            className="h-20 w-24 shrink-0 rounded-lg border border-border object-cover"
+          />
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg px-1 pr-3 text-sm font-semibold text-primary hover:bg-primary/8"
+      >
+        {isSocial ? "Abrir publicación" : "Abrir noticia"}
+        <ArrowUpRight size={15} />
+      </button>
+    </article>
+  );
+}
+
+function SourcesView({
+  sources,
+  onSourcesChange,
+}: {
+  sources: SerializedBriefSource[];
+  onSourcesChange: React.Dispatch<
+    React.SetStateAction<SerializedBriefSource[]>
+  >;
+}) {
+  const [adding, setAdding] = useState(sources.length === 0);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const filtered = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return sources;
+    return sources.filter(
+      (source) =>
+        source.name.toLowerCase().includes(normalized) ||
+        source.account?.handle.toLowerCase().includes(normalized) ||
+        PLATFORM_LABELS[source.account?.platform ?? "WEB"]
+          .toLowerCase()
+          .includes(normalized)
+    );
+  }, [query, sources]);
+
+  const pause = async (source: SerializedBriefSource) => {
+    if (busyId) return;
+    setBusyId(source.id);
+    const result = await setBriefSourceActiveAction(source.id, !source.isActive);
+    setBusyId(null);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    onSourcesChange((current) =>
+      current.map((candidate) =>
+        candidate.id === source.id
+          ? { ...candidate, isActive: !source.isActive }
+          : candidate
+      )
+    );
+    toast.success(source.isActive ? "Fuente pausada." : "Fuente reactivada.");
+  };
+
+  const remove = async (source: SerializedBriefSource) => {
+    if (
+      !window.confirm(
+        `¿Eliminar ${source.name} de tus fuentes? Las ediciones anteriores se conservan.`
+      )
+    ) {
+      return;
+    }
+    if (busyId) return;
+    setBusyId(source.id);
+    const result = await deleteBriefSourceAction(source.id);
+    setBusyId(null);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    onSourcesChange((current) =>
+      current.filter((candidate) => candidate.id !== source.id)
+    );
+    toast.success("Fuente eliminada.");
+  };
+
+  const openProfile = (source: SerializedBriefSource) => {
+    const url = source.account?.profileUrl;
+    if (!url || !validHttpsUrl(url)) {
+      toast.error("Esta fuente no tiene un enlace HTTPS válido.");
+      return;
+    }
+    window.location.assign(url);
+  };
+
+  return (
+    <section aria-labelledby="sources-title">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.13em] text-muted">
+            Elegidas por vos
+          </p>
+          <h2
+            id="sources-title"
+            className="mt-1 font-news text-3xl font-medium text-foreground"
+          >
+            Fuentes
+          </h2>
+          <p className="mt-2 max-w-[56ch] text-sm leading-relaxed text-muted">
+            Personas, medios y cuentas que querés seguir sin reconstruir un feed
+            infinito.
+          </p>
+        </div>
+        {!adding && (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            aria-label="Agregar una fuente"
+            className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-background"
+          >
+            <Plus size={16} />
+            <span className="hidden min-[370px]:inline">Agregar</span>
+          </button>
+        )}
+      </div>
+
+      {adding && (
+        <div className="mt-6 rounded-xl border border-border bg-surface p-4 sm:p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="text-base font-semibold text-foreground">
+              Agregar una fuente
+            </h3>
+            {sources.length > 0 && (
+              <button
+                type="button"
+                aria-label="Cancelar"
+                onClick={() => setAdding(false)}
+                className="grid h-11 w-11 place-items-center rounded-lg text-muted hover:bg-surface-2 hover:text-foreground"
+              >
+                <X size={18} />
+              </button>
+            )}
+          </div>
+          <SourceForm
+            initial={EMPTY_SOURCE}
+            submitLabel="Agregar a mis fuentes"
+            onCancel={sources.length ? () => setAdding(false) : undefined}
+            onSubmit={async (draft) => {
+              const result = await createBriefSourceAction(draft);
+              if (result.error || !result.source) return result.error ?? "Error";
+              onSourcesChange((current) => [result.source!, ...current]);
+              setAdding(false);
+              toast.success("Fuente agregada.");
+              return null;
+            }}
+          />
+        </div>
+      )}
+
+      {sources.length >= 8 && (
+        <label className="relative mt-6 block">
+          <span className="sr-only">Buscar en mis fuentes</span>
+          <Search
+            size={17}
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted"
+          />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Buscar por nombre, handle o plataforma"
+            className="pl-10 text-[16px]"
+            type="search"
+            enterKeyHint="search"
+          />
+        </label>
+      )}
+
+      <div className="mt-6 space-y-3">
+        {filtered.map((source) => (
+          <article
+            key={source.id}
+            className={`rounded-xl border p-4 ${
+              source.isActive
+                ? "border-border bg-surface"
+                : "border-border bg-surface-2/45"
+            }`}
+          >
+            {editingId === source.id ? (
+              <>
+                <h3 className="mb-4 text-base font-semibold text-foreground">
+                  Editar fuente
+                </h3>
+                <SourceForm
+                  initial={sourceDraft(source)}
+                  submitLabel="Guardar cambios"
+                  onCancel={() => setEditingId(null)}
+                  onSubmit={async (draft) => {
+                    const result = await updateBriefSourceAction(
+                      source.id,
+                      draft
+                    );
+                    if (result.error || !result.source) {
+                      return result.error ?? "Error";
+                    }
+                    onSourcesChange((current) =>
+                      current.map((candidate) =>
+                        candidate.id === source.id
+                          ? result.source!
+                          : candidate
+                      )
+                    );
+                    setEditingId(null);
+                    toast.success("Fuente actualizada.");
+                    return null;
+                  }}
+                />
+              </>
+            ) : (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="break-words text-base font-semibold text-foreground">
+                        {source.name}
+                      </h3>
+                      {source.priority && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-warning/12 px-2 py-1 text-xs font-semibold text-warning">
+                          <Star size={12} fill="currentColor" />
+                          Prioridad
+                        </span>
+                      )}
+                      {!source.isActive && (
+                        <span className="rounded-full bg-surface-3 px-2 py-1 text-xs font-semibold text-muted">
+                          Pausada
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 break-all text-sm text-muted">
+                      {source.account
+                        ? `${PLATFORM_LABELS[source.account.platform]} · @${source.account.handle}`
+                        : "Sin cuenta vinculada"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      {CATEGORY_LABELS[source.category]}
+                      {source.account?.status === "PRIVATE" && " · Cuenta privada"}
+                      {source.account?.status === "NOT_FOUND" &&
+                        " · Cuenta no encontrada"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => openProfile(source)}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-foreground hover:bg-surface-2"
+                  >
+                    <ExternalLink size={15} />
+                    Abrir perfil
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingId(source.id)}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-foreground hover:bg-surface-2"
+                  >
+                    <Pencil size={15} />
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void pause(source)}
+                    disabled={busyId === source.id}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:opacity-50"
+                  >
+                    {busyId === source.id ? (
+                      <Loader2 size={15} className="animate-spin" />
+                    ) : source.isActive ? (
+                      <CirclePause size={15} />
+                    ) : (
+                      <CirclePlay size={15} />
+                    )}
+                    {source.isActive ? "Pausar" : "Reactivar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void remove(source)}
+                    disabled={busyId === source.id}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold text-danger hover:bg-danger/8 disabled:opacity-50"
+                  >
+                    <Trash2 size={15} />
+                    Eliminar
+                  </button>
+                </div>
+              </>
+            )}
+          </article>
+        ))}
+      </div>
+
+      {!adding && filtered.length === 0 && (
+        <InlineEmpty
+          text={
+            query
+              ? "No encontramos fuentes con esa búsqueda."
+              : "Todavía no agregaste ninguna fuente."
+          }
+        />
+      )}
+
+      <div className="mt-6 rounded-xl bg-surface-2 px-4 py-4 text-sm leading-relaxed text-muted">
+        <p className="font-semibold text-foreground">Sobre el contenido social</p>
+        <p className="mt-1">
+          Control.io sólo muestra publicaciones cuando la plataforma o un
+          proveedor autorizado entrega datos verificables. Si no puede hacerlo,
+          vas a poder abrir el perfil o la publicación por HTTPS desde el
+          celular. La extensión de escritorio es opcional.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function SourceForm({
+  initial,
+  submitLabel,
+  onSubmit,
+  onCancel,
+}: {
+  initial: SourceDraft;
+  submitLabel: string;
+  onSubmit: (draft: SourceDraft) => Promise<string | null>;
+  onCancel?: () => void;
+}) {
+  const [draft, setDraft] = useState(initial);
+  const idPrefix = useId().replace(/:/g, "");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const errorRef = useRef<HTMLParagraphElement>(null);
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    startTransition(async () => {
+      const nextError = await onSubmit(draft);
+      if (nextError) {
+        setError(nextError);
+        requestAnimationFrame(() => errorRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        }));
+      }
+    });
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-4" noValidate>
+      {error && (
+        <p
+          ref={errorRef}
+          role="alert"
+          className="rounded-lg bg-danger/8 px-3 py-2 text-sm text-danger"
+        >
+          {error}
+        </p>
+      )}
+      <div>
+        <label htmlFor={`${idPrefix}-name`} className="mb-1.5 block text-sm font-medium text-foreground">
+          Nombre para reconocerla
+        </label>
+        <Input
+          id={`${idPrefix}-name`}
+          value={draft.name}
+          onChange={(event) =>
+            setDraft((current) => ({ ...current, name: event.target.value }))
+          }
+          placeholder="Ejemplo: Franco Pisso"
+          autoComplete="off"
+          enterKeyHint="next"
+          className="text-[16px]"
+          required
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor={`${idPrefix}-platform`} className="mb-1.5 block text-sm font-medium text-foreground">
+            Plataforma
+          </label>
+          <Select
+            id={`${idPrefix}-platform`}
+            value={draft.platform}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                platform: event.target.value as BriefPlatform,
+              }))
+            }
+            className="text-[16px]"
+          >
+            {Object.entries(PLATFORM_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <label htmlFor={`${idPrefix}-category`} className="mb-1.5 block text-sm font-medium text-foreground">
+            Tipo de relación
+          </label>
+          <Select
+            id={`${idPrefix}-category`}
+            value={draft.category}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                category: event.target.value as BriefSourceCategory,
+              }))
+            }
+            className="text-[16px]"
+          >
+            {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor={`${idPrefix}-handle`} className="mb-1.5 block text-sm font-medium text-foreground">
+          Handle o URL
+        </label>
+        <Input
+          id={`${idPrefix}-handle`}
+          value={draft.handleOrUrl}
+          onChange={(event) =>
+            setDraft((current) => ({
+              ...current,
+              handleOrUrl: event.target.value,
+            }))
+          }
+          placeholder={
+            draft.platform === "WEB"
+              ? "https://ejemplo.com"
+              : "@usuario o https://…"
+          }
+          inputMode="url"
+          autoComplete="url"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="done"
+          className="text-[16px]"
+          required
+        />
+        <p className="mt-1.5 text-xs leading-relaxed text-muted">
+          Podés pegar el enlace completo desde la app de la plataforma.
+        </p>
+      </div>
+
+      <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-border px-3 py-2">
+        <input
+          type="checkbox"
+          checked={draft.priority}
+          onChange={(event) =>
+            setDraft((current) => ({
+              ...current,
+              priority: event.target.checked,
+            }))
+          }
+          className="h-5 w-5 accent-primary"
+        />
+        <span>
+          <span className="block text-sm font-semibold text-foreground">
+            Marcar como prioridad
+          </span>
+          <span className="block text-xs text-muted">
+            Sus contenidos se consideran antes, sin aumentar el límite.
+          </span>
+        </span>
+      </label>
+
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isPending}
+            className="min-h-11 rounded-lg px-4 text-sm font-semibold text-muted hover:bg-surface-2 hover:text-foreground"
+          >
+            Cancelar
+          </button>
+        )}
+        <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
+          {isPending ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Plus size={16} />
+          )}
+          {isPending ? "Guardando…" : submitLabel}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function RadarView({
+  candidates,
+  onCandidatesChange,
+  onSourceAdded,
+}: {
+  candidates: SerializedDiscoveryCandidate[];
+  onCandidatesChange: React.Dispatch<
+    React.SetStateAction<SerializedDiscoveryCandidate[]>
+  >;
+  onSourceAdded: (source: SerializedBriefSource) => void;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const act = async (
+    candidate: SerializedDiscoveryCandidate,
+    action: "ADD" | "TODAY_ONLY" | "DISMISS"
+  ) => {
+    if (busyId) return;
+    setBusyId(candidate.id);
+    const result = await updateRadarCandidateAction(candidate.id, action);
+    setBusyId(null);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    onCandidatesChange((current) =>
+      action === "TODAY_ONLY"
+        ? current.map((item) =>
+            item.id === candidate.id
+              ? { ...item, status: "TODAY_ONLY" }
+              : item
+          )
+        : current.filter((item) => item.id !== candidate.id)
+    );
+    if (result.source) onSourceAdded(result.source);
+    toast.success(
+      action === "ADD"
+        ? "Fuente agregada."
+        : action === "DISMISS"
+          ? "No volveremos a priorizar esta sugerencia."
+          : "La conservamos sólo para la edición de hoy."
+    );
+  };
+
+  return (
+    <section aria-labelledby="radar-title">
+      <p className="text-xs font-semibold uppercase tracking-[0.13em] text-muted">
+        Descubrimiento limitado
+      </p>
+      <h2
+        id="radar-title"
+        className="mt-1 font-news text-3xl font-medium text-foreground"
+      >
+        Radar del día
+      </h2>
+      <p className="mt-2 max-w-[58ch] text-sm leading-relaxed text-muted">
+        Pocas sugerencias, con una razón visible. Nunca se encadenan con otras
+        recomendaciones.
+      </p>
+
+      {candidates.length === 0 ? (
+        <EmptyState
+          icon={Radar}
+          title="Hoy no encontramos nuevas fuentes que valga la pena sumar"
+          description="Preferimos dejar este espacio vacío antes que inventar métricas o mostrar recomendaciones débiles."
+        />
+      ) : (
+        <div className="mt-6 space-y-4">
+          {candidates.map((candidate) => (
+            <article
+              key={candidate.id}
+              className="rounded-xl border border-border bg-surface p-4 sm:p-5"
+            >
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                {candidate.platform && (
+                  <span className="font-semibold uppercase tracking-[0.08em] text-primary">
+                    {PLATFORM_LABELS[candidate.platform]}
+                  </span>
+                )}
+                {candidate.topic && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>{candidate.topic}</span>
+                  </>
+                )}
+              </div>
+              <h3 className="mt-2 font-news text-xl font-medium text-foreground">
+                {candidate.sourceName}
+              </h3>
+              {candidate.status === "TODAY_ONLY" && (
+                <span className="mt-2 inline-flex rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+                  Visible sólo hoy
+                </span>
+              )}
+              {candidate.handle && (
+                <p className="mt-1 break-all text-sm text-muted">
+                  @{candidate.handle}
+                </p>
+              )}
+              <p className="mt-3 text-sm leading-relaxed text-foreground">
+                {candidate.explanation}
+              </p>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                {candidate.status === "PENDING" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void act(candidate, "ADD")}
+                      disabled={busyId === candidate.id}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-background disabled:opacity-50"
+                    >
+                      {busyId === candidate.id ? (
+                        <Loader2 size={15} className="animate-spin" />
+                      ) : (
+                        <Plus size={15} />
+                      )}
+                      Agregar a mis fuentes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void act(candidate, "TODAY_ONLY")}
+                      disabled={busyId === candidate.id}
+                      className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold text-foreground hover:bg-surface-2 disabled:opacity-50"
+                    >
+                      Mostrar sólo hoy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void act(candidate, "DISMISS")}
+                      disabled={busyId === candidate.id}
+                      className="min-h-11 rounded-lg px-4 text-sm font-semibold text-muted hover:bg-surface-2 hover:text-foreground disabled:opacity-50"
+                    >
+                      No me interesa
+                    </button>
+                  </>
+                )}
+                {validHttpsUrl(candidate.profileUrl) && (
+                  <a
+                    href={candidate.profileUrl}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold text-primary hover:bg-primary/8"
+                  >
+                    Abrir
+                    <ArrowUpRight size={15} />
+                  </a>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SettingsView({
+  config,
+  history,
+  onConfigChange,
+  onGenerate,
+  onOpenItem,
+}: {
+  config: SerializedConfig;
+  history: SerializedEdition[];
+  onConfigChange: (config: SerializedConfig) => void;
+  onGenerate: () => void;
+  onOpenItem: (edition: SerializedEdition, item: SerializedBriefItem) => void;
+}) {
+  const [topics, setTopics] = useState(config.topics);
+  const [priorityTopics, setPriorityTopics] = useState(config.priorityTopics);
+  const [topicInput, setTopicInput] = useState("");
+  const [isActive, setIsActive] = useState(config.isActive);
+  const [sendHours, setSendHours] = useState(config.sendHours);
+  const [notifyPush, setNotifyPush] = useState(config.notifyPush);
+  const [notifyWhatsapp, setNotifyWhatsapp] = useState(config.notifyWhatsapp);
+  const [discoveryLevel, setDiscoveryLevel] =
+    useState<DiscoveryLevel>(config.discoveryLevel);
+  const [briefLength, setBriefLength] =
+    useState<BriefLength>(config.briefLength);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [expandedEdition, setExpandedEdition] = useState<string | null>(null);
+  const [isSaving, startSave] = useTransition();
+
+  const dirty =
+    JSON.stringify(topics) !== JSON.stringify(config.topics) ||
+    JSON.stringify(priorityTopics) !==
+      JSON.stringify(config.priorityTopics) ||
+    JSON.stringify(sendHours) !== JSON.stringify(config.sendHours) ||
+    isActive !== config.isActive ||
+    notifyPush !== config.notifyPush ||
+    notifyWhatsapp !== config.notifyWhatsapp ||
+    discoveryLevel !== config.discoveryLevel ||
+    briefLength !== config.briefLength;
 
   const addTopic = () => {
     const topic = topicInput.trim();
@@ -300,45 +1718,11 @@ export function MyBriefClient({ initialConfig, initialEditions }: Props) {
     setTopicInput("");
   };
 
-  const removeTopic = (topic: string) => {
-    setTopics((current) => current.filter((item) => item !== topic));
-    setPriority((current) => current.filter((item) => item !== topic));
-  };
-
-  const togglePriority = (topic: string) => {
-    setPriority((current) =>
-      current.includes(topic)
-        ? current.filter((item) => item !== topic)
-        : [...current, topic]
-    );
-  };
-
-  const changeDeliveryCount = (count: number) => {
-    setSendHours((current) => resizeDeliveryHours(current, count));
-  };
-
-  const changeDeliveryHour = (index: number, hour: number) => {
-    setSendHours((current) => {
-      if (
-        current.some(
-          (currentHour, currentIndex) =>
-            currentIndex !== index && currentHour === hour
-        )
-      ) {
-        toast.error("Elegí horarios distintos para cada ventana.");
-        return current;
-      }
-      const next = [...current];
-      next[index] = hour;
-      return next.sort((a, b) => a - b);
-    });
-  };
-
-  const saveConfig = () => {
+  const save = () => {
     startSave(async () => {
       const result = await saveNewsletterConfigAction({
         topics,
-        priorityTopics: priority,
+        priorityTopics,
         language: config.language,
         country: config.country,
         isActive,
@@ -347,1311 +1731,539 @@ export function MyBriefClient({ initialConfig, initialEditions }: Props) {
         notifyOnReady: notifyPush || notifyWhatsapp,
         notifyPush,
         notifyWhatsapp,
+        discoveryLevel,
+        briefLength,
       });
-
-      if (result.error) {
-        toast.error(result.error);
+      if (result.error || !result.config) {
+        toast.error(result.error ?? "No pudimos guardar los ajustes.");
         return;
       }
-
-      if (result.success && result.config) {
-        setConfig(result.config);
-        setTopics(result.config.topics);
-        setPriority(result.config.priorityTopics);
-        setIsActive(result.config.isActive);
-        setSendHours(result.config.sendHours);
-        setNotifyPush(result.config.notifyPush);
-        setNotifyWhatsapp(result.config.notifyWhatsapp);
-        toast.success("Preferencias guardadas.");
-      }
+      onConfigChange(result.config);
+      setTopics(result.config.topics);
+      setPriorityTopics(result.config.priorityTopics);
+      setSendHours(result.config.sendHours);
+      toast.success("Ajustes guardados.");
     });
-  };
-
-  const generateNow = () => {
-    if (topics.length === 0) {
-      toast.error("Agregá al menos un tema.");
-      setActiveTab("preferences");
-      return;
-    }
-    if (dirty) {
-      toast.error("Guardá tus preferencias antes de generar.");
-      setActiveTab("preferences");
-      return;
-    }
-
-    startGenerate(async () => {
-      const result = await generateNewsletterNowAction();
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      if (result.success && result.edition) {
-        setEditions((current) => [
-          result.edition!,
-          ...current.filter((edition) => edition.id !== result.edition!.id),
-        ]);
-        setActiveTab("today");
-        toast.success(
-          result.usedAI
-            ? `Brief listo: ${result.count} noticias analizadas.`
-            : `Brief listo: ${result.count} noticias.`
-        );
-      }
-    });
-  };
-
-  const completeToday = () => {
-    if (!today || today.isRead) return;
-    startComplete(async () => {
-      const result = await markNewsletterReadAction(today.id);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      setEditions((current) =>
-        current.map((edition) =>
-          edition.id === today.id ? { ...edition, isRead: true } : edition
-        )
-      );
-      toast.success("Listo. Ya estás al día.");
-    });
-  };
-
-  const addCirclePerson = () => {
-    const handle = normalizeInstagramHandle(circleHandle);
-    if (!handle) {
-      toast.error("Ingresá un usuario válido, por ejemplo @usuario.");
-      return;
-    }
-    if (
-      circlePeople.some(
-        (person) => person.handle.toLowerCase() === handle.toLowerCase()
-      )
-    ) {
-      toast.error("Ese perfil ya está en tu círculo.");
-      return;
-    }
-    if (circlePeople.length >= 20) {
-      toast.error("Tu círculo admite hasta 20 perfiles en esta versión.");
-      return;
-    }
-
-    setCirclePeople((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID(),
-        name: circleName.trim() || `@${handle}`,
-        handle,
-        kind: circleKind,
-      },
-    ]);
-    setCircleName("");
-    setCircleHandle("");
-    toast.success("Perfil agregado a tu círculo.");
-  };
-
-  const removeCirclePerson = (personId: string) => {
-    setCirclePeople((current) =>
-      current.filter((person) => person.id !== personId)
-    );
-    toast.success("Perfil quitado de este dispositivo.");
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 overflow-x-hidden px-4">
-      <header className="space-y-5 pt-2">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-muted">
-              Control.io
-            </p>
-            <h1 className="mt-1.5 font-news text-[32px] font-medium leading-none text-foreground md:text-[38px]">
-              Mi Brief
-            </h1>
-            <p className="mt-2.5 max-w-[52ch] text-sm leading-relaxed text-muted">
-              Lo importante del día, con un final claro.
-            </p>
-          </div>
+    <section aria-labelledby="settings-title">
+      <p className="text-xs font-semibold uppercase tracking-[0.13em] text-muted">
+        Tu edición
+      </p>
+      <h2
+        id="settings-title"
+        className="mt-1 font-news text-3xl font-medium text-foreground"
+      >
+        Ajustes
+      </h2>
+      <p className="mt-2 max-w-[58ch] text-sm leading-relaxed text-muted">
+        Definí qué entra, cuándo se prepara y cuánto querés leer.
+      </p>
 
-          {activeTab === "today" && (
-            <Button
-              variant="secondary"
-              onClick={generateNow}
-              disabled={isGenerating}
-              aria-label={
-                isGenerating ? "Generando el brief" : "Actualizar el brief"
-              }
-            >
-              <RefreshCw
-                size={16}
-                className={isGenerating ? "animate-spin" : ""}
-              />
-              <span className="hidden sm:inline">
-                {isGenerating ? "Generando…" : "Actualizar"}
-              </span>
-            </Button>
-          )}
-        </div>
-
-        <nav
-          className="grid grid-cols-4 gap-1 pb-1"
-          aria-label="Secciones de Mi Brief"
-          role="tablist"
+      <div className="mt-7 space-y-9">
+        <SettingsBlock
+          title="Temas y prioridades"
+          description="La estrella indica lo que el sistema debe considerar primero."
         >
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            const selected = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                onClick={() => setActiveTab(tab.id)}
-                className={`inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg px-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 sm:gap-2 sm:px-3 sm:text-sm ${
-                  selected
-                    ? "bg-primary text-background"
-                    : "text-muted hover:bg-surface-2 hover:text-foreground"
-                }`}
-              >
-                <Icon size={16} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-      </header>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              addTopic();
+            }}
+            className="flex gap-2"
+          >
+            <div className="min-w-0 flex-1">
+              <label htmlFor="brief-topic" className="sr-only">
+                Nuevo tema
+              </label>
+              <Input
+                id="brief-topic"
+                value={topicInput}
+                onChange={(event) => setTopicInput(event.target.value)}
+                placeholder="Ejemplo: inteligencia artificial"
+                className="text-[16px]"
+                enterKeyHint="done"
+              />
+            </div>
+            <Button
+              type="submit"
+              size="icon"
+              aria-label="Agregar tema"
+              disabled={!topicInput.trim()}
+            >
+              <Plus size={18} />
+            </Button>
+          </form>
 
-      {activeTab === "today" && (
-        <TodayBrief
-          edition={today}
-          topicsConfigured={topics.length > 0}
-          isGenerating={isGenerating}
-          isCompleting={isCompleting}
-          onGenerate={generateNow}
-          onConfigure={() => setActiveTab("preferences")}
-          onComplete={completeToday}
-          deliveryHours={sendHours}
-        />
+          <div className="mt-4 space-y-2">
+            {topics.map((topic) => {
+              const prioritized = priorityTopics.includes(topic);
+              return (
+                <div
+                  key={topic}
+                  className="flex min-h-12 items-center gap-2 rounded-lg border border-border px-2"
+                >
+                  <button
+                    type="button"
+                    aria-label={
+                      prioritized
+                        ? `Quitar prioridad a ${topic}`
+                        : `Marcar ${topic} como prioritario`
+                    }
+                    onClick={() =>
+                      setPriorityTopics((current) =>
+                        current.includes(topic)
+                          ? current.filter((item) => item !== topic)
+                          : [...current, topic]
+                      )
+                    }
+                    className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${
+                      prioritized ? "text-warning" : "text-muted"
+                    }`}
+                  >
+                    <Star
+                      size={17}
+                      fill={prioritized ? "currentColor" : "none"}
+                    />
+                  </button>
+                  <span className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">
+                    {topic}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Eliminar ${topic}`}
+                    onClick={() => {
+                      setTopics((current) =>
+                        current.filter((item) => item !== topic)
+                      );
+                      setPriorityTopics((current) =>
+                        current.filter((item) => item !== topic)
+                      );
+                    }}
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-muted hover:bg-danger/8 hover:text-danger"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              );
+            })}
+            {topics.length === 0 && (
+              <InlineEmpty text="Agregá al menos un tema para poder generar tu Brief." />
+            )}
+          </div>
+        </SettingsBlock>
+
+        <SettingsBlock
+          title="Preparación automática"
+          description="Podés recibir entre una y tres actualizaciones por día, siempre con contenido finito."
+        >
+          <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4 rounded-lg border border-border px-3">
+            <span>
+              <span className="block text-sm font-semibold text-foreground">
+                Preparar automáticamente
+              </span>
+              <span className="block text-xs text-muted">
+                Usa la zona horaria de Argentina.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(event) => setIsActive(event.target.checked)}
+              className="h-5 w-5 accent-primary"
+            />
+          </label>
+
+          <fieldset className="mt-4">
+            <legend className="text-sm font-medium text-foreground">
+              Actualizaciones diarias
+            </legend>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {[1, 2, 3].map((count) => (
+                <button
+                  key={count}
+                  type="button"
+                  aria-pressed={sendHours.length === count}
+                  onClick={() =>
+                    setSendHours((current) =>
+                      resizeDeliveryHours(current, count)
+                    )
+                  }
+                  className={`min-h-11 rounded-lg border text-sm font-semibold ${
+                    sendHours.length === count
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted hover:bg-surface-2"
+                  }`}
+                >
+                  {count}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+
+          <div className="mt-4 space-y-3">
+            {sendHours.map((hour, index) => (
+              <div key={`${index}-${hour}`}>
+                <label
+                  htmlFor={`delivery-hour-${index}`}
+                  className="mb-1.5 block text-sm font-medium text-foreground"
+                >
+                  Horario {index + 1}
+                </label>
+                <Select
+                  id={`delivery-hour-${index}`}
+                  value={hour}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    if (
+                      sendHours.some(
+                        (candidate, candidateIndex) =>
+                          candidateIndex !== index && candidate === value
+                      )
+                    ) {
+                      toast.error("Elegí horarios distintos.");
+                      return;
+                    }
+                    setSendHours((current) => {
+                      const next = [...current];
+                      next[index] = value;
+                      return next.sort((a, b) => a - b);
+                    });
+                  }}
+                  className="text-[16px]"
+                >
+                  {Array.from({ length: 24 }, (_, value) => (
+                    <option key={value} value={value}>
+                      {String(value).padStart(2, "0")}:00
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ))}
+          </div>
+        </SettingsBlock>
+
+        <SettingsBlock
+          title="Notificaciones"
+          description="Elegí cómo querés enterarte cuando la edición esté lista."
+        >
+          <div className="space-y-2">
+            <ToggleRow
+              title="Push en este dispositivo"
+              description="Disponible según el navegador y el sistema operativo."
+              checked={notifyPush}
+              onChange={setNotifyPush}
+            />
+            {notifyPush && (
+              <div className="rounded-lg bg-surface-2 px-3 py-3">
+                <EnablePushInline />
+              </div>
+            )}
+            <ToggleRow
+              title="WhatsApp"
+              description="Usa el número vinculado en tu cuenta."
+              checked={notifyWhatsapp}
+              onChange={setNotifyWhatsapp}
+            />
+            {notifyWhatsapp && (
+              <p className="px-1 text-xs leading-relaxed text-muted">
+                Si todavía no vinculaste un número, podés hacerlo desde{" "}
+                <Link href="/configuracion" className="font-semibold text-primary">
+                  Configuración
+                </Link>
+                .
+              </p>
+            )}
+          </div>
+        </SettingsBlock>
+
+        <SettingsBlock
+          title="Nivel de descubrimiento"
+          description="El Radar nunca se mezcla con las fuentes que elegiste."
+        >
+          <ChoiceList
+            value={discoveryLevel}
+            options={DISCOVERY_COPY}
+            onChange={setDiscoveryLevel}
+          />
+        </SettingsBlock>
+
+        <SettingsBlock
+          title="Longitud del Brief"
+          description="Los tres modos tienen un límite concreto y no cargan páginas adicionales."
+        >
+          <ChoiceList
+            value={briefLength}
+            options={LENGTH_COPY}
+            onChange={setBriefLength}
+          />
+        </SettingsBlock>
+
+        <SettingsBlock
+          title="Historial"
+          description="Tus ediciones anteriores siguen disponibles."
+        >
+          <button
+            type="button"
+            aria-expanded={historyOpen}
+            onClick={() => setHistoryOpen((current) => !current)}
+            className="flex min-h-12 w-full items-center justify-between gap-3 rounded-lg border border-border px-3 text-left text-sm font-semibold text-foreground hover:bg-surface-2"
+          >
+            <span className="flex items-center gap-2">
+              <History size={16} />
+              Ver {history.length}{" "}
+              {history.length === 1 ? "edición anterior" : "ediciones anteriores"}
+            </span>
+            {historyOpen ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+          </button>
+
+          {historyOpen && (
+            <div className="mt-3 divide-y divide-border border-y border-border">
+              {history.map((edition) => {
+                const expanded = expandedEdition === edition.id;
+                return (
+                  <div key={edition.id}>
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      onClick={() =>
+                        setExpandedEdition(expanded ? null : edition.id)
+                      }
+                      className="flex min-h-14 w-full items-center justify-between gap-3 py-3 text-left"
+                    >
+                      <span>
+                        <span className="block text-sm font-semibold text-foreground">
+                          {shortDate(edition.date)}
+                        </span>
+                        <span className="block text-xs text-muted">
+                          {edition.items.length} contenidos
+                          {edition.isRead ? " · terminada" : ""}
+                        </span>
+                      </span>
+                      {expanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+                    </button>
+                    {expanded && (
+                      <div className="pb-4">
+                        <p className="mb-2 text-sm leading-relaxed text-muted">
+                          {edition.summary}
+                        </p>
+                        {edition.items.slice(0, 6).map((item) => (
+                          <BriefItemRow
+                            key={item.id}
+                            item={item}
+                            compact
+                            onOpen={() => onOpenItem(edition, item)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {history.length === 0 && (
+                <InlineEmpty text="El historial va a aparecer después de tu primera edición." />
+              )}
+            </div>
+          )}
+        </SettingsBlock>
+      </div>
+
+      <div
+        className="sticky z-10 -mx-4 mt-8 border-t border-border bg-background/95 px-4 py-3 backdrop-blur-md sm:-mx-5 sm:px-5 md:static md:mx-0 md:bg-transparent md:px-0 md:backdrop-blur-none"
+        style={{
+          bottom: "calc(4.75rem + env(safe-area-inset-bottom, 0px))",
+        }}
+      >
+        <Button
+          onClick={save}
+          disabled={!dirty || isSaving || topics.length === 0}
+          className="w-full"
+        >
+          {isSaving ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Check size={16} />
+          )}
+          {isSaving
+            ? "Guardando…"
+            : dirty
+              ? "Guardar ajustes"
+              : "Todo guardado"}
+        </Button>
+        {dirty && topics.length > 0 && (
+          <p className="mt-2 text-center text-xs text-muted">
+            Guardá antes de crear una nueva edición.
+          </p>
+        )}
+      </div>
+
+      {config.topics.length > 0 && !dirty && (
+        <button
+          type="button"
+          onClick={onGenerate}
+          className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold text-primary hover:bg-primary/8"
+        >
+          <RefreshCw size={16} />
+          Actualizar Mi Brief ahora
+        </button>
       )}
+    </section>
+  );
+}
 
-      {activeTab === "circle" && (
-        <CircleView
-          people={circlePeople}
-          hydrated={circleHydrated}
-          name={circleName}
-          handle={circleHandle}
-          kind={circleKind}
-          onNameChange={setCircleName}
-          onHandleChange={setCircleHandle}
-          onKindChange={setCircleKind}
-          onAdd={addCirclePerson}
-          onRemove={removeCirclePerson}
-          onEmbedsReady={processInstagramEmbeds}
-        />
-      )}
+function SettingsBlock({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <h3 className="text-base font-semibold text-foreground">{title}</h3>
+      <p className="mt-1 text-sm leading-relaxed text-muted">{description}</p>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
 
-      {activeTab === "preferences" && (
-        <PreferencesView
-          topics={topics}
-          priority={priority}
-          topicInput={topicInput}
-          isActive={isActive}
-          sendHours={sendHours}
-          notifyPush={notifyPush}
-          notifyWhatsapp={notifyWhatsapp}
-          dirty={dirty}
-          isSaving={isSaving}
-          onTopicInputChange={setTopicInput}
-          onAddTopic={addTopic}
-          onRemoveTopic={removeTopic}
-          onTogglePriority={togglePriority}
-          onActiveChange={setIsActive}
-          onDeliveryCountChange={changeDeliveryCount}
-          onDeliveryHourChange={changeDeliveryHour}
-          onNotifyPushChange={setNotifyPush}
-          onNotifyWhatsappChange={setNotifyWhatsapp}
-          onSave={saveConfig}
-        />
-      )}
+function ToggleRow({
+  title,
+  description,
+  checked,
+  onChange,
+}: {
+  title: string;
+  description: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex min-h-14 cursor-pointer items-center justify-between gap-4 rounded-lg border border-border px-3 py-2">
+      <span>
+        <span className="block text-sm font-semibold text-foreground">
+          {title}
+        </span>
+        <span className="block text-xs leading-relaxed text-muted">
+          {description}
+        </span>
+      </span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-5 w-5 shrink-0 accent-primary"
+      />
+    </label>
+  );
+}
 
-      {activeTab === "history" && (
-        <HistoryView
-          editions={history}
-          expanded={expandedEdition}
-          onToggle={setExpandedEdition}
-        />
+function ChoiceList<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: Record<T, { title: string; description: string }>;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {(Object.entries(options) as Array<
+        [T, { title: string; description: string }]
+      >).map(([key, option]) => (
+        <label
+          key={key}
+          className={`flex min-h-14 cursor-pointer items-start gap-3 rounded-lg border px-3 py-3 ${
+            value === key
+              ? "border-primary bg-primary/8"
+              : "border-border"
+          }`}
+        >
+          <input
+            type="radio"
+            checked={value === key}
+            onChange={() => onChange(key)}
+            className="mt-0.5 h-5 w-5 shrink-0 accent-primary"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-foreground">
+              {option.title}
+            </span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+              {option.description}
+            </span>
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+  onAction,
+  disabled,
+}: {
+  icon: typeof Sparkles;
+  title: string;
+  description: string;
+  action?: string;
+  onAction?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="py-10 text-center">
+      <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-primary/10 text-primary">
+        <Icon size={21} />
+      </span>
+      <h2 className="mx-auto mt-4 max-w-[28ch] font-news text-2xl font-medium text-foreground">
+        {title}
+      </h2>
+      <p className="mx-auto mt-2 max-w-[48ch] text-sm leading-relaxed text-muted">
+        {description}
+      </p>
+      {action && onAction && (
+        <Button
+          onClick={onAction}
+          disabled={disabled}
+          className="mt-5 w-full sm:w-auto"
+        >
+          {disabled && <Loader2 size={16} className="animate-spin" />}
+          {action}
+        </Button>
       )}
     </div>
   );
 }
 
-function TodayBrief({
-  edition,
-  topicsConfigured,
-  isGenerating,
-  isCompleting,
-  onGenerate,
-  onConfigure,
-  onComplete,
-  deliveryHours,
+function InlineEmpty({
+  text,
+  action,
+  onAction,
 }: {
-  edition: SerializedEdition | null;
-  topicsConfigured: boolean;
-  isGenerating: boolean;
-  isCompleting: boolean;
-  onGenerate: () => void;
-  onConfigure: () => void;
-  onComplete: () => void;
-  deliveryHours: number[];
+  text: string;
+  action?: string;
+  onAction?: () => void;
 }) {
-  if (!edition) {
-    return (
-      <section className="rounded-2xl border border-border bg-surface px-5 py-10 text-center sm:px-8">
-        <Sparkles size={28} className="mx-auto text-primary" />
-        <h2 className="mt-4 text-xl font-bold text-foreground">
-          Tu primera edición empieza acá
-        </h2>
-        <p className="mx-auto mt-2 max-w-[44ch] text-sm leading-relaxed text-muted">
-          {topicsConfigured
-            ? "Generá el brief de hoy y quedate solamente con lo que merece tu atención."
-            : "Elegí tus temas para recibir una edición breve y personalizada cada día."}
-        </p>
-        <Button
-          className="mt-6"
-          onClick={topicsConfigured ? onGenerate : onConfigure}
-          disabled={isGenerating}
+  return (
+    <div className="rounded-xl bg-surface-2 px-4 py-4">
+      <p className="text-sm leading-relaxed text-muted">{text}</p>
+      {action && onAction && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-2 min-h-11 rounded-lg pr-3 text-sm font-semibold text-primary"
         >
-          {topicsConfigured ? "Generar el brief de hoy" : "Elegir mis temas"}
-        </Button>
-      </section>
-    );
-  }
-
-  const { essentials, remaining } = selectBriefArticles(edition.articles);
-  const visibleCount = essentials.length + remaining.length;
-  const estimatedMinutes = Math.max(3, Math.ceil(visibleCount * 0.7));
-  const currentArgentinaHour = Number(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Argentina/Buenos_Aires",
-      hour: "2-digit",
-      hourCycle: "h23",
-    }).format(new Date())
-  );
-  const nextToday = deliveryHours.find((hour) => hour > currentArgentinaHour);
-  const nextHour = nextToday ?? deliveryHours[0] ?? 8;
-
-  if (edition.isRead) {
-    return (
-      <section className="rounded-2xl border border-success/25 bg-success/5 px-5 py-10 text-center sm:px-8">
-        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success/15 text-success">
-          <Check size={24} />
-        </span>
-        <h2 className="mt-4 text-xl font-bold text-foreground">
-          Ya estás al día
-        </h2>
-        <p className="mt-2 text-sm text-muted">
-          Tu próxima edición se prepara {nextToday ? "hoy" : "mañana"} a las{" "}
-          {String(nextHour).padStart(2, "0")}:00.
-        </p>
-      </section>
-    );
-  }
-
-  return (
-    <article className="space-y-9">
-      <header className="animate-news-in">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted">
-            {dateline(edition.date)}
-          </p>
-          <div className="flex items-center gap-3 text-xs text-muted">
-            <span className="inline-flex items-center gap-1.5">
-              <Clock3 size={13} />
-              {estimatedMinutes} min
-            </span>
-            <span>{visibleCount} contenidos</span>
-          </div>
-        </div>
-
-        {edition.summary && (
-          <div className="mt-5">
-            <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
-              En pocas palabras
-            </p>
-            <p className="font-news text-[20px] leading-[1.55] text-foreground md:text-[23px]">
-              {edition.summary}
-            </p>
-          </div>
-        )}
-      </header>
-
-      {essentials.length > 0 && (
-        <BriefSection title="Lo imprescindible" articles={essentials} lead />
+          {action}
+        </button>
       )}
-
-      {remaining.length > 0 && (
-        <BriefSection title="Tus temas" articles={remaining} />
-      )}
-
-      {visibleCount === 0 && (
-        <p className="text-sm text-muted">
-          Hoy no encontramos noticias confiables para tus temas.
-        </p>
-      )}
-
-      <div className="space-y-4 border-t border-border pt-6 text-center">
-        <p className="text-sm text-muted">
-          Cuando terminás, el brief termina con vos.
-        </p>
-        <Button onClick={onComplete} disabled={isCompleting}>
-          <BookOpenCheck size={17} />
-          {isCompleting ? "Cerrando edición…" : "Terminé por hoy"}
-        </Button>
-      </div>
-
-      <SourceNotice />
-    </article>
-  );
-}
-
-function BriefSection({
-  title,
-  articles,
-  lead = false,
-}: {
-  title: string;
-  articles: AnalyzedArticle[];
-  lead?: boolean;
-}) {
-  return (
-    <section>
-      <div className="mb-2 flex items-center gap-3">
-        <h2 className="text-[13px] font-bold uppercase tracking-[0.14em] text-foreground">
-          {title}
-        </h2>
-        <span className="h-px flex-1 bg-border" />
-        <span className="font-mono text-[11px] text-muted">
-          {articles.length}
-        </span>
-      </div>
-      <div className="divide-y divide-border">
-        {articles.map((article, index) => (
-          <BriefStory
-            key={`${article.url}-${index}`}
-            article={article}
-            lead={lead && index === 0}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function BriefStory({
-  article,
-  lead = false,
-}: {
-  article: AnalyzedArticle;
-  lead?: boolean;
-}) {
-  const ago = timeAgo(article.publishedAt);
-  return (
-    <a
-      href={article.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group block py-5 focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-    >
-      <div className="mb-2 flex items-center gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-primary">
-          {article.topic}
-        </span>
-        {article.priority && (
-          <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-warning">
-            prioritario
-          </span>
-        )}
-      </div>
-      <h3
-        className={`font-news font-medium leading-tight text-foreground transition-colors group-hover:text-primary ${
-          lead ? "text-[24px] md:text-[28px]" : "text-[19px] md:text-[21px]"
-        }`}
-      >
-        {article.title}
-      </h3>
-      {article.summary && (
-        <p className="mt-2 text-sm leading-relaxed text-muted">
-          {article.summary}
-        </p>
-      )}
-      <div className="mt-2.5 flex items-center gap-1.5 text-xs text-muted">
-        <span className="font-medium text-foreground/70">{article.source}</span>
-        {article.reputable && (
-          <BadgeCheck
-            size={13}
-            className="shrink-0 text-success/80"
-            aria-label="Fuente reconocida"
-          />
-        )}
-        {ago && (
-          <>
-            <span aria-hidden="true">·</span>
-            <span>{ago}</span>
-          </>
-        )}
-        <ExternalLink size={13} className="ml-0.5 text-primary" />
-      </div>
-    </a>
-  );
-}
-
-function SourceNotice() {
-  return (
-    <p className="flex items-start gap-2 border-t border-border pt-4 text-xs leading-relaxed text-muted">
-      <ShieldCheck size={14} className="mt-0.5 shrink-0 text-success/80" />
-      <span>
-        Priorizamos fuentes reconocidas y filtramos contenido dudoso. Verificá
-        la fuente original antes de compartir.
-      </span>
-    </p>
-  );
-}
-
-function CircleView({
-  people,
-  hydrated,
-  name,
-  handle,
-  kind,
-  onNameChange,
-  onHandleChange,
-  onKindChange,
-  onAdd,
-  onRemove,
-  onEmbedsReady,
-}: {
-  people: CirclePerson[];
-  hydrated: boolean;
-  name: string;
-  handle: string;
-  kind: CirclePerson["kind"];
-  onNameChange: (value: string) => void;
-  onHandleChange: (value: string) => void;
-  onKindChange: (value: CirclePerson["kind"]) => void;
-  onAdd: () => void;
-  onRemove: (personId: string) => void;
-  onEmbedsReady: () => void;
-}) {
-  const [focusLaunch, setFocusLaunch] = useState<{
-    person: CirclePerson;
-    requestId: number;
-  } | null>(null);
-  const launchSequenceRef = useRef(0);
-  const closeFocusLauncher = useCallback(() => setFocusLaunch(null), []);
-  const openFocusedProfile = useCallback((person: CirclePerson) => {
-    launchSequenceRef.current += 1;
-    setFocusLaunch({
-      person,
-      requestId: launchSequenceRef.current,
-    });
-  }, []);
-
-  return (
-    <section className="space-y-8">
-      <div>
-        <h2 className="text-xl font-bold text-foreground">Mi círculo</h2>
-        <p className="mt-1 max-w-[58ch] text-sm leading-relaxed text-muted">
-          Elegí familiares y referentes. Instagram mostrará el perfil dentro de
-          Control.io solamente cuando sea público y permita inserciones.
-        </p>
-      </div>
-
-      <div className="rounded-2xl border border-border bg-surface p-4 sm:p-5">
-        <h3 className="text-sm font-bold text-foreground">Agregar un perfil</h3>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <label className="space-y-1.5 text-sm font-medium text-foreground">
-            Nombre para reconocerlo
-            <Input
-              value={name}
-              onChange={(event) => onNameChange(event.target.value)}
-              placeholder="Ejemplo: Mamá"
-              maxLength={60}
-            />
-          </label>
-          <label className="space-y-1.5 text-sm font-medium text-foreground">
-            Usuario de Instagram
-            <Input
-              value={handle}
-              onChange={(event) => onHandleChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  onAdd();
-                }
-              }}
-              placeholder="@usuario"
-              autoCapitalize="none"
-              autoCorrect="off"
-              maxLength={120}
-            />
-          </label>
-        </div>
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <label className="space-y-1.5 text-sm font-medium text-foreground">
-            Tipo de vínculo
-            <Select
-              value={kind}
-              onChange={(event) =>
-                onKindChange(event.target.value as CirclePerson["kind"])
-              }
-              className="min-w-44"
-            >
-              <option value="familiar">Familiar o amistad</option>
-              <option value="referente">Referente</option>
-            </Select>
-          </label>
-          <Button onClick={onAdd}>
-            <Plus size={16} />
-            Agregar a Mi círculo
-          </Button>
-        </div>
-      </div>
-
-      {!hydrated ? (
-        <div className="space-y-3" aria-label="Cargando Mi círculo">
-          <div className="h-24 animate-pulse rounded-xl bg-surface-2" />
-          <div className="h-24 animate-pulse rounded-xl bg-surface-2" />
-        </div>
-      ) : people.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border px-5 py-10 text-center">
-          <CircleUserRound size={28} className="mx-auto text-primary" />
-          <h3 className="mt-4 text-lg font-bold text-foreground">
-            Tu círculo está vacío
-          </h3>
-          <p className="mx-auto mt-2 max-w-[42ch] text-sm leading-relaxed text-muted">
-            Agregá un perfil público para probar cómo se muestra su contenido
-            permitido por Instagram.
-          </p>
-        </div>
-      ) : (
-        <div className="grid items-start gap-x-6 gap-y-10 md:grid-cols-2">
-          {people.map((person) => (
-            <article key={person.id} className="min-w-0 space-y-3">
-              <div className="flex items-center justify-between gap-3 border-b border-border pb-3">
-                <div className="min-w-0">
-                  <h3 className="truncate text-base font-bold text-foreground">
-                    {person.name}
-                  </h3>
-                  <p className="text-sm text-muted">
-                    @{person.handle} ·{" "}
-                    {person.kind === "familiar" ? "tu círculo" : "referente"}
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onRemove(person.id)}
-                  aria-label={`Quitar a ${person.name} de Mi círculo`}
-                  title="Quitar de Mi círculo"
-                >
-                  <Trash2 size={17} />
-                </Button>
-              </div>
-
-              <div
-                className="mx-auto w-full max-w-[380px]"
-                aria-label={`Vista protegida del perfil de ${person.name}`}
-              >
-                <div className="relative h-[420px] overflow-hidden rounded-xl bg-surface-2">
-                  <div
-                    inert
-                    aria-hidden="true"
-                    className="pointer-events-none select-none [&_iframe]:!min-w-0 [&_iframe]:!w-full"
-                  >
-                    <blockquote
-                      className="instagram-media !m-0 !min-w-0 !max-w-[380px] !w-full"
-                      data-instgrm-permalink={`https://www.instagram.com/${person.handle}/`}
-                      data-instgrm-version="14"
-                      style={
-                        {
-                          width: "100%",
-                          minWidth: 0,
-                          margin: 0,
-                        } as CSSProperties
-                      }
-                    >
-                      <div className="flex min-h-32 items-center justify-center p-5 text-center">
-                        <p className="text-sm text-muted">
-                          Cargando el perfil público de @{person.handle}…
-                        </p>
-                      </div>
-                    </blockquote>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => openFocusedProfile(person)}
-                    className="absolute inset-0 z-10 cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/70"
-                    aria-label={`Abrir el modo enfocado de ${person.name} durante dos minutos`}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => openFocusedProfile(person)}
-                  className="mx-auto mt-2 flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-primary transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                >
-                  <Clock3 size={14} />
-                  Abrir modo enfocado · 2 min
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-
-      <div className="rounded-xl bg-surface-2 p-4 text-xs leading-relaxed text-muted">
-        <p className="font-semibold text-foreground">Límite de esta versión</p>
-        <p className="mt-1">
-          Las cuentas privadas, las historias y los perfiles que desactivaron
-          las inserciones no pueden mostrarse fuera de Instagram. La lista se
-          guarda solamente en este navegador y no modifica tu base de datos.
-        </p>
-      </div>
-
-      {people.length > 0 && (
-        <Script
-          id="instagram-embed"
-          src="https://www.instagram.com/embed.js"
-          strategy="lazyOnload"
-          onReady={onEmbedsReady}
-          onError={() =>
-            toast.error(
-              "Instagram no pudo cargar los perfiles. Podés reintentar más tarde."
-            )
-          }
-        />
-      )}
-
-      {focusLaunch && (
-        <TimedProfileDialog
-          key={focusLaunch.requestId}
-          person={focusLaunch.person}
-          onClose={closeFocusLauncher}
-        />
-      )}
-    </section>
-  );
-}
-
-function TimedProfileDialog({
-  person,
-  onClose,
-}: {
-  person: CirclePerson;
-  onClose: () => void;
-}) {
-  const [extensionStatus, setExtensionStatus] =
-    useState<FocusExtensionStatus>("checking");
-  const pendingOpenRef = useRef<string | null>(null);
-  const openRequestTimeoutRef = useRef<number | null>(null);
-  const autoOpenRequestedRef = useRef(false);
-
-  const openInteractiveProfile = useCallback(() => {
-    if (extensionStatus !== "ready") {
-      toast.error(
-        extensionStatus === "outdated"
-          ? "Actualizá Control.io Focus para poder reproducir publicaciones y reels."
-          : "No detecté Control.io Focus. Instalá la extensión privada y recargá esta página."
-      );
-      return;
-    }
-
-    if (pendingOpenRef.current) return;
-
-    const correlationId = `focus-open-${person.id}-${Date.now()}`;
-    pendingOpenRef.current = correlationId;
-    postFocusExtensionMessage("CONTROLIO_FOCUS_OPEN", {
-      correlationId,
-      durationSeconds: 120,
-      handle: person.handle,
-    });
-
-    openRequestTimeoutRef.current = window.setTimeout(() => {
-      if (pendingOpenRef.current !== correlationId) return;
-      pendingOpenRef.current = null;
-      toast.error("La extensión no respondió. Recargá Control.io e intentá nuevamente.");
-      onClose();
-    }, 1800);
-  }, [extensionStatus, onClose, person.handle, person.id]);
-
-  useEffect(() => {
-    if (
-      extensionStatus !== "ready" ||
-      autoOpenRequestedRef.current
-    ) {
-      return;
-    }
-
-    autoOpenRequestedRef.current = true;
-    openInteractiveProfile();
-  }, [extensionStatus, openInteractiveProfile]);
-
-  useEffect(() => {
-    const handleBridgeMessage = (event: MessageEvent) => {
-      if (
-        event.source !== window ||
-        event.origin !== window.location.origin
-      ) {
-        return;
-      }
-
-      const message = event.data as FocusExtensionMessage;
-      if (message?.source !== FOCUS_EXTENSION_SOURCE) return;
-
-      if (message.type === "CONTROLIO_FOCUS_PING_RESULT") {
-        setExtensionStatus(
-          !message.ok
-            ? "missing"
-            : isCurrentFocusExtension(message.version)
-              ? "ready"
-              : "outdated"
-        );
-        return;
-      }
-
-      if (
-        message.type === "CONTROLIO_FOCUS_OPEN_RESULT" &&
-        message.correlationId === pendingOpenRef.current
-      ) {
-        pendingOpenRef.current = null;
-        if (openRequestTimeoutRef.current !== null) {
-          window.clearTimeout(openRequestTimeoutRef.current);
-          openRequestTimeoutRef.current = null;
-        }
-
-        if (!message.ok) {
-          toast.error(
-            message.error || "No se pudo abrir la ventana enfocada."
-          );
-          onClose();
-        }
-        return;
-      }
-
-      if (message.type === "CONTROLIO_FOCUS_SESSION_CLOSED") {
-        if (message.reason === "replaced" && pendingOpenRef.current) return;
-        onClose();
-      }
-    };
-
-    window.addEventListener("message", handleBridgeMessage);
-    const correlationId = `focus-ping-${person.id}-${Date.now()}`;
-    postFocusExtensionMessage("CONTROLIO_FOCUS_PING", { correlationId });
-    const availabilityTimer = window.setTimeout(() => {
-      setExtensionStatus((current) =>
-        current === "checking" ? "missing" : current
-      );
-    }, 900);
-
-    return () => {
-      window.clearTimeout(availabilityTimer);
-      if (openRequestTimeoutRef.current !== null) {
-        window.clearTimeout(openRequestTimeoutRef.current);
-      }
-      window.removeEventListener("message", handleBridgeMessage);
-    };
-  }, [onClose, person.handle, person.id]);
-
-  useEffect(() => {
-    if (
-      extensionStatus !== "missing" &&
-      extensionStatus !== "outdated"
-    ) {
-      return;
-    }
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [extensionStatus, onClose]);
-
-  if (extensionStatus === "checking" || extensionStatus === "ready") {
-    return null;
-  }
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-background/90 p-3 sm:p-6"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="focus-extension-title"
-        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl sm:max-h-[calc(100dvh-3rem)]"
-      >
-        <header className="flex items-center justify-between gap-4 border-b border-border px-4 py-3 sm:px-5">
-          <div className="min-w-0">
-            <h2
-              id="focus-extension-title"
-              className="truncate text-base font-bold text-foreground"
-            >
-              Preparar Control.io Focus
-            </h2>
-            <p className="truncate text-xs text-muted">
-              Necesario para abrir @{person.handle} con restricciones.
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            aria-label="Cerrar instalación"
-            title="Cerrar"
-          >
-            <X size={18} />
-          </Button>
-        </header>
-
-        <FocusExtensionInstaller isUpdate={extensionStatus === "outdated"} />
-      </section>
-    </div>,
-    document.body
-  );
-}
-
-function FocusExtensionInstaller({ isUpdate }: { isUpdate: boolean }) {
-  const [downloadStarted, setDownloadStarted] = useState(false);
-
-  const downloadExtension = () => {
-    setDownloadStarted(true);
-    window.location.assign("/api/my-brief/focus-extension");
-  };
-
-  return (
-    <footer className="max-h-[48dvh] overflow-y-auto border-t border-border bg-surface-2 px-4 py-4 sm:px-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="max-w-[52ch]">
-          <p className="flex items-center gap-2 text-sm font-bold text-foreground">
-            <span className="inline-flex size-7 items-center justify-center rounded-full bg-primary/12 text-primary">
-              <Download size={15} aria-hidden="true" />
-            </span>
-            {isUpdate
-              ? `Actualizar Control.io Focus a v${FOCUS_EXTENSION_MIN_VERSION}`
-              : "Instalar Control.io Focus"}
-          </p>
-          <p className="mt-1.5 text-xs leading-relaxed text-muted">
-            {isUpdate
-              ? "Tenés una versión anterior. Esta actualización habilita la navegación entre reels del perfil elegido."
-              : "Es una instalación privada y se hace una sola vez en esta computadora."}
-          </p>
-        </div>
-        <Button onClick={downloadExtension} className="shrink-0">
-          <Download size={16} />
-          {downloadStarted
-            ? "Descargar nuevamente"
-            : isUpdate
-              ? "Descargar actualización"
-              : "Descargar extensión"}
-        </Button>
-      </div>
-
-      <ol className="mt-4 divide-y divide-border border-y border-border">
-        <li className="grid grid-cols-[28px_1fr] gap-3 py-3">
-          <span className="flex size-7 items-center justify-center rounded-full bg-background text-xs font-bold text-foreground">
-            1
-          </span>
-          <p className="text-xs leading-relaxed text-muted">
-            <strong className="block text-foreground">
-              Buscá el archivo en Descargas
-            </strong>
-            Se llama <code>controlio-focus.zip</code>. Hacé clic derecho y
-            elegí “Extraer todo”.
-          </p>
-        </li>
-        <li className="grid grid-cols-[28px_1fr] gap-3 py-3">
-          <span className="flex size-7 items-center justify-center rounded-full bg-background text-xs font-bold text-foreground">
-            2
-          </span>
-          <p className="text-xs leading-relaxed text-muted">
-            <strong className="block text-foreground">
-              {isUpdate
-                ? "Quitá la versión anterior"
-                : "Abrí las extensiones de Chrome"}
-            </strong>
-            Escribí <code>chrome://extensions</code> en la barra y{" "}
-            {isUpdate
-              ? "presioná “Quitar” en Control.io Focus."
-              : "activá “Modo de desarrollador”."}
-          </p>
-        </li>
-        <li className="grid grid-cols-[28px_1fr] gap-3 py-3">
-          <span className="flex size-7 items-center justify-center rounded-full bg-background text-xs font-bold text-foreground">
-            3
-          </span>
-          <p className="text-xs leading-relaxed text-muted">
-            <strong className="block text-foreground">
-              {isUpdate
-                ? "Cargá la carpeta actualizada"
-                : "Cargá la carpeta descomprimida"}
-            </strong>
-            Presioná “Cargar extensión sin empaquetar” y seleccioná la carpeta
-            <code className="ml-1">controlio-focus</code>.
-          </p>
-        </li>
-      </ol>
-
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs leading-relaxed text-muted">
-          Cuando Chrome confirme la instalación, volvé acá y recargá.
-        </p>
-        <Button
-          variant="secondary"
-          onClick={() => window.location.reload()}
-          className="shrink-0"
-        >
-          <RefreshCw size={15} />
-          Ya la instalé: recargar
-        </Button>
-      </div>
-    </footer>
-  );
-}
-
-function PreferencesView({
-  topics,
-  priority,
-  topicInput,
-  isActive,
-  sendHours,
-  notifyPush,
-  notifyWhatsapp,
-  dirty,
-  isSaving,
-  onTopicInputChange,
-  onAddTopic,
-  onRemoveTopic,
-  onTogglePriority,
-  onActiveChange,
-  onDeliveryCountChange,
-  onDeliveryHourChange,
-  onNotifyPushChange,
-  onNotifyWhatsappChange,
-  onSave,
-}: {
-  topics: string[];
-  priority: string[];
-  topicInput: string;
-  isActive: boolean;
-  sendHours: number[];
-  notifyPush: boolean;
-  notifyWhatsapp: boolean;
-  dirty: boolean;
-  isSaving: boolean;
-  onTopicInputChange: (value: string) => void;
-  onAddTopic: () => void;
-  onRemoveTopic: (topic: string) => void;
-  onTogglePriority: (topic: string) => void;
-  onActiveChange: (value: boolean) => void;
-  onDeliveryCountChange: (count: number) => void;
-  onDeliveryHourChange: (index: number, hour: number) => void;
-  onNotifyPushChange: (value: boolean) => void;
-  onNotifyWhatsappChange: (value: boolean) => void;
-  onSave: () => void;
-}) {
-  return (
-    <section className="space-y-8">
-      <div>
-        <h2 className="text-xl font-bold text-foreground">Preferencias</h2>
-        <p className="mt-1 text-sm text-muted">
-          Cinco temas bien elegidos suelen ser suficientes para un brief útil.
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-sm font-bold text-foreground">
-            Temas que querés seguir
-          </h3>
-          <p className="mt-1 text-xs leading-relaxed text-muted">
-            Marcá con una estrella lo verdaderamente prioritario.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Input
-            value={topicInput}
-            onChange={(event) => onTopicInputChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                onAddTopic();
-              }
-            }}
-            placeholder="Ejemplo: inteligencia artificial"
-          />
-          <Button
-            variant="secondary"
-            size="icon"
-            onClick={onAddTopic}
-            aria-label="Agregar tema"
-          >
-            <Plus size={17} />
-          </Button>
-        </div>
-
-        {topics.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {topics.map((topic) => {
-              const isPriority = priority.includes(topic);
-              return (
-                <span
-                  key={topic}
-                  className={`inline-flex min-h-11 max-w-full items-center gap-1 rounded-full border py-1 pl-1 pr-2 text-sm ${
-                    isPriority
-                      ? "border-warning/30 bg-warning/10"
-                      : "border-transparent bg-surface-2"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => onTogglePriority(topic)}
-                    className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                    aria-label={
-                      isPriority
-                        ? `Quitar prioridad a ${topic}`
-                        : `Priorizar ${topic}`
-                    }
-                  >
-                    <Star
-                      size={14}
-                      className={
-                        isPriority
-                          ? "fill-warning text-warning"
-                          : "text-muted"
-                      }
-                    />
-                  </button>
-                  <span className="min-w-0 break-words px-0.5">{topic}</span>
-                  <button
-                    type="button"
-                    onClick={() => onRemoveTopic(topic)}
-                    className="flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-surface-3 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                    aria-label={`Quitar ${topic}`}
-                  >
-                    <X size={15} />
-                  </button>
-                </span>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-4 border-t border-border pt-6">
-        <label className="flex min-h-11 cursor-pointer items-start gap-3 text-sm text-foreground">
-          <input
-            type="checkbox"
-            checked={isActive}
-            onChange={(event) => onActiveChange(event.target.checked)}
-            className="mt-1 h-4 w-4 shrink-0 accent-primary"
-          />
-          <span>
-            <span className="font-semibold">Preparar una edición cada día</span>
-            <span className="mt-0.5 block text-xs text-muted">
-              Se actualiza automáticamente en las ventanas que elijas.
-            </span>
-          </span>
-        </label>
-
-        {isActive && (
-          <div className="space-y-4 rounded-xl bg-surface-2 p-4">
-            <label className="flex flex-wrap items-center gap-2 text-sm text-foreground">
-              <Clock3 size={15} className="text-muted" />
-              Ventanas por día
-              <Select
-                value={String(sendHours.length)}
-                onChange={(event) =>
-                  onDeliveryCountChange(Number(event.target.value))
-                }
-                className="w-36"
-              >
-                <option value="1">1 entrega</option>
-                <option value="2">2 entregas</option>
-                <option value="3">3 entregas</option>
-              </Select>
-            </label>
-
-            <div className="grid gap-3 sm:grid-cols-3">
-              {sendHours.map((hour, index) => (
-                <label
-                  key={`delivery-${index}`}
-                  className="space-y-1.5 text-xs font-medium text-muted"
-                >
-                  Ventana {index + 1}
-                  <Select
-                    value={String(hour)}
-                    onChange={(event) =>
-                      onDeliveryHourChange(index, Number(event.target.value))
-                    }
-                    className="w-full text-sm text-foreground"
-                    aria-label={`Horario de la ventana ${index + 1}`}
-                  >
-                    {Array.from({ length: 24 }, (_, optionHour) => (
-                      <option key={optionHour} value={optionHour}>
-                        {String(optionHour).padStart(2, "0")}:00
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-              ))}
-            </div>
-
-            <p className="text-xs leading-relaxed text-muted">
-              Horario de Argentina. Cada ventana refresca el brief del día y
-              puede enviarte un aviso.
-            </p>
-          </div>
-        )}
-      </div>
-
-      {isActive && (
-        <div className="space-y-4 border-t border-border pt-6">
-          <div>
-            <h3 className="flex items-center gap-2 text-sm font-bold text-foreground">
-              <Bell size={15} className="text-primary" />
-              Avisarme en cada ventana
-            </h3>
-            <p className="mt-1 text-xs text-muted">
-              Elegí por dónde querés recibir cada entrega.
-            </p>
-          </div>
-
-          <label className="flex min-h-11 cursor-pointer items-start gap-3 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={notifyPush}
-              onChange={(event) => onNotifyPushChange(event.target.checked)}
-              className="mt-1 h-4 w-4 shrink-0 accent-primary"
-            />
-            <span>
-              <span className="font-semibold">Notificación push</span>
-              <span className="mt-0.5 block text-xs text-muted">
-                En el celular o navegador.
-              </span>
-            </span>
-          </label>
-          {notifyPush && <EnablePushInline />}
-
-          <label className="flex min-h-11 cursor-pointer items-start gap-3 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={notifyWhatsapp}
-              onChange={(event) =>
-                onNotifyWhatsappChange(event.target.checked)
-              }
-              className="mt-1 h-4 w-4 shrink-0 accent-primary"
-            />
-            <span>
-              <span className="flex items-center gap-1.5 font-semibold">
-                <MessageCircle size={14} className="text-primary" />
-                WhatsApp
-              </span>
-              <span className="mt-0.5 block text-xs text-muted">
-                Recibís el resumen en el número vinculado.
-              </span>
-            </span>
-          </label>
-        </div>
-      )}
-
-      <div className="flex justify-end border-t border-border pt-6">
-        <Button onClick={onSave} disabled={isSaving || !dirty}>
-          {isSaving ? "Guardando preferencias…" : "Guardar preferencias"}
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-function HistoryView({
-  editions,
-  expanded,
-  onToggle,
-}: {
-  editions: SerializedEdition[];
-  expanded: string | null;
-  onToggle: (editionId: string | null) => void;
-}) {
-  if (editions.length === 0) {
-    return (
-      <section className="rounded-2xl border border-dashed border-border px-5 py-10 text-center">
-        <History size={28} className="mx-auto text-primary" />
-        <h2 className="mt-4 text-lg font-bold text-foreground">
-          Todavía no hay ediciones anteriores
-        </h2>
-        <p className="mt-2 text-sm text-muted">
-          Tus briefs anteriores van a quedar disponibles acá.
-        </p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="space-y-3">
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-foreground">Historial</h2>
-        <p className="mt-1 text-sm text-muted">
-          Volvé a una edición solamente cuando estés buscando algo concreto.
-        </p>
-      </div>
-      {editions.map((edition) => {
-        const isExpanded = expanded === edition.id;
-        return (
-          <div key={edition.id} className="border-b border-border">
-            <button
-              type="button"
-              className="flex min-h-16 w-full items-center justify-between gap-4 py-4 text-left focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-              onClick={() => onToggle(isExpanded ? null : edition.id)}
-              aria-expanded={isExpanded}
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-bold capitalize text-foreground">
-                  {formatDateLong(edition.date)}
-                </p>
-                <p className="mt-1 line-clamp-1 text-xs text-muted">
-                  {edition.summary}
-                </p>
-              </div>
-              <ChevronDown
-                size={18}
-                className={`shrink-0 text-muted transition-transform ${
-                  isExpanded ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-            {isExpanded && (
-              <div className="pb-7">
-                <BriefSection
-                  title="Contenido de la edición"
-                  articles={edition.articles}
-                />
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </section>
+    </div>
   );
 }

@@ -23,7 +23,7 @@ const rightItems: NavItem[] = [
 
 const moreItems: NavItem[] = [
   { href: "/calendario",   icon: CalendarCheck, label: "Organización", match: ["/tareas", "/calendario"] },
-  { href: "/newsletter",   icon: Newspaper,  label: "Newsletter" },
+  { href: "/newsletter",   icon: Newspaper,  label: "Mi Brief" },
   { href: "/grupos",       icon: Users,      label: "Grupos" },
   { href: "/deudas",       icon: HandCoins,  label: "Deudas" },
   { href: "/cuotas",       icon: CreditCard, label: "Cuotas" },
@@ -57,7 +57,10 @@ export function BottomNav({
   // empieza a moverse con el scroll. Saliéndonos del árbol garantizamos
   // que el fixed siempre quede anclado al viewport real.
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setMounted(true), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const isMoreActive = more.some((i) => (i.match ?? [i.href]).some((m) => pathname.startsWith(m)));
   const isCuentasActive =

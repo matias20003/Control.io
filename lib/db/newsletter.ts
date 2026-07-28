@@ -5,6 +5,12 @@ import {
   todayStringArg,
 } from "@/lib/timezone";
 import type { AnalyzedArticle } from "@/lib/services/newsletter-ai";
+import {
+  type BriefLength,
+  type DiscoveryLevel,
+  type SerializedBriefItem,
+} from "@/lib/brief/types";
+import { serializeBriefItem } from "@/lib/db/brief";
 
 export type SerializedConfig = {
   topics: string[];
@@ -17,6 +23,9 @@ export type SerializedConfig = {
   notifyOnReady: boolean;
   notifyPush: boolean;
   notifyWhatsapp: boolean;
+  discoveryLevel: DiscoveryLevel;
+  briefLength: BriefLength;
+  localSourcesMigrated: boolean;
 };
 
 export type SerializedEdition = {
@@ -25,7 +34,11 @@ export type SerializedEdition = {
   summary: string;
   articles: AnalyzedArticle[];
   isRead: boolean;
+  completedAt: string | null;
+  reviewedCount: number;
   createdAt: string;
+  updatedAt: string;
+  items: SerializedBriefItem[];
 };
 
 const DEFAULT_CONFIG: SerializedConfig = {
@@ -39,6 +52,9 @@ const DEFAULT_CONFIG: SerializedConfig = {
   notifyOnReady: true,
   notifyPush: true,
   notifyWhatsapp: true,
+  discoveryLevel: "BALANCED",
+  briefLength: "NORMAL",
+  localSourcesMigrated: false,
 };
 
 function normalizeSendHours(
@@ -75,6 +91,9 @@ export async function getConfig(userId: string): Promise<SerializedConfig> {
     notifyOnReady: row.notifyOnReady,
     notifyPush: row.notifyPush,
     notifyWhatsapp: row.notifyWhatsapp,
+    discoveryLevel: row.discoveryLevel as DiscoveryLevel,
+    briefLength: row.briefLength as BriefLength,
+    localSourcesMigrated: row.localSourcesMigratedAt != null,
   };
 }
 
@@ -122,6 +141,8 @@ export async function upsertConfig(
       notifyOnReady: data.notifyOnReady ?? true,
       notifyPush: data.notifyPush ?? true,
       notifyWhatsapp: data.notifyWhatsapp ?? true,
+      discoveryLevel: data.discoveryLevel ?? "BALANCED",
+      briefLength: data.briefLength ?? "NORMAL",
     },
     update: {
       ...(data.topics !== undefined ? { topics } : {}),
@@ -143,6 +164,12 @@ export async function upsertConfig(
         : {}),
       ...(data.notifyPush !== undefined ? { notifyPush: data.notifyPush } : {}),
       ...(data.notifyWhatsapp !== undefined ? { notifyWhatsapp: data.notifyWhatsapp } : {}),
+      ...(data.discoveryLevel !== undefined
+        ? { discoveryLevel: data.discoveryLevel }
+        : {}),
+      ...(data.briefLength !== undefined
+        ? { briefLength: data.briefLength }
+        : {}),
     },
   });
 
@@ -157,6 +184,9 @@ export async function upsertConfig(
     notifyOnReady: row.notifyOnReady,
     notifyPush: row.notifyPush,
     notifyWhatsapp: row.notifyWhatsapp,
+    discoveryLevel: row.discoveryLevel as DiscoveryLevel,
+    briefLength: row.briefLength as BriefLength,
+    localSourcesMigrated: row.localSourcesMigratedAt != null,
   };
 }
 
@@ -166,16 +196,57 @@ function serializeEdition(row: {
   summary: string;
   articles: unknown;
   isRead: boolean;
+  completedAt: Date | string | null;
+  reviewedCount: number;
   createdAt: Date | string;
+  updatedAt: Date | string;
+  briefItems: Parameters<typeof serializeBriefItem>[0][];
 }): SerializedEdition {
+  const articles = (row.articles as AnalyzedArticle[]) ?? [];
+  const normalizedItems = row.briefItems.map(serializeBriefItem);
+  const items =
+    normalizedItems.length > 0
+      ? normalizedItems
+      : articles.map((article, index) => ({
+          id: `legacy-news-${index}`,
+          contentKey: `legacy-news-${index}`,
+          kind: "NEWS" as const,
+          sourceType: "NEWS" as const,
+          sourceId: null,
+          title: article.title,
+          summary: article.summary,
+          url: article.url,
+          topic: article.topic,
+          publishedAt: article.publishedAt,
+          rank: index + 1,
+          section: article.highlight ? ("KEYS" as const) : ("TOPICS" as const),
+          inclusionReason: article.priority
+            ? "Coincide con uno de tus temas prioritarios."
+            : article.reputable
+              ? "Proviene de una fuente reconocida."
+              : null,
+          metadata: {
+            source: article.source,
+            reputable: article.reputable,
+            priority: article.priority,
+          },
+        }));
   return {
     id: row.id,
     date: row.date instanceof Date ? row.date.toISOString() : row.date,
     summary: row.summary,
-    articles: (row.articles as AnalyzedArticle[]) ?? [],
+    articles,
     isRead: row.isRead,
+    completedAt:
+      row.completedAt instanceof Date
+        ? row.completedAt.toISOString()
+        : row.completedAt,
+    reviewedCount: row.reviewedCount,
     createdAt:
       row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+    updatedAt:
+      row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
+    items,
   };
 }
 
@@ -185,6 +256,7 @@ export async function getEditions(
 ): Promise<SerializedEdition[]> {
   const rows = await prisma.newsletterEdition.findMany({
     where: { userId },
+    include: { briefItems: { orderBy: [{ section: "asc" }, { rank: "asc" }] } },
     orderBy: { date: "desc" },
     take: limit,
   });
@@ -196,6 +268,7 @@ export async function getLatestEdition(
 ): Promise<SerializedEdition | null> {
   const row = await prisma.newsletterEdition.findFirst({
     where: { userId },
+    include: { briefItems: { orderBy: [{ section: "asc" }, { rank: "asc" }] } },
     orderBy: { date: "desc" },
   });
   return row ? serializeEdition(row) : null;
@@ -212,7 +285,13 @@ export async function saveEdition(
   const row = await prisma.newsletterEdition.upsert({
     where: { userId_date: { userId, date } },
     create: { userId, date, summary, articles: articles as object[] },
-    update: { summary, articles: articles as object[], isRead: false },
+    update: {
+      summary,
+      articles: articles as object[],
+      isRead: false,
+      completedAt: null,
+    },
+    include: { briefItems: true },
   });
   return serializeEdition(row);
 }
@@ -223,7 +302,7 @@ export async function markEditionRead(
 ): Promise<void> {
   await prisma.newsletterEdition.updateMany({
     where: { id: editionId, userId },
-    data: { isRead: true },
+    data: { isRead: true, completedAt: new Date() },
   });
 }
 
@@ -258,6 +337,8 @@ export type ActiveConfig = {
   notifyOnReady: boolean;
   notifyPush: boolean;
   notifyWhatsapp: boolean;
+  discoveryLevel: DiscoveryLevel;
+  briefLength: BriefLength;
   whatsappNumber: string | null;
 };
 
@@ -277,6 +358,8 @@ export async function getActiveConfigs(): Promise<ActiveConfig[]> {
       notifyOnReady: true,
       notifyPush: true,
       notifyWhatsapp: true,
+      discoveryLevel: true,
+      briefLength: true,
       user: { select: { whatsappNumber: true } },
     },
   });
@@ -293,6 +376,8 @@ export async function getActiveConfigs(): Promise<ActiveConfig[]> {
       notifyOnReady: r.notifyOnReady,
       notifyPush: r.notifyPush,
       notifyWhatsapp: r.notifyWhatsapp,
+      discoveryLevel: r.discoveryLevel as DiscoveryLevel,
+      briefLength: r.briefLength as BriefLength,
       whatsappNumber: r.user?.whatsappNumber ?? null,
     }));
 }

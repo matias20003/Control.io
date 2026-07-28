@@ -14,7 +14,9 @@ export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isPublicRoute =
     PUBLIC_EXACT.includes(pathname) ||
-    PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
+    PUBLIC_ROUTES.some((r) => pathname.startsWith(r)) ||
+    (process.env.BRIEF_E2E_FIXTURE === "1" &&
+      pathname === "/brief-mobile-fixture");
 
   // Chequeo optimista: si no hay cookie de sesión y la ruta es protegida, redirigir al login.
   // NO redirigimos de login→dashboard aquí porque la cookie puede estar expirada,

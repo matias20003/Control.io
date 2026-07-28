@@ -9,8 +9,13 @@ import {
   getConfigsForHour,
   todayEditionExists,
   claimDeliveryWindow,
+  getLatestEdition,
   type SerializedEdition,
 } from "@/lib/db/newsletter";
+import { syncNewsBriefItems } from "@/lib/db/brief";
+import { refreshSocialContentForEdition } from "@/lib/services/social/sync";
+import type { BriefLength, DiscoveryLevel } from "@/lib/brief/types";
+import { generateRadarForUser } from "@/lib/services/brief/radar";
 import { sendPushToUser } from "@/lib/push/send";
 import { sendText } from "@/lib/whatsapp/kapso";
 
@@ -19,6 +24,8 @@ export type GenerateOptions = {
   priorityTopics?: string[];
   language?: string;
   country?: string;
+  briefLength?: BriefLength;
+  discoveryLevel?: DiscoveryLevel;
   /** Presupuesto de la IA (ms). El cron (background) da más; "Generar ahora" menos. */
   aiDeadlineMs?: number;
 };
@@ -45,7 +52,26 @@ export async function generateEditionForUser(
   });
 
   const analysis = await analyzeNews(topics, raw, priorityTopics, opts.aiDeadlineMs);
-  const edition = await saveEdition(userId, analysis.summary, analysis.articles);
+  const savedEdition = await saveEdition(
+    userId,
+    analysis.summary,
+    analysis.articles
+  );
+  await syncNewsBriefItems(savedEdition.id, analysis.articles);
+  await refreshSocialContentForEdition(
+    userId,
+    savedEdition.id,
+    opts.briefLength ?? "NORMAL"
+  ).catch(() => {
+    // Una red social nunca bloquea las noticias ni la edición principal.
+  });
+  await generateRadarForUser(
+    userId,
+    opts.discoveryLevel ?? "BALANCED"
+  ).catch(() => {
+    // Radar es secundario y nunca bloquea el Brief.
+  });
+  const edition = (await getLatestEdition(userId)) ?? savedEdition;
 
   return {
     edition,
@@ -117,6 +143,8 @@ export async function generateAllEditions(): Promise<{
         priorityTopics: cfg.priorityTopics,
         language: cfg.language,
         country: cfg.country,
+        briefLength: cfg.briefLength,
+        discoveryLevel: cfg.discoveryLevel,
       });
       generated++;
       if (result.usedAI) aiUsed++;
@@ -161,6 +189,8 @@ export async function generateEditionsForHour(hour: number): Promise<{
         priorityTopics: cfg.priorityTopics,
         language: cfg.language,
         country: cfg.country,
+        briefLength: cfg.briefLength,
+        discoveryLevel: cfg.discoveryLevel,
         // El cron corre en background (maxDuration=300): le damos margen para
         // esperar a los modelos free lentos y usar IA de verdad.
         aiDeadlineMs: 120000,

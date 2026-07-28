@@ -18,7 +18,7 @@ const navItems = [
   { href: "/movimientos",   icon: ArrowUpDown,     label: "Movimientos" },
   { href: "/cuentas",       icon: Wallet,          label: "Cuentas" },
   { href: "/presupuestos",  icon: Target,          label: "Planificá", match: ["/presupuestos", "/metas", "/recurrentes"] },
-  { href: "/newsletter",    icon: Newspaper,       label: "Newsletter" },
+  { href: "/newsletter",    icon: Newspaper,       label: "Mi Brief" },
   { href: "/grupos",        icon: Users,           label: "Grupos" },
   { href: "/deudas",        icon: HandCoins,       label: "Deudas" },
   { href: "/cuotas",        icon: CreditCard,      label: "Cuotas" },
