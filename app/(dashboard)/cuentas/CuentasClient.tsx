@@ -373,6 +373,7 @@ export function CuentasClient({ initialAccounts, recentTx, sparklines }: Props) 
                   <option value="USD">USD — Dólar</option>
                   <option value="EUR">EUR — Euro</option>
                   <option value="BRL">BRL — Real</option>
+                  <option value="BTC">BTC — Bitcoin</option>
                 </Select>
               </div>
               <div className="space-y-1.5">
@@ -381,7 +382,7 @@ export function CuentasClient({ initialAccounts, recentTx, sparklines }: Props) 
                   id="edit-balance"
                   name="balance"
                   type="number"
-                  step="0.01"
+                  step="0.00000001"
                   defaultValue={editingAccount?.balance ?? 0}
                 />
               </div>
@@ -447,6 +448,7 @@ export function CuentasClient({ initialAccounts, recentTx, sparklines }: Props) 
                   <option value="USD">USD — Dólar</option>
                   <option value="EUR">EUR — Euro</option>
                   <option value="BRL">BRL — Real</option>
+                  <option value="BTC">BTC — Bitcoin</option>
                 </Select>
               </div>
               <div className="space-y-1.5">
@@ -455,7 +457,7 @@ export function CuentasClient({ initialAccounts, recentTx, sparklines }: Props) 
                   id="balance"
                   name="balance"
                   type="number"
-                  step="0.01"
+                  step="0.00000001"
                   defaultValue="0"
                   placeholder="0.00"
                 />

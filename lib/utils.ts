@@ -6,11 +6,12 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number, currency = "ARS"): string {
+  const decimals = currency === "BTC" ? 8 : 2;
   return new Intl.NumberFormat("es-AR", {
     style: "currency",
     currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: currency === "BTC" ? 2 : decimals,
+    maximumFractionDigits: decimals,
   }).format(amount);
 }
 
