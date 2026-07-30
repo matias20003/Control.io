@@ -3,8 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getConfig, getEditions } from "@/lib/db/newsletter";
 import { MyBriefClient } from "./MyBriefClient";
+import { MyCircleClient } from "./MyCircleClient";
 import { getBriefSources, getDiscoveryCandidates } from "@/lib/db/brief";
 import { ensureRadarForUser } from "@/lib/services/brief/radar";
+
+const MY_CIRCLE_EMAIL = "yorismatias372@gmail.com";
 
 export const metadata: Metadata = { title: "Mi Brief" };
 
@@ -34,6 +37,17 @@ export default async function NewsletterPage() {
     getBriefSources(user.id),
     getDiscoveryCandidates(user.id, config.discoveryLevel),
   ]);
+
+  if (user.email?.toLowerCase() === MY_CIRCLE_EMAIL) {
+    return (
+      <MyCircleClient
+        initialConfig={config}
+        initialEditions={editions}
+        initialSources={sources}
+        initialRadar={radar}
+      />
+    );
+  }
 
   return (
     <MyBriefClient

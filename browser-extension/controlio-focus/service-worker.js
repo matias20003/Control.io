@@ -93,8 +93,8 @@ async function openSession(message) {
 
   const requestedDuration = Math.floor(Number(message.durationSeconds));
   const durationSeconds = Math.min(
-    120,
-    Math.max(1, Number.isFinite(requestedDuration) ? requestedDuration : 120)
+    180,
+    Math.max(1, Number.isFinite(requestedDuration) ? requestedDuration : 180)
   );
 
   await clearSession("replaced", true);

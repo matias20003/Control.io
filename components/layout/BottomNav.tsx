@@ -35,9 +35,11 @@ const moreItems: NavItem[] = [
 export function BottomNav({
   newsletterUnread = false,
   showCorreos = false,
+  showMyCircle = false,
 }: {
   newsletterUnread?: boolean;
   showCorreos?: boolean;
+  showMyCircle?: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -136,7 +138,9 @@ export function BottomNav({
                         )}
                       </div>
                       <span className="text-sm font-medium text-center leading-tight">
-                        {item.label}
+                        {item.href === "/newsletter" && showMyCircle
+                          ? "Mi Círculo"
+                          : item.label}
                       </span>
                     </Link>
                   );

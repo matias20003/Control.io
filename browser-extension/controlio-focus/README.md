@@ -1,7 +1,7 @@
 # Control.io Focus
 
 Extensión privada de Chrome para abrir el perfil elegido desde **Mi círculo** en
-una ventana enfocada de hasta dos minutos.
+una ventana enfocada de hasta tres minutos.
 
 ## Qué hace
 
