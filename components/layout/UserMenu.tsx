@@ -49,7 +49,7 @@ export function UserMenu({ name, email }: { name: string; email: string }) {
         ref={btnRef}
         onClick={toggle}
         aria-label="Menú de usuario"
-        className="w-9 h-9 rounded-xl bg-primary/15 text-primary text-xs font-bold flex items-center justify-center hover:bg-primary/25 transition-colors shrink-0"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-xs font-bold text-primary transition-colors hover:bg-primary/25"
       >
         {initials}
       </button>
@@ -59,7 +59,7 @@ export function UserMenu({ name, email }: { name: string; email: string }) {
           <div
             ref={menuRef}
             style={{ position: "fixed", top: pos.top, right: pos.right }}
-            className="w-56 rounded-xl bg-surface border border-border shadow-xl p-1.5 z-[100]"
+            className="w-56 max-w-[calc(100vw-1rem)] rounded-xl bg-surface border border-border shadow-xl p-1.5 z-[100]"
           >
             <div className="px-2.5 py-2">
               <p className="text-sm font-medium text-foreground truncate">{name}</p>
@@ -69,21 +69,21 @@ export function UserMenu({ name, email }: { name: string; email: string }) {
             <Link
               href="/configuracion"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
+              className="flex min-h-11 items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
             >
               <Settings size={15} /> Configuración
             </Link>
             <button
               type="button"
               onClick={() => { setOpen(false); window.dispatchEvent(new Event("feedback:open")); }}
-              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
+              className="w-full flex min-h-11 items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
             >
               <MessageSquarePlus size={15} /> Enviar feedback
             </button>
             <form action={signOutAction}>
               <button
                 type="submit"
-                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-muted hover:text-danger hover:bg-danger/8 transition-colors cursor-pointer"
+                className="w-full flex min-h-11 items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-muted hover:text-danger hover:bg-danger/8 transition-colors cursor-pointer"
               >
                 <LogOut size={15} /> Cerrar sesión
               </button>

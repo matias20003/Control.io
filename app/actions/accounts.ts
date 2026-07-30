@@ -75,8 +75,8 @@ export async function updateAccountAction(accountId: string, formData: FormData)
     revalidatePath("/dashboard");
     revalidatePath("/movimientos");
     return { success: true, account };
-  } catch {
-    return { error: "Error al actualizar la cuenta" };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Error al actualizar la cuenta" };
   }
 }
 

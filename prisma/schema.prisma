@@ -182,8 +182,12 @@ model Transaction {
   type             TransactionType
   amount           Decimal         @db.Decimal(15, 2)
   currency         String          @default("ARS")
+  destinationAmount   Decimal?     @db.Decimal(15, 2)
+  destinationCurrency String?
   amountARS        Decimal?        @db.Decimal(15, 2)
-  exchangeRate     Decimal?        @db.Decimal(10, 4)
+  exchangeRate     Decimal?        @db.Decimal(18, 8)
+  rateBaseCurrency  String?
+  rateQuoteCurrency String?
   description      String?
   date             DateTime
   categoryId       String?

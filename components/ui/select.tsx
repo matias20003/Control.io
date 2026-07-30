@@ -15,7 +15,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           className={cn(
             "w-full h-11 px-3 pr-9 rounded-lg",
             "bg-surface border border-border",
-            "text-sm text-foreground",
+            "text-base md:text-sm text-foreground",
             "transition-colors duration-150",
             "hover:border-muted-2",
             "focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/70",

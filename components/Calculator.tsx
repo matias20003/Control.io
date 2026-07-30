@@ -233,7 +233,7 @@ export function CalculatorTrigger() {
       onClick={() => window.dispatchEvent(new CustomEvent("calculator:open"))}
       title="Abrir calculadora"
       aria-label="Abrir calculadora"
-      className="p-2 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+      className="flex h-11 w-11 items-center justify-center rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
     >
       <CalculatorIcon size={16} />
     </button>

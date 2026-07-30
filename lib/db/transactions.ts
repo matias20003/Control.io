@@ -3,12 +3,18 @@ import { startOfMonth, endOfMonth } from "date-fns";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { startOfTodayArg, endOfTodayArg } from "@/lib/timezone";
 import { snapshotConversion } from "@/lib/exchange";
+import { calculateTransferConversion } from "@/lib/transfer-conversion";
 
 export type SerializedTransaction = {
   id: string;
   type: string;
   amount: number;
   currency: string;
+  destinationAmount: number | null;
+  destinationCurrency: string | null;
+  exchangeRate: number | null;
+  rateBaseCurrency: string | null;
+  rateQuoteCurrency: string | null;
   description: string | null;
   date: string;
   categoryId: string | null;
@@ -34,6 +40,11 @@ function serialize(tx: any): SerializedTransaction {
     type: tx.type,
     amount: toNum(tx.amount),
     currency: tx.currency,
+    destinationAmount: tx.destinationAmount == null ? null : toNum(tx.destinationAmount),
+    destinationCurrency: tx.destinationCurrency,
+    exchangeRate: tx.exchangeRate == null ? null : toNum(tx.exchangeRate),
+    rateBaseCurrency: tx.rateBaseCurrency,
+    rateQuoteCurrency: tx.rateQuoteCurrency,
     description: decrypt(tx.description),           // ← decrypt on read
     date: tx.date instanceof Date ? tx.date.toISOString() : tx.date,
     categoryId: tx.categoryId,
@@ -188,6 +199,7 @@ export async function getLastMovementDate(userId: string): Promise<Date | null> 
 export async function createTransaction(userId: string, data: {
   type: string; amount: number; currency: string; description?: string;
   date: string; categoryId?: string; accountId?: string; toAccountId?: string; notes?: string;
+  exchangeRate?: number;
 }) {
   // Las transferencias no llevan categoría (evita relaciones huérfanas que
   // luego confunden a reportes y presupuestos).
@@ -196,13 +208,17 @@ export async function createTransaction(userId: string, data: {
   // Pre-validamos ownership de cuentas/categoría. Sin esto un cliente malicioso
   // podría enviar IDs de otro usuario y, aunque Prisma rechace el update por la
   // composite where, igual queda creada la Transaction con FKs inválidos.
+  let sourceAccount: { id: string; currency: string } | null = null;
+  let destinationAccount: { id: string; currency: string } | null = null;
   if (data.accountId) {
-    const acc = await prisma.account.findFirst({ where: { id: data.accountId, userId }, select: { id: true } });
+    const acc = await prisma.account.findFirst({ where: { id: data.accountId, userId }, select: { id: true, currency: true } });
     if (!acc) throw new Error("Cuenta inválida");
+    sourceAccount = acc;
   }
   if (data.toAccountId) {
-    const toAcc = await prisma.account.findFirst({ where: { id: data.toAccountId, userId }, select: { id: true } });
+    const toAcc = await prisma.account.findFirst({ where: { id: data.toAccountId, userId }, select: { id: true, currency: true } });
     if (!toAcc) throw new Error("Cuenta destino inválida");
+    destinationAccount = toAcc;
   }
   if (data.categoryId) {
     const cat = await prisma.category.findFirst({ where: { id: data.categoryId, userId }, select: { id: true } });
@@ -211,7 +227,30 @@ export async function createTransaction(userId: string, data: {
 
   // Snapshot del tipo de cambio. Si el movimiento es en USD lo dejamos
   // expresado también en ARS para que los reportes puedan sumar todo.
-  const { amountARS, exchangeRate } = await snapshotConversion(data.amount, data.currency);
+  const sourceCurrency = sourceAccount?.currency ?? data.currency;
+  if (data.type === "TRANSFER" && (!sourceAccount || !destinationAccount)) {
+    throw new Error("Elegí las cuentas de origen y destino");
+  }
+  if (data.type === "TRANSFER" && sourceAccount!.id === destinationAccount!.id) {
+    throw new Error("Las cuentas deben ser distintas");
+  }
+
+  const conversion = data.type === "TRANSFER"
+    ? calculateTransferConversion(
+        data.amount,
+        sourceCurrency,
+        destinationAccount!.currency,
+        data.exchangeRate,
+      )
+    : null;
+  const snapshot = conversion
+    ? {
+        amountARS: conversion.sourceCurrency === "ARS"
+          ? data.amount
+          : data.amount * conversion.exchangeRate,
+        exchangeRate: conversion.exchangeRate,
+      }
+    : await snapshotConversion(data.amount, sourceCurrency);
 
   // Todo el flujo en una sola tx para que crear el movimiento + actualizar saldos
   // sean atómicos: si una operación falla, ninguna persiste.
@@ -221,9 +260,13 @@ export async function createTransaction(userId: string, data: {
         userId,
         type: data.type as any,
         amount: data.amount,
-        currency: data.currency,
-        amountARS,
-        exchangeRate,
+        currency: sourceCurrency,
+        destinationAmount: conversion?.destinationAmount ?? null,
+        destinationCurrency: conversion?.destinationCurrency ?? null,
+        amountARS: snapshot.amountARS,
+        exchangeRate: snapshot.exchangeRate,
+        rateBaseCurrency: conversion?.rateBaseCurrency ?? null,
+        rateQuoteCurrency: conversion?.rateQuoteCurrency ?? null,
         description: encrypt(data.description || null), // ← encrypt on write
         date: new Date(data.date),
         categoryId: data.categoryId || null,
@@ -248,7 +291,7 @@ export async function createTransaction(userId: string, data: {
     if (data.type === "TRANSFER" && data.toAccountId) {
       await db.account.update({
         where: { id: data.toAccountId, userId },
-        data: { balance: { increment: data.amount } },
+        data: { balance: { increment: conversion!.destinationAmount } },
       });
     }
 
@@ -262,24 +305,39 @@ export async function updateTransaction(
   data: {
     type: string; amount: number; currency: string; description?: string;
     date: string; categoryId?: string; accountId?: string; toAccountId?: string; notes?: string;
+    exchangeRate?: number;
   }
 ) {
   const existing = await prisma.transaction.findFirst({ where: { id: transactionId, userId } });
   if (!existing) throw new Error("No encontrado");
 
   // Validar ownership de las nuevas cuentas/categoría antes de tocar saldos.
+  let sourceAccount: { id: string; currency: string } | null = null;
+  let destinationAccount: { id: string; currency: string } | null = null;
   if (data.accountId) {
-    const acc = await prisma.account.findFirst({ where: { id: data.accountId, userId }, select: { id: true } });
+    const acc = await prisma.account.findFirst({ where: { id: data.accountId, userId }, select: { id: true, currency: true } });
     if (!acc) throw new Error("Cuenta inválida");
+    sourceAccount = acc;
   }
   if (data.toAccountId) {
-    const toAcc = await prisma.account.findFirst({ where: { id: data.toAccountId, userId }, select: { id: true } });
+    const toAcc = await prisma.account.findFirst({ where: { id: data.toAccountId, userId }, select: { id: true, currency: true } });
     if (!toAcc) throw new Error("Cuenta destino inválida");
+    destinationAccount = toAcc;
   }
   if (data.categoryId) {
     const cat = await prisma.category.findFirst({ where: { id: data.categoryId, userId }, select: { id: true } });
     if (!cat) throw new Error("Categoría inválida");
   }
+  const sourceCurrency = sourceAccount?.currency ?? data.currency;
+  if (data.type === "TRANSFER" && (!sourceAccount || !destinationAccount)) {
+    throw new Error("Elegí las cuentas de origen y destino");
+  }
+  if (data.type === "TRANSFER" && sourceAccount!.id === destinationAccount!.id) {
+    throw new Error("Las cuentas deben ser distintas");
+  }
+  const conversion = data.type === "TRANSFER"
+    ? calculateTransferConversion(data.amount, sourceCurrency, destinationAccount!.currency, data.exchangeRate)
+    : null;
 
   // Reverso + write + apply, todo atómico. Si algo falla, los saldos
   // no quedan a medio actualizar.
@@ -290,21 +348,33 @@ export async function updateTransaction(
       await db.account.update({ where: { id: existing.accountId, userId }, data: { balance: { increment: reverseDelta } } });
     }
     if (existing.type === "TRANSFER" && existing.toAccountId) {
-      await db.account.update({ where: { id: existing.toAccountId, userId }, data: { balance: { increment: -toNum(existing.amount) } } });
+      const oldDestinationAmount = existing.destinationAmount == null
+        ? toNum(existing.amount)
+        : toNum(existing.destinationAmount);
+      await db.account.update({ where: { id: existing.toAccountId, userId }, data: { balance: { increment: -oldDestinationAmount } } });
     }
 
     // Snapshot del rate también en update — el usuario puede haber cambiado
     // el monto o la moneda y queremos que amountARS quede coherente.
-    const { amountARS, exchangeRate } = await snapshotConversion(data.amount, data.currency);
+    const snapshot = conversion
+      ? {
+          amountARS: conversion.sourceCurrency === "ARS" ? data.amount : data.amount * conversion.exchangeRate,
+          exchangeRate: conversion.exchangeRate,
+        }
+      : await snapshotConversion(data.amount, sourceCurrency);
 
     const updated = await db.transaction.update({
       where: { id: transactionId, userId },
       data: {
         type: data.type as any,
         amount: data.amount,
-        currency: data.currency,
-        amountARS,
-        exchangeRate,
+        currency: sourceCurrency,
+        destinationAmount: conversion?.destinationAmount ?? null,
+        destinationCurrency: conversion?.destinationCurrency ?? null,
+        amountARS: snapshot.amountARS,
+        exchangeRate: snapshot.exchangeRate,
+        rateBaseCurrency: conversion?.rateBaseCurrency ?? null,
+        rateQuoteCurrency: conversion?.rateQuoteCurrency ?? null,
         description: encrypt(data.description || null), // ← encrypt on write
         date: new Date(data.date),
         categoryId: data.categoryId || null,
@@ -324,7 +394,7 @@ export async function updateTransaction(
       await db.account.update({ where: { id: data.accountId, userId }, data: { balance: { increment: delta } } });
     }
     if (data.type === "TRANSFER" && data.toAccountId) {
-      await db.account.update({ where: { id: data.toAccountId, userId }, data: { balance: { increment: data.amount } } });
+      await db.account.update({ where: { id: data.toAccountId, userId }, data: { balance: { increment: conversion!.destinationAmount } } });
     }
 
     return serialize(updated);
@@ -346,9 +416,10 @@ export async function deleteTransaction(userId: string, transactionId: string) {
       });
     }
     if (tx.type === "TRANSFER" && tx.toAccountId) {
+      const destinationAmount = tx.destinationAmount == null ? toNum(tx.amount) : toNum(tx.destinationAmount);
       await db.account.update({
         where: { id: tx.toAccountId, userId },
-        data: { balance: { increment: -toNum(tx.amount) } },
+        data: { balance: { increment: -destinationAmount } },
       });
     }
     await db.transaction.delete({ where: { id: transactionId, userId } });

@@ -159,6 +159,7 @@ html {
   background-color: var(--color-background);
   color: var(--color-foreground);
   height: 100%;
+  overflow-x: clip;
   -webkit-text-size-adjust: 100%;
   text-rendering: optimizeLegibility;
 }
@@ -168,10 +169,22 @@ body {
   font-size: var(--text-base);
   line-height: 1.55;
   min-height: 100dvh;
+  min-width: 320px;
+  overflow-x: clip;
   background-color: var(--color-background);
   color: var(--color-foreground);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* En teléfonos, el contenido secundario también debe seguir siendo legible.
+   Los inputs suben a 16px desde sus componentes para evitar el auto-zoom de
+   Safari; acá elevamos únicamente la escala compacta del sistema a 14px. */
+@media (max-width: 767px) {
+  :root {
+    --text-xs: 0.875rem;
+    --text-sm: 0.875rem;
+  }
 }
 
 /* ── Ambient mesh: gradientes radiales tonales detrás de toda la app.
@@ -252,7 +265,7 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: var(--color-muted-2); }
 
 /* ── Safe area mobile ── */
-.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pb-safe { padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.25rem); }
 
 /* ── Focus visible global ── */
 :focus-visible {

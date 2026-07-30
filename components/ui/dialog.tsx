@@ -51,11 +51,11 @@ export function DialogContent({
       <DialogPrimitive.Content
         className={cn(
           "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[70]",
-          "w-[calc(100vw-2rem)] max-w-md",
+          "w-[calc(100vw-1rem)] sm:w-[calc(100vw-2rem)] max-w-md",
           // Límite de alto al viewport + columna flex: el header queda fijo y el
           // cuerpo scrollea. Sin esto, los formularios largos se salían de la
           // pantalla y el botón "Guardar" quedaba inalcanzable.
-          "max-h-[calc(100dvh-2rem)] flex flex-col",
+          "max-h-[calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col",
           // Volvemos al fondo sólido. Combinar backdrop-filter en el overlay
           // con otro backdrop-filter en el content hace que Chrome desactive
           // el segundo: el contenido del modal queda invisible aunque el
@@ -72,7 +72,7 @@ export function DialogContent({
         )}
       >
         {/* Header — fijo */}
-        <div className="flex items-start justify-between p-6 pb-4 shrink-0">
+        <div className="flex items-start justify-between p-4 pb-3 sm:p-6 sm:pb-4 shrink-0">
           <div>
             <DialogPrimitive.Title className="text-base font-semibold text-foreground tracking-tight leading-tight">
               {title}
@@ -87,9 +87,9 @@ export function DialogContent({
             <button
               aria-label="Cerrar"
               className={cn(
-                "ml-4 -mt-0.5 -mr-0.5 p-2.5 rounded-lg",
+                "ml-4 -mt-0.5 -mr-0.5 h-11 w-11 rounded-lg",
                 "text-muted hover:text-foreground hover:bg-surface-2",
-                "transition-colors duration-150 flex-shrink-0"
+                "transition-colors duration-150 flex flex-shrink-0 items-center justify-center"
               )}
             >
               <X size={18} strokeWidth={2} />
@@ -98,7 +98,7 @@ export function DialogContent({
         </div>
 
         {/* Cuerpo — scrolleable */}
-        <div className="px-6 pb-6 overflow-y-auto overscroll-contain">
+        <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-4 sm:px-6 sm:pb-6">
           {children}
         </div>
       </DialogPrimitive.Content>

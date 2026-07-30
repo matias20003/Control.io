@@ -6,13 +6,13 @@ import { UserMenu } from "@/components/layout/UserMenu";
 export function Header({ name, email }: { name: string; email: string }) {
   return (
     <header
-      className="md:hidden sticky top-0 z-20 flex items-center justify-between px-4 pb-2 glass-strong glass-highlight border-b border-[color:var(--glass-border)]"
+      className="md:hidden sticky top-0 z-20 flex min-w-0 items-center justify-between gap-2 px-3 pb-2 min-[390px]:px-4 glass-strong glass-highlight border-b border-[color:var(--glass-border)]"
       style={{
         paddingTop: "calc(0.5rem + env(safe-area-inset-top, 0px))",
       }}
     >
       <LogoFull size="sm" />
-      <div className="flex items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-0.5 min-[390px]:gap-1">
         <CalculatorTrigger />
         <PushProvider />
         <UserMenu name={name} email={email} />

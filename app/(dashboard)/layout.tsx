@@ -44,7 +44,7 @@ export default async function DashboardLayout({
       <Sidebar newsletterUnread={newsletterUnread} showCorreos={showCorreos} showMyCircle={showMyCircle} />
       <Header name={name} email={user.email ?? ""} />
       <Calculator />
-      <main className="md:ml-60 pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-0 min-h-dvh">
+      <main className="min-h-dvh min-w-0 w-full overflow-x-clip pb-[calc(7rem+env(safe-area-inset-bottom))] md:ml-60 md:w-auto md:pb-0">
         <Topbar name={name} email={user.email ?? ""} />
         <InstallBanner />
         {children}
