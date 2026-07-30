@@ -2,21 +2,14 @@ import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { getConfig, getEditions } from "@/lib/db/newsletter";
-import { MyBriefClient } from "./MyBriefClient";
 import { MyCircleClient } from "./MyCircleClient";
 import {
   getBriefSources,
   getDailyTrendCandidates,
-  getDiscoveryCandidates,
 } from "@/lib/db/brief";
-import {
-  ensureDailyTrendsForUser,
-  ensureRadarForUser,
-} from "@/lib/services/brief/radar";
+import { ensureDailyTrendsForUser } from "@/lib/services/brief/radar";
 
-const MY_CIRCLE_EMAIL = "yorismatias372@gmail.com";
-
-export const metadata: Metadata = { title: "Mi Brief" };
+export const metadata: Metadata = { title: "Mi Círculo" };
 
 // "Generar ahora" puede esperar a un modelo free lento (hasta ~20s). Damos
 // margen para que la server action no corte antes de tiempo.
@@ -30,43 +23,20 @@ export default async function NewsletterPage() {
   if (!user) redirect("/login");
 
   const config = await getConfig(user.id);
-  const showMyCircle = user.email?.toLowerCase() === MY_CIRCLE_EMAIL;
-  const radarTask = showMyCircle
-    ? ensureDailyTrendsForUser(user.id, {
-        language: config.language,
-        country: config.country,
-      })
-    : ensureRadarForUser(user.id, {
-        level: config.discoveryLevel,
-        topics: config.topics,
-        priorityTopics: config.priorityTopics,
-        language: config.language,
-        country: config.country,
-      });
-  await radarTask.catch(() => {
+  await ensureDailyTrendsForUser(user.id, {
+    language: config.language,
+    country: config.country,
+  }).catch(() => {
     // Radar es secundario: una fuente externa nunca bloquea la lectura del Brief.
   });
   const [editions, sources, radar] = await Promise.all([
     getEditions(user.id, 30),
     getBriefSources(user.id),
-    showMyCircle
-      ? getDailyTrendCandidates(user.id)
-      : getDiscoveryCandidates(user.id, config.discoveryLevel),
+    getDailyTrendCandidates(user.id),
   ]);
 
-  if (showMyCircle) {
-    return (
-      <MyCircleClient
-        initialConfig={config}
-        initialEditions={editions}
-        initialSources={sources}
-        initialRadar={radar}
-      />
-    );
-  }
-
   return (
-    <MyBriefClient
+    <MyCircleClient
       initialConfig={config}
       initialEditions={editions}
       initialSources={sources}

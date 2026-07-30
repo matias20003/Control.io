@@ -36,8 +36,7 @@ export default async function DashboardLayout({
   const newsletterUnread = await hasUnreadTodayEdition(user.id).catch(() => false);
   // "Correos" (bandeja unificada) solo para el dueño.
   const showCorreos = !!process.env.ADMIN_EMAIL && user.email === process.env.ADMIN_EMAIL;
-  const showMyCircle =
-    user.email?.toLowerCase() === "yorismatias372@gmail.com";
+  const showMyCircle = true;
 
   return (
     <div className="ambient-mesh min-h-dvh bg-background">
