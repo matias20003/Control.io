@@ -15,6 +15,7 @@ type RateReference = {
   buy: number;
   sell: number;
   updatedAt: string;
+  checkedAt: string;
   source: string;
 };
 
@@ -42,7 +43,9 @@ export function TransferFields({
   const [rateTouched, setRateTouched] = useState(!!defaultExchangeRate && defaultExchangeRate !== 1);
   const [reference, setReference] = useState<RateReference | null>(null);
   const [loadingReference, setLoadingReference] = useState(false);
+  const [referenceRefreshKey, setReferenceRefreshKey] = useState(0);
   const previousForeignCurrency = useRef<string | null>(null);
+  const referenceRequest = useRef(0);
 
   const from = accounts.find((account) => account.id === fromId);
   const to = accounts.find((account) => account.id === toId);
@@ -70,17 +73,50 @@ export function TransferFields({
       setRateTouched(false);
     }
     previousForeignCurrency.current = foreignCurrency;
-    const controller = new AbortController();
-    setLoadingReference(true);
-    fetch(`/api/cotizaciones/referencia?currency=${encodeURIComponent(foreignCurrency)}`, {
-      signal: controller.signal,
-    })
-      .then((response) => response.json())
-      .then((payload) => setReference(payload.ok ? payload.data : null))
-      .catch(() => setReference(null))
-      .finally(() => setLoadingReference(false));
-    return () => controller.abort();
-  }, [foreignCurrency]);
+    let controller: AbortController | null = null;
+
+    const refreshReference = () => {
+      controller?.abort();
+      controller = new AbortController();
+      const requestId = ++referenceRequest.current;
+      setLoadingReference(true);
+      fetch(
+        `/api/cotizaciones/referencia?currency=${encodeURIComponent(foreignCurrency)}&t=${Date.now()}`,
+        {
+          signal: controller.signal,
+          cache: "no-store",
+        }
+      )
+        .then((response) => response.json())
+        .then((payload) => {
+          if (requestId === referenceRequest.current) {
+            setReference(payload.ok ? payload.data : null);
+          }
+        })
+        .catch((error) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          if (requestId === referenceRequest.current) setReference(null);
+        })
+        .finally(() => {
+          if (requestId === referenceRequest.current) setLoadingReference(false);
+        });
+    };
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshReference();
+    };
+
+    refreshReference();
+    const interval = window.setInterval(refreshWhenVisible, 60_000);
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      controller?.abort();
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [foreignCurrency, referenceRefreshKey]);
 
   useEffect(() => {
     if (suggestedRate && !rateTouched) setRate(String(suggestedRate));
@@ -105,6 +141,10 @@ export function TransferFields({
   const updateLabel = reference
     ? new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
         .format(new Date(reference.updatedAt))
+    : null;
+  const checkedLabel = reference
+    ? new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+        .format(new Date(reference.checkedAt))
     : null;
 
   return (
@@ -159,11 +199,23 @@ export function TransferFields({
                     {loadingReference
                       ? "Consultando DolarAPI…"
                       : reference
-                        ? `${reference.source} · ${updateLabel}`
+                        ? `${reference.source} · cotización ${updateLabel} · verificada ${checkedLabel}`
                         : "Referencia no disponible; podés ingresar tu cotización manual"}
                   </p>
                 </div>
-                {loadingReference && <RefreshCw size={14} className="animate-spin text-primary shrink-0" />}
+                <button
+                  type="button"
+                  onClick={() => setReferenceRefreshKey((current) => current + 1)}
+                  disabled={loadingReference}
+                  aria-label="Actualizar cotización ahora"
+                  title="Actualizar cotización ahora"
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-primary hover:bg-primary/10 disabled:cursor-wait"
+                >
+                  <RefreshCw
+                    size={14}
+                    className={loadingReference ? "animate-spin" : ""}
+                  />
+                </button>
               </div>
               {reference && (
                 <div className="grid grid-cols-2 gap-2">

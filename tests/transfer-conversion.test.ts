@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { calculateTransferConversion } from "@/lib/transfer-conversion";
+import { getTransferRateReference } from "@/lib/services/transfer-rates";
 
 describe("calculateTransferConversion", () => {
   it("vende USD y acredita ARS multiplicando por la cotización", () => {
@@ -33,5 +34,39 @@ describe("calculateTransferConversion", () => {
 
   it("conserva ocho decimales al comprar bitcoin", () => {
     expect(calculateTransferConversion(100000, "ARS", "BTC", 150000000).destinationAmount).toBe(0.00066667);
+  });
+});
+
+describe("getTransferRateReference", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("consulta DolarAPI sin caché y registra cuándo se verificó", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          compra: 1460,
+          venta: 1510,
+          fechaActualizacion: "2026-07-30T15:00:00.000Z",
+        }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getTransferRateReference("USD");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://dolarapi.com/v1/dolares/oficial",
+      { cache: "no-store" }
+    );
+    expect(result).toMatchObject({
+      buy: 1460,
+      sell: 1510,
+      updatedAt: "2026-07-30T15:00:00.000Z",
+      source: "DolarAPI",
+    });
+    expect(Date.parse(result?.checkedAt ?? "")).not.toBeNaN();
   });
 });
