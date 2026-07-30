@@ -203,6 +203,7 @@ export async function generateRadarForUser(
         userId,
         date,
         status: "PENDING",
+        candidateType: { not: "TREND" },
         ...(activeUrls.length > 0
           ? { profileUrl: { notIn: activeUrls } }
           : {}),
