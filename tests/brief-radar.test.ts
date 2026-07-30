@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RawArticle } from "@/lib/services/news";
-import { fetchNewsForTopic } from "@/lib/services/news";
+import { fetchNewsForTopic, fetchTopNews } from "@/lib/services/news";
 import {
   buildRadarCandidates,
   normalizeRadarProfileUrl,
@@ -167,6 +167,40 @@ describe("fetchNewsForTopic", () => {
       source: "Arquitectura Hoy",
       sourceUrl: "https://www.arquitecturahoy.com/",
       topic: "Arquitectura",
+    });
+  });
+
+  it("trae la portada general sin usar temas personales", async () => {
+    const xml = `<?xml version="1.0"?>
+      <rss><channel><item>
+        <title>El tema principal del día - Reuters</title>
+        <link>https://news.google.com/rss/articles/trend</link>
+        <source url="https://www.reuters.com/">Reuters</source>
+        <pubDate>Thu, 30 Jul 2026 12:00:00 GMT</pubDate>
+        <description>Una noticia de alcance general.</description>
+      </item></channel></rss>`;
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(xml, {
+        status: 200,
+        headers: { "Content-Type": "application/rss+xml" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const articles = await fetchTopNews({
+      language: "es",
+      country: "ar",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://news.google.com/rss?hl=es-419&gl=AR&ceid=AR:es",
+      expect.any(Object)
+    );
+    expect(articles[0]).toMatchObject({
+      title: "El tema principal del día",
+      source: "Reuters",
+      topic: "Actualidad general",
+      reputable: true,
     });
   });
 });

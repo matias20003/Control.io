@@ -1,17 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
-  ArrowDown,
   ArrowRight,
-  ArrowUp,
   CheckCircle2,
   Clock3,
   ExternalLink,
   Camera as Instagram,
   Loader2,
   MessageCircle,
-  Minus,
   Newspaper,
   Plus,
   Radar,
@@ -67,7 +64,7 @@ const SECTION_LINKS = [
   {
     id: "radar" as const,
     label: "Radar",
-    description: "Tres señales relevantes, explicadas",
+    description: "Los temas que están en auge hoy",
     icon: Radar,
   },
 ];
@@ -288,7 +285,7 @@ export function MyCircleClient({
         <NewsView items={newsItems} onOpenItem={openItem} />
       )}
       {section === "radar" && (
-        <RadarView radar={initialRadar} items={newsItems} />
+        <RadarView radar={initialRadar} />
       )}
       {section === "settings" && (
         <CircleSettings
@@ -434,12 +431,12 @@ function CircleHome({
 
         <DashboardColumn
           title="Radar"
-          subtitle="Tres temas relevantes para vos"
+          subtitle="La agenda general del día"
           action="Abrir Radar"
           onAction={() => onSection("radar")}
           last
         >
-          <TrendTable radar={radar} items={newsItems} compact />
+          <TrendTable radar={radar} compact />
         </DashboardColumn>
       </section>
     </div>
@@ -826,22 +823,16 @@ function NewsView({
   );
 }
 
-function RadarView({
-  radar,
-  items,
-}: {
-  radar: SerializedDiscoveryCandidate[];
-  items: SerializedBriefItem[];
-}) {
+function RadarView({ radar }: { radar: SerializedDiscoveryCandidate[] }) {
   return (
     <section className="mt-7">
       <SectionHeading
-        eyebrow="Señales, no estímulos"
-        title="Radar"
-        description="Tres temas vinculados a tus intereses, comparados y explicados con fuentes."
+        eyebrow="Panorama general"
+        title="Lo que está pasando hoy"
+        description="Tres temas en auge de la agenda general, aunque no estén entre tus intereses o referentes."
       />
-      <div className="mt-7 overflow-hidden rounded-xl border border-border bg-surface/50 p-4 sm:p-6">
-        <TrendTable radar={radar} items={items} />
+      <div className="mt-7 overflow-hidden rounded-xl border border-border bg-surface/50 px-4 sm:px-6">
+        <TrendTable radar={radar} />
       </div>
     </section>
   );
@@ -849,143 +840,85 @@ function RadarView({
 
 function TrendTable({
   radar,
-  items,
   compact = false,
 }: {
   radar: SerializedDiscoveryCandidate[];
-  items: SerializedBriefItem[];
   compact?: boolean;
 }) {
-  const trends = useMemo(() => {
-    const candidates = radar.slice(0, 3).map((candidate, index) => ({
-      topic: candidate.topic || candidate.sourceName,
-      explanation: candidate.explanation,
-      sources: Math.max(1, Number(candidate.signals?.citations ?? 1)),
-      relevance: index === 0 ? "Alta" : "Media",
-      direction: index === 0 ? "up" : index === 1 ? "stable" : "down",
-    }));
-    if (candidates.length < 3) {
-      const counts = new Map<string, number>();
-      for (const item of items) {
-        const topic = item.topic || "Actualidad";
-        counts.set(topic, (counts.get(topic) ?? 0) + 1);
-      }
-      for (const [topic, count] of [...counts.entries()].sort(
-        (a, b) => b[1] - a[1]
-      )) {
-        if (candidates.length >= 3) break;
-        if (candidates.some((candidate) => candidate.topic === topic)) continue;
-        candidates.push({
-          topic,
-          explanation: "Aparece con frecuencia entre tus fuentes verificadas.",
-          sources: count,
-          relevance: candidates.length === 0 ? "Alta" : "Media",
-          direction: candidates.length === 0 ? "up" : "stable",
-        });
-      }
-    }
-    return candidates.slice(0, 3);
-  }, [items, radar]);
+  const trends = radar.slice(0, 3);
 
   if (trends.length === 0) {
     return (
-      <QuietEmpty text="Radar necesita temas y una edición para comparar señales." />
+      <QuietEmpty text="Todavía no hay un panorama confiable del día. Volvé a actualizar en unos minutos." />
     );
   }
 
   return (
-    <>
-      <div className="divide-y divide-border sm:hidden">
-        {trends.map((trend, index) => (
-          <article key={trend.topic} className="py-4">
-            <div className="flex items-start gap-3">
-              <span className="font-news text-xl text-muted">{index + 1}</span>
-              <div className="min-w-0 flex-1">
-                <h3 className="font-semibold text-foreground">{trend.topic}</h3>
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs">
-                  <span className="text-muted">
-                    Relevancia:{" "}
-                    <strong className="text-foreground">{trend.relevance}</strong>
-                  </span>
-                  <TrendDirection direction={trend.direction} />
-                  <span className="text-muted">
-                    Fuentes:{" "}
-                    <strong className="font-mono text-foreground">
-                      {trend.sources}
-                    </strong>
-                  </span>
-                </div>
-                {!compact && (
-                  <p className="mt-3 text-xs leading-relaxed text-muted">
-                    {trend.explanation}
-                  </p>
+    <div className="divide-y divide-border">
+      {trends.map((trend, index) => {
+        const publishedAt = metadataText(
+          trend.signals,
+          "latestPublishedAt"
+        );
+        const reputable = trend.signals?.reputable === true;
+        return (
+          <article
+            key={trend.id}
+            className={`grid gap-3 py-5 ${
+              compact
+                ? "grid-cols-[2rem_1fr_auto]"
+                : "md:grid-cols-[2.5rem_1fr_auto] md:gap-5 md:py-6"
+            }`}
+          >
+            <span className="font-news text-xl text-muted-2">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-primary">
+                En auge hoy
+              </p>
+              <h3
+                className={`mt-1 text-foreground ${
+                  compact
+                    ? "line-clamp-2 text-sm font-semibold leading-snug"
+                    : "font-news text-xl leading-snug sm:text-2xl"
+                }`}
+              >
+                {trend.topic || trend.sourceName}
+              </h3>
+              {!compact && (
+                <p className="mt-3 max-w-[70ch] text-sm leading-relaxed text-muted">
+                  {trend.explanation}
+                </p>
+              )}
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                <span>{trend.sourceName}</span>
+                <span aria-hidden="true">·</span>
+                <span>{timeAgo(publishedAt)}</span>
+                {reputable && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="inline-flex items-center gap-1 text-success">
+                      <ShieldCheck size={13} />
+                      Fuente reconocida
+                    </span>
+                  </>
                 )}
               </div>
             </div>
+            <a
+              href={trend.profileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Leer noticia: ${trend.topic || trend.sourceName}`}
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-primary transition-colors hover:bg-primary/8"
+            >
+              <ExternalLink size={17} />
+            </a>
           </article>
-        ))}
-      </div>
-      <div className="hidden overflow-x-auto sm:block">
-        <table className="w-full min-w-[660px] border-collapse text-left text-sm">
-        <thead>
-          <tr className="border-b border-border text-xs text-muted">
-            <th className="w-8 py-3 pr-3 font-medium">#</th>
-            <th className="py-3 pr-4 font-medium">Tema</th>
-            <th className="py-3 pr-4 font-medium">Relevancia</th>
-            <th className="py-3 pr-4 font-medium">Vs. ayer</th>
-            <th className="py-3 pr-4 font-medium">Fuentes</th>
-            {!compact && <th className="py-3 font-medium">Por qué importa</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {trends.map((trend, index) => (
-            <tr key={trend.topic} className="border-b border-border last:border-0">
-              <td className="py-4 pr-3 font-news text-lg text-muted">
-                {index + 1}
-              </td>
-              <td className="py-4 pr-4 font-semibold text-foreground">
-                {trend.topic}
-              </td>
-              <td className="py-4 pr-4 text-foreground">{trend.relevance}</td>
-              <td className="py-4 pr-4">
-                <TrendDirection direction={trend.direction} />
-              </td>
-              <td className="py-4 pr-4 font-mono text-foreground">
-                {trend.sources}
-              </td>
-              {!compact && (
-                <td className="max-w-[34ch] py-4 text-xs leading-relaxed text-muted">
-                  {trend.explanation}
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-        </table>
-      </div>
-    </>
-  );
-}
-
-function TrendDirection({ direction }: { direction: string }) {
-  if (direction === "up") {
-    return (
-      <span className="inline-flex items-center gap-1 text-success">
-        <ArrowUp size={14} /> Sube
-      </span>
-    );
-  }
-  if (direction === "down") {
-    return (
-      <span className="inline-flex items-center gap-1 text-danger">
-        <ArrowDown size={14} /> Baja
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-muted">
-      <Minus size={14} /> Estable
-    </span>
+        );
+      })}
+    </div>
   );
 }
 

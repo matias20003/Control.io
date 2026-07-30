@@ -310,6 +310,22 @@ export async function getDiscoveryCandidates(
   return rows.map(serializeCandidate);
 }
 
+export async function getDailyTrendCandidates(
+  userId: string
+): Promise<SerializedDiscoveryCandidate[]> {
+  const rows = await prisma.discoveryCandidate.findMany({
+    where: {
+      userId,
+      date: startOfTodayArg(),
+      candidateType: "TREND",
+      status: "PENDING",
+    },
+    orderBy: [{ score: "desc" }, { createdAt: "asc" }],
+    take: 3,
+  });
+  return rows.map(serializeCandidate);
+}
+
 export async function updateDiscoveryCandidate(
   userId: string,
   candidateId: string,

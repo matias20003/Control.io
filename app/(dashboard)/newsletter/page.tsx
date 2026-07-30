@@ -4,8 +4,15 @@ import { redirect } from "next/navigation";
 import { getConfig, getEditions } from "@/lib/db/newsletter";
 import { MyBriefClient } from "./MyBriefClient";
 import { MyCircleClient } from "./MyCircleClient";
-import { getBriefSources, getDiscoveryCandidates } from "@/lib/db/brief";
-import { ensureRadarForUser } from "@/lib/services/brief/radar";
+import {
+  getBriefSources,
+  getDailyTrendCandidates,
+  getDiscoveryCandidates,
+} from "@/lib/db/brief";
+import {
+  ensureDailyTrendsForUser,
+  ensureRadarForUser,
+} from "@/lib/services/brief/radar";
 
 const MY_CIRCLE_EMAIL = "yorismatias372@gmail.com";
 
@@ -23,22 +30,31 @@ export default async function NewsletterPage() {
   if (!user) redirect("/login");
 
   const config = await getConfig(user.id);
-  await ensureRadarForUser(user.id, {
-    level: config.discoveryLevel,
-    topics: config.topics,
-    priorityTopics: config.priorityTopics,
-    language: config.language,
-    country: config.country,
-  }).catch(() => {
+  const showMyCircle = user.email?.toLowerCase() === MY_CIRCLE_EMAIL;
+  const radarTask = showMyCircle
+    ? ensureDailyTrendsForUser(user.id, {
+        language: config.language,
+        country: config.country,
+      })
+    : ensureRadarForUser(user.id, {
+        level: config.discoveryLevel,
+        topics: config.topics,
+        priorityTopics: config.priorityTopics,
+        language: config.language,
+        country: config.country,
+      });
+  await radarTask.catch(() => {
     // Radar es secundario: una fuente externa nunca bloquea la lectura del Brief.
   });
   const [editions, sources, radar] = await Promise.all([
     getEditions(user.id, 30),
     getBriefSources(user.id),
-    getDiscoveryCandidates(user.id, config.discoveryLevel),
+    showMyCircle
+      ? getDailyTrendCandidates(user.id)
+      : getDiscoveryCandidates(user.id, config.discoveryLevel),
   ]);
 
-  if (user.email?.toLowerCase() === MY_CIRCLE_EMAIL) {
+  if (showMyCircle) {
     return (
       <MyCircleClient
         initialConfig={config}

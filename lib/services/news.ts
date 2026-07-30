@@ -89,6 +89,55 @@ function pickSourceUrl(block: string): string | null {
   }
 }
 
+function parseGoogleNewsItems(
+  xml: string,
+  topic: string,
+  limit: number,
+  priority: boolean
+): RawArticle[] {
+  const items = xml.split(/<item>/i).slice(1);
+  const articles: RawArticle[] = [];
+
+  for (const raw of items.slice(0, limit)) {
+    const block = raw.split(/<\/item>/i)[0];
+    const rawTitle = decodeEntities(pick(block, "title"));
+    const link = decodeEntities(pick(block, "link"));
+    if (!rawTitle || !link) continue;
+
+    let title = rawTitle;
+    let source = decodeEntities(pick(block, "source"));
+    const dash = rawTitle.lastIndexOf(" - ");
+    if (!source && dash > 0) {
+      source = rawTitle.slice(dash + 3).trim();
+      title = rawTitle.slice(0, dash).trim();
+    } else if (source && rawTitle.endsWith(` - ${source}`)) {
+      title = rawTitle.slice(0, rawTitle.length - source.length - 3).trim();
+    }
+
+    const pubRaw = pick(block, "pubDate").trim();
+    let publishedAt: string | null = null;
+    if (pubRaw) {
+      const date = new Date(pubRaw);
+      if (!Number.isNaN(date.getTime())) publishedAt = date.toISOString();
+    }
+
+    const finalSource = source || "Google News";
+    articles.push({
+      title,
+      url: link,
+      source: finalSource,
+      sourceUrl: pickSourceUrl(block),
+      topic,
+      publishedAt,
+      snippet: decodeEntities(pick(block, "description")).slice(0, 300),
+      priority,
+      reputable: isReputableSource(finalSource),
+    });
+  }
+
+  return articles;
+}
+
 /**
  * Trae hasta `limit` noticias recientes de Google News para un tema.
  * hl/gl/ceid configuran idioma y país (default español / Argentina).
@@ -121,51 +170,44 @@ export async function fetchNewsForTopic(
     if (!res.ok) return [];
     const xml = await res.text();
 
-    const items = xml.split(/<item>/i).slice(1);
-    const articles: RawArticle[] = [];
+    return parseGoogleNewsItems(xml, topic, limit, priority);
+  } catch {
+    return [];
+  }
+}
 
-    for (const raw of items.slice(0, limit)) {
-      const block = raw.split(/<\/item>/i)[0];
+/**
+ * Trae la portada general de Google News para el país configurado.
+ * No depende de los temas ni de las fuentes elegidas por el usuario.
+ */
+export async function fetchTopNews(
+  opts: {
+    language?: string;
+    country?: string;
+    limit?: number;
+  } = {}
+): Promise<RawArticle[]> {
+  const lang = (opts.language ?? "es").toLowerCase();
+  const country = (opts.country ?? "ar").toUpperCase();
+  const limit = opts.limit ?? 24;
+  const hl = lang === "es" ? "es-419" : lang;
+  const ceid = `${country}:${lang}`;
+  const url = `https://news.google.com/rss?hl=${hl}&gl=${country}&ceid=${ceid}`;
 
-      const rawTitle = decodeEntities(pick(block, "title"));
-      const link = decodeEntities(pick(block, "link"));
-      if (!rawTitle || !link) continue;
-
-      // Google News formatea el title como "Titular - Medio".
-      let title = rawTitle;
-      let source = decodeEntities(pick(block, "source"));
-      const dash = rawTitle.lastIndexOf(" - ");
-      if (!source && dash > 0) {
-        source = rawTitle.slice(dash + 3).trim();
-        title = rawTitle.slice(0, dash).trim();
-      } else if (source && rawTitle.endsWith(` - ${source}`)) {
-        title = rawTitle.slice(0, rawTitle.length - source.length - 3).trim();
-      }
-
-      const pubRaw = pick(block, "pubDate").trim();
-      let publishedAt: string | null = null;
-      if (pubRaw) {
-        const d = new Date(pubRaw);
-        if (!isNaN(d.getTime())) publishedAt = d.toISOString();
-      }
-
-      const snippet = decodeEntities(pick(block, "description")).slice(0, 300);
-
-      const finalSource = source || "Google News";
-      articles.push({
-        title,
-        url: link,
-        source: finalSource,
-        sourceUrl: pickSourceUrl(block),
-        topic,
-        publishedAt,
-        snippet,
-        priority,
-        reputable: isReputableSource(finalSource),
-      });
-    }
-
-    return articles;
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; control.io-radar/1.0)",
+      },
+      next: { revalidate: 1800 },
+    });
+    if (!response.ok) return [];
+    return parseGoogleNewsItems(
+      await response.text(),
+      "Actualidad general",
+      limit,
+      false
+    );
   } catch {
     return [];
   }
