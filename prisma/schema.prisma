@@ -136,7 +136,7 @@ model Account {
   name      String
   type      AccountType
   currency  String      @default("ARS")
-  balance   Decimal     @default(0) @db.Decimal(15, 2)
+  balance   Decimal     @default(0) @db.Decimal(24, 8)
   color     String?
   icon      String?
   isActive  Boolean     @default(true)
@@ -176,31 +176,31 @@ model Category {
 }
 
 model Transaction {
-  id               String          @id @default(cuid())
-  userId           String
-  user             Profile         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type             TransactionType
-  amount           Decimal         @db.Decimal(15, 2)
-  currency         String          @default("ARS")
-  destinationAmount   Decimal?     @db.Decimal(15, 2)
+  id                  String          @id @default(cuid())
+  userId              String
+  user                Profile         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type                TransactionType
+  amount              Decimal         @db.Decimal(24, 8)
+  currency            String          @default("ARS")
+  destinationAmount   Decimal?        @db.Decimal(24, 8)
   destinationCurrency String?
-  amountARS        Decimal?        @db.Decimal(15, 2)
-  exchangeRate     Decimal?        @db.Decimal(18, 8)
-  rateBaseCurrency  String?
-  rateQuoteCurrency String?
-  description      String?
-  date             DateTime
-  categoryId       String?
-  category         Category?       @relation(fields: [categoryId], references: [id])
-  accountId        String?
-  account          Account?        @relation("FromAccount", fields: [accountId], references: [id])
-  toAccountId      String?
-  toAccount        Account?        @relation("ToAccount", fields: [toAccountId], references: [id])
-  creditPurchaseId String?
-  creditPurchase   CreditPurchase? @relation(fields: [creditPurchaseId], references: [id])
-  notes            String?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  amountARS           Decimal?        @db.Decimal(15, 2)
+  exchangeRate        Decimal?        @db.Decimal(18, 8)
+  rateBaseCurrency    String?
+  rateQuoteCurrency   String?
+  description         String?
+  date                DateTime
+  categoryId          String?
+  category            Category?       @relation(fields: [categoryId], references: [id])
+  accountId           String?
+  account             Account?        @relation("FromAccount", fields: [accountId], references: [id])
+  toAccountId         String?
+  toAccount           Account?        @relation("ToAccount", fields: [toAccountId], references: [id])
+  creditPurchaseId    String?
+  creditPurchase      CreditPurchase? @relation(fields: [creditPurchaseId], references: [id])
+  notes               String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
   @@index([userId, date])
   @@index([userId, type])

@@ -24,6 +24,14 @@ describe("calculateTransferConversion", () => {
   });
 
   it("rechaza pares todavía no soportados", () => {
-    expect(() => calculateTransferConversion(100, "EUR", "USD", 1.1)).toThrow(/ARS y USD/);
+    expect(() => calculateTransferConversion(100, "EUR", "USD", 1.1)).toThrow(/pesos argentinos/);
+  });
+
+  it("convierte ARS a EUR usando ARS por euro", () => {
+    expect(calculateTransferConversion(170000, "ARS", "EUR", 1700).destinationAmount).toBe(100);
+  });
+
+  it("conserva ocho decimales al comprar bitcoin", () => {
+    expect(calculateTransferConversion(100000, "ARS", "BTC", 150000000).destinationAmount).toBe(0.00066667);
   });
 });
