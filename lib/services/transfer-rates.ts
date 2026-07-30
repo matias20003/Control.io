@@ -4,6 +4,7 @@ export type TransferRateReference = {
   buy: number;
   sell: number;
   updatedAt: string;
+  checkedAt: string;
   source: string;
 };
 
@@ -37,7 +38,7 @@ export async function getTransferRateReference(currency: string): Promise<Transf
 
   if (code === "BTC") {
     const response = await fetch("https://dolarapi.com/v1/exchanges/monedas/btc/ars", {
-      next: { revalidate: 300 },
+      cache: "no-store",
     });
     if (!response.ok) return null;
     const payload = await response.json() as { value?: DolarApiExchange[] };
@@ -51,6 +52,7 @@ export async function getTransferRateReference(currency: string): Promise<Transf
       buy,
       sell,
       updatedAt: new Date().toISOString(),
+      checkedAt: new Date().toISOString(),
       source: rows.length === 1 && rows[0].exchange
         ? `DolarAPI · ${rows[0].exchange}`
         : `DolarAPI · ${rows.length} exchanges`,
@@ -61,7 +63,7 @@ export async function getTransferRateReference(currency: string): Promise<Transf
   const endpoint = code === "USD"
     ? "https://dolarapi.com/v1/dolares/oficial"
     : `https://dolarapi.com/v1/cotizaciones/${code.toLowerCase()}`;
-  const response = await fetch(endpoint, { next: { revalidate: 300 } });
+  const response = await fetch(endpoint, { cache: "no-store" });
   if (!response.ok) return null;
   const payload = await response.json() as DolarApiFiat;
   const buy = validRate(payload.compra);
@@ -73,6 +75,7 @@ export async function getTransferRateReference(currency: string): Promise<Transf
     buy,
     sell,
     updatedAt: payload.fechaActualizacion ?? new Date().toISOString(),
+    checkedAt: new Date().toISOString(),
     source: "DolarAPI",
   };
 }

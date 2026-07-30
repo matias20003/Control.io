@@ -16,7 +16,12 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json(
       { ok: true, data },
-      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" } },
+      {
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+          Pragma: "no-cache",
+        },
+      },
     );
   } catch {
     return NextResponse.json({ ok: false, error: "No se pudo consultar DolarAPI" }, { status: 502 });
