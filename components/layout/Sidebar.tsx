@@ -29,9 +29,11 @@ const navItems = [
 export function Sidebar({
   newsletterUnread = false,
   showCorreos = false,
+  showMyCircle = false,
 }: {
   newsletterUnread?: boolean;
   showCorreos?: boolean;
+  showMyCircle?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -74,7 +76,11 @@ export function Sidebar({
                 strokeWidth={isActive ? 2.2 : 1.7}
                 className="shrink-0"
               />
-              <span className="truncate">{item.label}</span>
+              <span className="truncate">
+                {item.href === "/newsletter" && showMyCircle
+                  ? "Mi Círculo"
+                  : item.label}
+              </span>
               {item.href === "/newsletter" && newsletterUnread && !isActive && (
                 <span
                   className="ml-auto w-2 h-2 rounded-full bg-primary shrink-0"

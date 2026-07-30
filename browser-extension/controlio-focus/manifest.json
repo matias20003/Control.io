@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Control.io Focus",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Abre Instagram en una ventana enfocada, limitada al perfil elegido desde Mi círculo.",
   "minimum_chrome_version": "102",
   "permissions": [

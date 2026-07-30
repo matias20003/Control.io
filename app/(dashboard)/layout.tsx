@@ -36,10 +36,12 @@ export default async function DashboardLayout({
   const newsletterUnread = await hasUnreadTodayEdition(user.id).catch(() => false);
   // "Correos" (bandeja unificada) solo para el dueño.
   const showCorreos = !!process.env.ADMIN_EMAIL && user.email === process.env.ADMIN_EMAIL;
+  const showMyCircle =
+    user.email?.toLowerCase() === "yorismatias372@gmail.com";
 
   return (
     <div className="ambient-mesh min-h-dvh bg-background">
-      <Sidebar newsletterUnread={newsletterUnread} showCorreos={showCorreos} />
+      <Sidebar newsletterUnread={newsletterUnread} showCorreos={showCorreos} showMyCircle={showMyCircle} />
       <Header name={name} email={user.email ?? ""} />
       <Calculator />
       <main className="md:ml-60 pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-0 min-h-dvh">
@@ -47,7 +49,7 @@ export default async function DashboardLayout({
         <InstallBanner />
         {children}
       </main>
-      <BottomNav newsletterUnread={newsletterUnread} showCorreos={showCorreos} />
+      <BottomNav newsletterUnread={newsletterUnread} showCorreos={showCorreos} showMyCircle={showMyCircle} />
       <FeedbackButton registeredAt={user.created_at} />
     </div>
   );
