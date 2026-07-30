@@ -108,7 +108,7 @@ export function BottomNav({
               <button
                 aria-label="Cerrar menú"
                 onClick={() => setOpen(false)}
-                className="-mr-2 p-2 rounded-lg text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
+                className="-mr-2 flex h-11 w-11 items-center justify-center rounded-lg text-muted hover:text-foreground hover:bg-surface-2 transition-colors"
               >
                 <X size={18} strokeWidth={2} />
               </button>
@@ -182,7 +182,7 @@ export function BottomNav({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center gap-1 py-2 rounded-xl transition-all duration-150",
+                  "flex min-h-11 flex-col items-center justify-center gap-1 py-2 rounded-xl transition-all duration-150",
                   isActive ? "text-primary" : "text-muted"
                 )}
               >
@@ -230,7 +230,7 @@ export function BottomNav({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center gap-1 py-2 rounded-xl transition-all duration-150",
+                  "flex min-h-11 flex-col items-center justify-center gap-1 py-2 rounded-xl transition-all duration-150",
                   isActive ? "text-primary" : "text-muted"
                 )}
               >
@@ -244,7 +244,7 @@ export function BottomNav({
           <button
             onClick={() => setOpen(!open)}
             className={cn(
-              "flex flex-col items-center gap-1 py-2 rounded-xl transition-all duration-150",
+              "flex min-h-11 flex-col items-center justify-center gap-1 py-2 rounded-xl transition-all duration-150",
               isMoreActive || open ? "text-primary" : "text-muted"
             )}
           >

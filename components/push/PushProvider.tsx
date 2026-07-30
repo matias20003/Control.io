@@ -98,14 +98,14 @@ export function PushProvider() {
         <button
           onClick={disable}
           title="Desactivar notificaciones"
-          className="p-2 rounded-lg text-primary hover:bg-primary/10 transition-colors"
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-primary hover:bg-primary/10 transition-colors"
         >
           <Bell size={16} />
         </button>
       ) : status === "denied" ? (
         <button
           title="Notificaciones bloqueadas en el navegador"
-          className="p-2 rounded-lg text-muted cursor-not-allowed"
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-muted cursor-not-allowed"
           disabled
         >
           <BellOff size={16} />
@@ -114,7 +114,7 @@ export function PushProvider() {
         <button
           onClick={enable}
           title="Activar notificaciones"
-          className="p-2 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
         >
           <BellOff size={16} />
         </button>

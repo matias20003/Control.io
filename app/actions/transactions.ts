@@ -27,6 +27,7 @@ const createTransactionSchema = z.object({
   accountId: z.string().optional(),
   toAccountId: z.string().optional(),
   notes: z.string().optional(),
+  exchangeRate: z.coerce.number().positive("La cotización debe ser mayor a 0").optional(),
 });
 
 export async function createTransactionAction(formData: FormData) {
@@ -46,6 +47,7 @@ export async function createTransactionAction(formData: FormData) {
     accountId: (formData.get("accountId") as string) || undefined,
     toAccountId: (formData.get("toAccountId") as string) || undefined,
     notes: (formData.get("notes") as string) || undefined,
+    exchangeRate: formData.get("exchangeRate") || undefined,
   };
 
   const result = createTransactionSchema.safeParse(raw);
@@ -70,8 +72,8 @@ export async function createTransactionAction(formData: FormData) {
     revalidatePath("/dashboard");
     revalidatePath("/cuentas");
     return { success: true, transaction: tx, newBalance, accountCurrency };
-  } catch {
-    return { error: "Error al crear el movimiento" };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Error al crear el movimiento" };
   }
 }
 
@@ -90,6 +92,7 @@ export async function updateTransactionAction(transactionId: string, formData: F
     accountId: (formData.get("accountId") as string) || undefined,
     toAccountId: (formData.get("toAccountId") as string) || undefined,
     notes: (formData.get("notes") as string) || undefined,
+    exchangeRate: formData.get("exchangeRate") || undefined,
   };
 
   const result = createTransactionSchema.safeParse(raw);
@@ -101,8 +104,8 @@ export async function updateTransactionAction(transactionId: string, formData: F
     revalidatePath("/dashboard");
     revalidatePath("/cuentas");
     return { success: true, transaction: tx };
-  } catch {
-    return { error: "Error al actualizar el movimiento" };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Error al actualizar el movimiento" };
   }
 }
 

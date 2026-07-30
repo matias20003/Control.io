@@ -473,7 +473,9 @@ export default async function DashboardPage({
                       </div>
                       <div className="text-right shrink-0">
                         <p className={`text-sm font-bold font-mono ${amtColor}`}>
-                          {sign}{formatCurrency(t.amount, t.currency)}
+                          {isTransfer && t.destinationAmount != null && t.destinationCurrency
+                            ? <>{formatCurrency(t.amount, t.currency)} <span className="text-muted">→</span> {formatCurrency(t.destinationAmount, t.destinationCurrency)}</>
+                            : <>{sign}{formatCurrency(t.amount, t.currency)}</>}
                         </p>
                         <p className="text-[11px] text-muted">{relTime(t.date)}</p>
                       </div>

@@ -32,6 +32,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { TransferFields } from "@/components/TransferFields";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ImportCSVDialog } from "./ImportCSVDialog";
 import { Card, CardContent } from "@/components/ui/card";
@@ -359,16 +360,26 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
         <form action={submitForm} className="space-y-4">
           <input type="hidden" name="type" value={type} />
           {/* Currency: hidden input when collapsed, visible select when expanded */}
-          {!showMore && (
+          {type !== "TRANSFER" && !showMore && (
             <input type="hidden" name="currency" value={defaultValues?.currency ?? "ARS"} />
           )}
 
-          {/* Monto — autofocus para tipear directo al abrir */}
-          <div className="space-y-1.5">
-            <Label htmlFor="f-amount">Monto *</Label>
-            <Input id="f-amount" name="amount" type="number" step="0.01" min="0.01" placeholder="0.00"
-              defaultValue={defaultValues?.amount ?? ""} required autoFocus />
-          </div>
+          {type === "TRANSFER" ? (
+            <TransferFields
+              accounts={accounts}
+              idPrefix={defaultValues?.id ? `transfer-${defaultValues.id}` : "transfer-new"}
+              defaultFromId={defaultValues?.accountId}
+              defaultToId={defaultValues?.toAccountId}
+              defaultAmount={defaultValues?.amount}
+              defaultExchangeRate={defaultValues?.exchangeRate}
+            />
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="f-amount">Monto *</Label>
+              <Input id="f-amount" name="amount" type="number" step="0.01" min="0.01" placeholder="0.00"
+                defaultValue={defaultValues?.amount ?? ""} required autoFocus />
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="f-date">Fecha</Label>
@@ -414,30 +425,13 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
             </div>
           )}
 
-          {type !== "TRANSFER" ? (
+          {type !== "TRANSFER" && (
             <div className="space-y-1.5">
               <Label htmlFor="f-account">Cuenta {accounts.length > 0 ? "*" : ""}</Label>
               <Select id="f-account" name="accountId" defaultValue={defaultValues?.accountId ?? accounts[0]?.id ?? ""} required={accounts.length > 0}>
                 <option value="" disabled={accounts.length > 0}>{accounts.length > 0 ? "Seleccioná una cuenta" : "Sin cuenta"}</option>
                 {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
               </Select>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="f-from">Desde *</Label>
-                <Select id="f-from" name="accountId" defaultValue={defaultValues?.accountId ?? ""} required>
-                  <option value="">Seleccionar</option>
-                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="f-to">Hacia *</Label>
-                <Select id="f-to" name="toAccountId" defaultValue={defaultValues?.toAccountId ?? ""} required>
-                  <option value="">Seleccionar</option>
-                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </Select>
-              </div>
             </div>
           )}
 
@@ -450,14 +444,16 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
 
           {showMore && (
             <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="f-currency">Moneda</Label>
-                <Select id="f-currency" name="currency" defaultValue={defaultValues?.currency ?? "ARS"}>
-                  <option value="ARS">ARS</option>
-                  <option value="USD">USD</option>
-                  <option value="EUR">EUR</option>
-                </Select>
-              </div>
+              {type !== "TRANSFER" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="f-currency">Moneda</Label>
+                  <Select id="f-currency" name="currency" defaultValue={defaultValues?.currency ?? "ARS"}>
+                    <option value="ARS">ARS</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor="f-notes">Notas</Label>
                 <Textarea id="f-notes" name="notes" placeholder="Notas adicionales..." rows={2}
@@ -675,7 +671,9 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
                           <td className="py-2.5 px-2 text-muted whitespace-nowrap">{formatDate(tx.date)}</td>
                           <td className="py-2.5 px-2 text-muted truncate max-w-[140px]">{tx.accountName || "—"}{isTransfer && tx.toAccountName ? ` → ${tx.toAccountName}` : ""}</td>
                           <td className={`py-2.5 px-2 text-right font-bold font-mono whitespace-nowrap ${isExpense ? "text-danger" : isTransfer ? "text-primary" : "text-success"}`}>
-                            {isExpense ? "−" : isTransfer ? "" : "+"}{formatCurrency(tx.amount, tx.currency)}
+                            {isTransfer && tx.destinationAmount != null && tx.destinationCurrency
+                              ? <>{formatCurrency(tx.amount, tx.currency)} <span className="text-muted">→</span> {formatCurrency(tx.destinationAmount, tx.destinationCurrency)}</>
+                              : <>{isExpense ? "−" : isTransfer ? "" : "+"}{formatCurrency(tx.amount, tx.currency)}</>}
                           </td>
                           <td className="py-2.5 px-2">
                             <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -709,7 +707,9 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
                         </p>
                       </div>
                       <p className={`text-sm font-bold font-mono ${isExpense ? "text-danger" : isTransfer ? "text-primary" : "text-success"}`}>
-                        {isExpense ? "−" : isTransfer ? "" : "+"}{formatCurrency(tx.amount, tx.currency)}
+                        {isTransfer && tx.destinationAmount != null && tx.destinationCurrency
+                          ? <>{formatCurrency(tx.amount, tx.currency)} <span className="text-muted">→</span> {formatCurrency(tx.destinationAmount, tx.destinationCurrency)}</>
+                          : <>{isExpense ? "−" : isTransfer ? "" : "+"}{formatCurrency(tx.amount, tx.currency)}</>}
                       </p>
                       <div className="flex items-center gap-0.5">
                         <button onClick={() => openEdit(tx)} className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary/10"><Pencil size={13} /></button>

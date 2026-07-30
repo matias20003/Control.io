@@ -24,7 +24,7 @@ export function SectionTabs() {
   if (!group) return null;
 
   return (
-    <div className="flex gap-1 bg-surface-2 rounded-xl p-1 w-fit">
+    <div className="flex max-w-full gap-1 overflow-x-auto overscroll-x-contain rounded-xl bg-surface-2 p-1">
       {group.map((t) => {
         const active = pathname.startsWith(t.href);
         return (
@@ -32,7 +32,7 @@ export function SectionTabs() {
             key={t.href}
             href={t.href}
             className={cn(
-              "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+              "flex min-h-11 shrink-0 items-center px-4 py-2 rounded-lg text-sm font-medium transition-all md:min-h-0",
               active ? "bg-surface text-foreground shadow-sm" : "text-muted hover:text-foreground"
             )}
           >

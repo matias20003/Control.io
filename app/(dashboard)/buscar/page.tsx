@@ -73,7 +73,9 @@ export default async function BuscarPage({
                       <p className="text-xs text-muted truncate">{formatDate(t.date)}{t.accountName ? ` · ${t.accountName}` : ""}{t.categoryName ? ` · ${t.categoryName}` : ""}</p>
                     </div>
                     <p className={`text-sm font-bold font-mono shrink-0 ${isIncome ? "text-success" : isTransfer ? "text-primary" : "text-danger"}`}>
-                      {isIncome ? "+" : isTransfer ? "" : "−"}{formatCurrency(t.amount, t.currency)}
+                      {isTransfer && t.destinationAmount != null && t.destinationCurrency
+                        ? <>{formatCurrency(t.amount, t.currency)} <span className="text-muted">→</span> {formatCurrency(t.destinationAmount, t.destinationCurrency)}</>
+                        : <>{isIncome ? "+" : isTransfer ? "" : "−"}{formatCurrency(t.amount, t.currency)}</>}
                     </p>
                   </Link>
                 );

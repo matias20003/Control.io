@@ -62,6 +62,20 @@ export async function createAccount(userId: string, data: {
 export async function updateAccount(userId: string, accountId: string, data: {
   name?: string; type?: string; currency?: string; balance?: number; color?: string; icon?: string;
 }) {
+  if (data.currency !== undefined) {
+    const current = await prisma.account.findFirst({
+      where: { id: accountId, userId },
+      select: {
+        currency: true,
+        _count: { select: { transactionsFrom: true, transactionsTo: true } },
+      },
+    });
+    if (!current) throw new Error("Cuenta no encontrada");
+    const hasMovements = current._count.transactionsFrom > 0 || current._count.transactionsTo > 0;
+    if (hasMovements && data.currency !== current.currency) {
+      throw new Error("No se puede cambiar la moneda de una cuenta con movimientos");
+    }
+  }
   const row = await prisma.account.update({
     where: { id: accountId, userId },
     data: {
@@ -109,7 +123,7 @@ export async function getAccountSparklines(
       date: { gte: start },
       OR: [{ accountId: { not: null } }, { toAccountId: { not: null } }],
     },
-    select: { type: true, amount: true, date: true, accountId: true, toAccountId: true },
+    select: { type: true, amount: true, destinationAmount: true, date: true, accountId: true, toAccountId: true },
   });
 
   // Efecto neto por cuenta y por día dentro de la ventana.
@@ -132,7 +146,7 @@ export async function getAccountSparklines(
     }
     // Cuenta destino (solo transferencias): suma.
     if (t.type === "TRANSFER" && t.toAccountId && effects[t.toAccountId]) {
-      effects[t.toAccountId][i] += amt;
+      effects[t.toAccountId][i] += t.destinationAmount == null ? amt : toNum(t.destinationAmount);
     }
   }
 

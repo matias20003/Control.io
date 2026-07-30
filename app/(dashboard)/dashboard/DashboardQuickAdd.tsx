@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { TransferFields } from "@/components/TransferFields";
 import { createTransactionAction } from "@/app/actions/transactions";
 import { createCategoryAction } from "@/app/actions/categories";
 import { formatCurrency } from "@/lib/utils";
@@ -132,15 +133,19 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
 
         <form action={handleCreate} className="space-y-4">
           <input type="hidden" name="type" value={txType} />
-          {!showMore && (
+          {txType !== "TRANSFER" && !showMore && (
             <input type="hidden" name="currency" value={lastDefaults.currency ?? "ARS"} />
           )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="dqa-amount">Monto *</Label>
-            <Input id="dqa-amount" name="amount" type="number" step="0.01" min="0.01"
-              placeholder="0.00" required autoFocus />
-          </div>
+          {txType === "TRANSFER" ? (
+            <TransferFields accounts={accounts} idPrefix="dqa-transfer" />
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="dqa-amount">Monto *</Label>
+              <Input id="dqa-amount" name="amount" type="number" step="0.01" min="0.01"
+                placeholder="0.00" required autoFocus />
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="dqa-date">Fecha</Label>
@@ -186,7 +191,7 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
             </div>
           )}
 
-          {txType !== "TRANSFER" ? (
+          {txType !== "TRANSFER" && (
             <div className="space-y-1.5">
               <Label htmlFor="dqa-account">Cuenta {accounts.length > 0 ? "*" : ""}</Label>
               <Select id="dqa-account" name="accountId" defaultValue={lastDefaults.accountId ?? accounts[0]?.id ?? ""} required={accounts.length > 0}>
@@ -195,23 +200,6 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
                   <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>
                 ))}
               </Select>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="dqa-from">Desde *</Label>
-                <Select id="dqa-from" name="accountId" defaultValue="" required>
-                  <option value="">Seleccionar</option>
-                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="dqa-to">Hacia *</Label>
-                <Select id="dqa-to" name="toAccountId" defaultValue="" required>
-                  <option value="">Seleccionar</option>
-                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </Select>
-              </div>
             </div>
           )}
 
@@ -224,14 +212,16 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
 
           {showMore && (
             <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="dqa-currency">Moneda</Label>
-                <Select id="dqa-currency" name="currency" defaultValue={lastDefaults.currency ?? "ARS"}>
-                  <option value="ARS">ARS</option>
-                  <option value="USD">USD</option>
-                  <option value="EUR">EUR</option>
-                </Select>
-              </div>
+              {txType !== "TRANSFER" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="dqa-currency">Moneda</Label>
+                  <Select id="dqa-currency" name="currency" defaultValue={lastDefaults.currency ?? "ARS"}>
+                    <option value="ARS">ARS</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor="dqa-notes">Notas</Label>
                 <Textarea id="dqa-notes" name="notes" placeholder="Notas adicionales..." rows={2} />
@@ -259,22 +249,18 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
 
   return (
     <>
-      <div className="space-y-2">
-        <div className="grid grid-cols-2 gap-2">
+      <div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <Button variant="income" onClick={() => openModal("INCOME")} className="w-full">
             <ArrowDownLeft size={15} />Nuevo ingreso
           </Button>
           <Button variant="expense" onClick={() => openModal("EXPENSE")} className="w-full">
             <ArrowUpRight size={15} />Nuevo gasto
           </Button>
+          <Button variant="outline" onClick={() => openModal("TRANSFER")} className="w-full text-primary">
+            <ArrowLeftRight size={15} />Movimiento entre cuentas
+          </Button>
         </div>
-        <button onClick={() => openModal("TRANSFER")}
-          className="group inline-flex items-center gap-1.5 text-xs font-medium text-muted-2 hover:text-primary transition-colors py-1">
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-surface-2 text-muted group-hover:bg-primary/15 group-hover:text-primary transition-colors">
-            <ArrowLeftRight size={11} />
-          </span>
-          Nueva transferencia
-        </button>
       </div>
 
       <Dialog open={isOpen} onOpenChange={(o) => { if (!o) { setIsOpen(false); setLastDefaults({}); } }}>
