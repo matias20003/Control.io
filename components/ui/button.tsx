@@ -36,6 +36,8 @@ const buttonVariants = cva(
           "bg-gradient-to-br from-success/15 to-success/[0.06] text-success border border-success/25 rounded-lg shadow-[inset_0_1px_0_oklch(0.96_0.005_258/8%)] hover:from-success/22 hover:to-success/10 hover:border-success/40 hover:shadow-[inset_0_1px_0_oklch(0.96_0.005_258/12%),0_8px_24px_oklch(0.67_0.17_148/22%)] active:scale-[0.985] transition-all duration-200",
         expense:
           "bg-gradient-to-br from-danger/15 to-danger/[0.06] text-danger border border-danger/25 rounded-lg shadow-[inset_0_1px_0_oklch(0.96_0.005_258/8%)] hover:from-danger/22 hover:to-danger/10 hover:border-danger/40 hover:shadow-[inset_0_1px_0_oklch(0.96_0.005_258/12%),0_8px_24px_oklch(0.62_0.22_27/22%)] active:scale-[0.985] transition-all duration-200",
+        transfer:
+          "bg-gradient-to-br from-primary/15 to-primary/[0.06] text-primary border border-primary/25 rounded-lg shadow-[inset_0_1px_0_oklch(0.96_0.005_258/8%)] hover:from-primary/22 hover:to-primary/10 hover:border-primary/40 hover:shadow-[inset_0_1px_0_oklch(0.96_0.005_258/12%),0_8px_24px_oklch(0.67_0.19_258/22%)] active:scale-[0.985] transition-all duration-200",
       },
       size: {
         default:  "h-11 px-5 text-sm",

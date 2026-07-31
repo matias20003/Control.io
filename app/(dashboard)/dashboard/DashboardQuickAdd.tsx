@@ -21,6 +21,13 @@ type SaveMode = "save" | "save_and_another";
 
 type Defaults = { accountId?: string; currency?: string; date?: string; categoryId?: string };
 
+/* Botón de acción rápida: apilado (ícono arriba) en mobile, horizontal desde sm.
+   El paso a 13px solo aplica a pantallas de menos de 360px, donde "Transferencia"
+   no entra en un tercio del ancho. */
+const QUICK_BTN =
+  "h-auto min-h-16 w-full flex-col gap-1.5 px-1 py-3 text-[13px] leading-none " +
+  "min-[360px]:text-sm sm:h-11 sm:min-h-0 sm:flex-row sm:gap-2 sm:px-5 sm:py-0";
+
 interface Props {
   accounts: SerializedAccount[];
   categories: SerializedCategory[];
@@ -284,18 +291,31 @@ export function DashboardQuickAdd({ accounts, categories }: Props) {
 
   return (
     <>
-      <div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <Button variant="income" onClick={() => openModal("INCOME")} className="w-full">
-            <ArrowDownLeft size={15} />Nuevo ingreso
-          </Button>
-          <Button variant="expense" onClick={() => openModal("EXPENSE")} className="w-full">
-            <ArrowUpRight size={15} />Nuevo gasto
-          </Button>
-          <Button variant="outline" onClick={() => openModal("TRANSFER")} className="w-full text-primary">
-            <ArrowLeftRight size={15} />Movimiento entre cuentas
-          </Button>
-        </div>
+      {/* Acciones rápidas — las tres en una sola fila también en mobile.
+          El ícono va arriba de la etiqueta para que entre completa sin achicar
+          el texto; desde sm vuelven a ser botones horizontales. */}
+      <div className="grid grid-cols-3 gap-2">
+        <Button
+          variant="income"
+          onClick={() => openModal("INCOME")}
+          className={QUICK_BTN}
+        >
+          <ArrowDownLeft size={18} className="sm:size-[15px]" />Ingreso
+        </Button>
+        <Button
+          variant="expense"
+          onClick={() => openModal("EXPENSE")}
+          className={QUICK_BTN}
+        >
+          <ArrowUpRight size={18} className="sm:size-[15px]" />Gasto
+        </Button>
+        <Button
+          variant="transfer"
+          onClick={() => openModal("TRANSFER")}
+          className={QUICK_BTN}
+        >
+          <ArrowLeftRight size={18} className="sm:size-[15px]" />Transferencia
+        </Button>
       </div>
 
       <Dialog open={isOpen} onOpenChange={(o) => { if (!o) closeModal(); }}>

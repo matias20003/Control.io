@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { RefreshCw, X } from "lucide-react";
+import {
+  NOTICE_ACTION,
+  NOTICE_BODY,
+  NOTICE_DISMISS,
+  NOTICE_ICON,
+  NOTICE_ROW,
+  NOTICE_TITLE,
+} from "@/components/notice";
 
 // Recuerda que hace tiempo que el usuario no carga movimientos y lo invita a
 // subir el resumen. Aparece a partir de los 5 días y no insiste antes de 2 días.
@@ -29,28 +37,24 @@ export function UpdateReminderBanner({ days }: { days: number | null }) {
   };
 
   return (
-    <div className="relative flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-      <RefreshCw size={18} className="shrink-0 text-amber-500" />
+    <div className={NOTICE_ROW}>
+      <span className={`${NOTICE_ICON} bg-warning/12 text-warning`}>
+        <RefreshCw size={17} />
+      </span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-foreground">
-          Hace {days} días que no cargás movimientos
-        </p>
-        <p className="text-xs text-muted">
-          Subí el resumen de MercadoPago o tu banco para ponerte al día — solo se agrega lo nuevo.
+        <p className={NOTICE_TITLE}>Hace {days} días que no cargás movimientos</p>
+        <p className={NOTICE_BODY}>
+          Subí el resumen de tu banco o MercadoPago — solo se agrega lo nuevo.
         </p>
       </div>
       <Link
         href="/movimientos?import=1"
         onClick={dismiss}
-        className="shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+        className={`${NOTICE_ACTION} border border-border text-foreground hover:border-primary/50 hover:text-primary`}
       >
         Importar
       </Link>
-      <button
-        onClick={dismiss}
-        aria-label="Cerrar"
-        className="shrink-0 rounded-lg p-1 text-muted hover:bg-surface-2"
-      >
+      <button onClick={dismiss} aria-label="Cerrar" className={NOTICE_DISMISS}>
         <X size={15} />
       </button>
     </div>

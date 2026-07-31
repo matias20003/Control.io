@@ -21,6 +21,7 @@ import { IncomeExpenseChart, BalanceSparkline } from "./DashboardCharts";
 import { NetWorthCard } from "./NetWorthCard";
 import { PrivacyToggle } from "@/components/PrivacyToggle";
 import { TodayDate } from "./TodayDate";
+import { Greeting, greetingFor } from "./Greeting";
 import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 import { GuidedTour } from "@/components/GuidedTour";
 import { WhatsappPromoModal } from "@/components/WhatsappPromoModal";
@@ -68,6 +69,16 @@ export default async function DashboardPage({
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
+
+  // Hora de Argentina para el saludo del primer render (el server corre en UTC).
+  // Al montar, el cliente la corrige con la hora real del dispositivo.
+  const argentinaHour = Number(
+    new Intl.DateTimeFormat("es-AR", {
+      hour: "numeric",
+      hourCycle: "h23",
+      timeZone: "America/Argentina/Buenos_Aires",
+    }).format(now),
+  );
 
   const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo, netWorth, lastMovementAt, agenda, isTester] =
     await Promise.all([
@@ -184,88 +195,79 @@ export default async function DashboardPage({
 
       <WhatsappPromoModal isLinked={!!whatsappNumber} />
 
-      {/* Greeting */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Hola, {name} 👋</h1>
+      {/* Greeting — la racha y el ojo de privacidad viajan juntos a la derecha */}
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <Greeting name={name} initial={greetingFor(argentinaHour)} />
           <TodayDate />
         </div>
-        {streak >= 1 ? (
-          <div
-            className="inline-flex items-center gap-1.5 rounded-full border border-orange-500/25 bg-orange-500/10 px-2.5 py-1"
-            title={`Racha de ${streak} días · récord ${streakInfo.longest} · ${streakSubtitle}`}
-          >
-            <span className="text-sm leading-none">🔥</span>
-            <span className="text-xs font-semibold text-foreground">
-              {streak} {streak === 1 ? "día" : "días"}
-            </span>
-          </div>
-        ) : (
-          <div
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2.5 py-1"
-            title={streakInfo.longest > 1 ? `Tu récord es de ${streakInfo.longest} días. ¡Retomala hoy!` : "Registrá un movimiento hoy para arrancar tu racha."}
-          >
-            <span className="text-sm leading-none opacity-50 grayscale">🔥</span>
-            <span className="text-xs font-medium text-muted">Sin racha</span>
-          </div>
-        )}
-        <PrivacyToggle />
+        <div className="flex shrink-0 items-center gap-2">
+          {streak >= 1 ? (
+            <div
+              className="inline-flex items-center gap-1.5 rounded-full border border-orange-500/25 bg-orange-500/10 px-2.5 py-1"
+              title={`Racha de ${streak} días · récord ${streakInfo.longest} · ${streakSubtitle}`}
+            >
+              <span className="text-sm leading-none">🔥</span>
+              <span className="text-xs font-semibold text-foreground">
+                {streak} {streak === 1 ? "día" : "días"}
+              </span>
+            </div>
+          ) : (
+            <div
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2.5 py-1"
+              title={streakInfo.longest > 1 ? `Tu récord es de ${streakInfo.longest} días. ¡Retomala hoy!` : "Registrá un movimiento hoy para arrancar tu racha."}
+            >
+              <span className="text-sm leading-none opacity-50 grayscale">🔥</span>
+              <span className="text-xs font-medium text-muted">Sin racha</span>
+            </div>
+          )}
+          <PrivacyToggle />
+        </div>
         <StreakCelebration current={streak} />
       </div>
 
-      {/* Onboarding WhatsApp-first: lo más prominente para quien no vinculó.
-          En modo "testers" se muestra siempre (preview); en "all", solo a unlinked. */}
-      {hasFeature("onboardingWa", { isTester }) &&
-        (!whatsappNumber || FEATURE_FLAGS.onboardingWa === "testers") && (
-          <WhatsappOnboardingHero linkCode={whatsappLinkCode || ""} />
+      {/* ── AVISOS ──────────────────────────────────────────────────────────
+          Onboarding, recordatorios y novedades apilados en UNA tarjeta neutra.
+          Antes eran cuatro bloques grandes de colores distintos que se comían
+          la primera pantalla del celular. `empty:hidden` la esconde cuando
+          ningún aviso aplica (varios se descartan del lado del cliente). */}
+      <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface empty:hidden">
+        {/* Onboarding WhatsApp-first: el aviso de más valor para quien no vinculó.
+            En modo "testers" se muestra siempre (preview); en "all", solo a unlinked. */}
+        {hasFeature("onboardingWa", { isTester }) &&
+          (!whatsappNumber || FEATURE_FLAGS.onboardingWa === "testers") && (
+            <WhatsappOnboardingHero linkCode={whatsappLinkCode || ""} />
+          )}
+
+        <UpdateReminderBanner days={daysSinceLastMovement} />
+
+        {hasFeature("gastosHormiga", { isTester }) && (
+          <Link href="/gastos-hormiga" className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-2">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-warning/12 text-base">🐜</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium leading-tight text-foreground">Gastos hormiga</p>
+              <p className="mt-0.5 text-xs leading-snug text-muted">Descubrí dónde se te va la plata</p>
+            </div>
+            <ChevronRight size={16} className="shrink-0 text-muted" />
+          </Link>
         )}
 
-      <UpdateReminderBanner days={daysSinceLastMovement} />
+        <OnboardingChecklist state={onboarding} defaultOpen={welcome === "1"} />
+      </div>
 
-      {hasFeature("gastosHormiga", { isTester }) && (
-        <Link
-          href="/gastos-hormiga"
-          className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 transition-colors hover:border-amber-500/50"
-        >
-          <span className="shrink-0">🐜</span>
-          <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-            Gastos hormiga <span className="font-normal text-muted">— descubrí dónde se te va la plata</span>
-          </p>
-          <ChevronRight size={15} className="shrink-0 text-amber-500" />
-        </Link>
-      )}
-
-      <OnboardingChecklist state={onboarding} />
       <GuidedTour enabled={welcome === "1"} userName={name} />
       <DashboardQuickAdd accounts={accounts} categories={categories} />
 
-      {/* Banner comparativo del mes */}
-      {balanceDelta != null && (
-        <Card>
-          <CardContent className="px-4 py-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${balanceBetter ? "bg-success/10" : "bg-danger/10"}`}>
-                {balanceBetter ? <TrendingUp size={18} className="text-success" /> : <TrendingDown size={18} className="text-danger" />}
-              </span>
-              <p className="text-sm font-medium text-foreground">
-                {balanceBetter ? "Este mes viene mejor que el anterior" : "Este mes vas por debajo del anterior"}
-              </p>
-            </div>
-            <div className="text-right shrink-0">
-              <p className={`text-sm font-bold font-mono ${balanceBetter ? "text-success" : "text-danger"}`}>
-                {balanceBetter ? "+" : ""}{formatCurrency(balanceDelta, "ARS")}
-              </p>
-              <p className="text-[11px] text-muted">vs. mes anterior</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* ── CUERPO ──────────────────────────────────────────────────────────
+          Una sola grilla con todos los bloques como hermanos directos: en
+          mobile es una columna y el orden lo fija `order-*`; desde lg vuelve a
+          la grilla de 6 columnas (3+3 para charts, 2+2+2 para el resto).
+          Al ser hermanos, `order` puede moverlos entre "filas" sin duplicar
+          markup por breakpoint. */}
+      <div className="flex flex-col gap-4 lg:grid lg:grid-cols-6 [&>*>*]:h-full">
 
-      <div className="flex flex-col gap-4">
-      {/* ── HERO ROW ── */}
-      <div className="order-1 grid grid-cols-1 gap-4 lg:order-2 lg:grid-cols-3">
-
-        {/* Balance del mes (ingresos − gastos) — NO es el saldo total de cuentas */}
+      {/* Balance del mes (ingresos − gastos) — NO es el saldo total de cuentas */}
+      <div className="order-9 lg:order-6 lg:col-span-2">
         <Card>
           <CardContent className="p-5">
             <p className="text-xs font-semibold text-muted uppercase tracking-wider">Balance del mes</p>
@@ -286,11 +288,13 @@ export default async function DashboardPage({
             )}
           </CardContent>
         </Card>
+      </div>
 
-        {/* Objetivo principal — en desktop acá; en mobile baja después de Movimientos */}
-        <div className="hidden lg:block">{objetivoCard}</div>
+      {/* Objetivo principal */}
+      <div className="order-11 lg:order-7 lg:col-span-2">{objetivoCard}</div>
 
-        {/* Resumen del mes */}
+      {/* Resumen del mes */}
+      <div className="order-7 lg:order-8 lg:col-span-2">
         <Card>
           <CardContent className="p-5">
             <p className="text-xs font-semibold text-muted uppercase tracking-wider">Resumen del mes</p>
@@ -319,16 +323,16 @@ export default async function DashboardPage({
         </Card>
       </div>
 
-      {/* ── CHARTS ROW ── */}
-      <div className="order-2 grid grid-cols-1 gap-4 lg:order-1 lg:grid-cols-2">
-
-        {/* Patrimonio neto — multi-moneda, convertido con la cotización del día */}
-        {netWorth && netWorth.byCurrency.length > 0 && (
+      {/* Patrimonio neto — multi-moneda, convertido con la cotización del día */}
+      {netWorth && netWorth.byCurrency.length > 0 && (
+        <div className="order-1 lg:order-2 lg:col-span-3">
           <NetWorthCard positions={netWorth.byCurrency} monthlyBalances={balanceSeries} />
-        )}
+        </div>
+      )}
 
-        {/* Evolución ingresos vs gastos */}
-        {ieSeries.length > 0 && (
+      {/* Evolución ingresos vs gastos */}
+      {ieSeries.length > 0 && (
+        <div className="order-6 lg:order-3 lg:col-span-3">
           <Card>
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-2">
@@ -341,9 +345,11 @@ export default async function DashboardPage({
               <IncomeExpenseChart data={ieSeries} />
             </CardContent>
           </Card>
-        )}
+        </div>
+      )}
 
-        {/* Gastos por categoría */}
+      {/* Gastos por categoría */}
+      <div className="order-2 lg:order-4 lg:col-span-3">
         {byCategory.length > 0 ? (
           <CategoryChart data={byCategory} totalExpense={totalExpense} />
         ) : (
@@ -355,18 +361,20 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
         )}
-
-        <ProjectedCashFlowCard startingBalance={totalBalanceARS} events={agenda} />
       </div>
+
+      {/* Flujo proyectado a 30 días */}
+      <div className="order-10 lg:order-5 lg:col-span-3">
+        <ProjectedCashFlowCard startingBalance={totalBalanceARS} events={agenda} />
       </div>
 
       {/* Invitá a un amigo — loop de crecimiento WhatsApp-native */}
-      <InviteCard userId={user.id} />
+      <div className="order-13 lg:order-9 lg:col-span-6">
+        <InviteCard userId={user.id} />
+      </div>
 
-      {/* ── THREE CARDS ROW ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-        {/* Movimientos recientes */}
+      {/* Movimientos recientes */}
+      <div className="order-3 lg:order-10 lg:col-span-2">
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
@@ -411,11 +419,10 @@ export default async function DashboardPage({
             )}
           </CardContent>
         </Card>
+      </div>
 
-        {/* Objetivo principal — solo en mobile, justo debajo de Movimientos */}
-        <div className="lg:hidden">{objetivoCard}</div>
-
-        {/* Insights para vos */}
+      {/* Insights para vos */}
+      <div className="order-12 lg:order-11 lg:col-span-2">
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
@@ -444,8 +451,10 @@ export default async function DashboardPage({
             )}
           </CardContent>
         </Card>
+      </div>
 
-        {/* Tus cuentas */}
+      {/* Tus cuentas */}
+      <div className="order-4 lg:order-12 lg:col-span-2">
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
@@ -490,8 +499,9 @@ export default async function DashboardPage({
         </Card>
       </div>
 
-      {/* ── PRÓXIMOS PAGOS ── */}
+      {/* Próximos pagos */}
       {agenda.length > 0 && (
+        <div className="order-5 lg:order-13 lg:col-span-6">
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
@@ -523,8 +533,10 @@ export default async function DashboardPage({
             </div>
           </CardContent>
         </Card>
+        </div>
       )}
 
+      </div>
     </div>
   );
 }
