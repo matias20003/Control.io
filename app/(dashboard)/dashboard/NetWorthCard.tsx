@@ -9,7 +9,7 @@
  * propio queda en localStorage y pisa al de la API hasta que se resetea.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, Pencil, RefreshCw, RotateCcw } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ChevronDown, Pencil, RefreshCw, RotateCcw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
@@ -67,6 +67,7 @@ export function NetWorthCard({ positions, monthlyBalances }: Props) {
   const [loaded, setLoaded] = useState<{ key: string; rates: Record<string, Rate> } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [editing, setEditing] = useState<string | null>(null);
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   const [overridesRaw, setOverridesRaw] = useLocalValue(OVERRIDES_KEY);
@@ -172,6 +173,7 @@ export function NetWorthCard({ positions, monthlyBalances }: Props) {
 
   const delta = series.length > 1 ? series[series.length - 1].patrimonio - series[0].patrimonio : null;
   const hasForeign = foreign.length > 0;
+  const hasBreakdown = hasForeign || positions.length > 1;
 
   const commitDraft = (currency: string, value: string) => {
     setDrafts((prev) => ({ ...prev, [currency]: value }));
@@ -187,11 +189,6 @@ export function NetWorthCard({ positions, monthlyBalances }: Props) {
             <p className="text-sm font-semibold text-foreground">Patrimonio neto</p>
             <p className="text-2xl md:text-3xl font-bold font-mono mt-1 text-foreground">
               {formatCurrency(totals.net, "ARS")}
-            </p>
-            <p className="text-xs text-muted mt-0.5">
-              activos <span className="money">{formatCurrency(totals.assets, "ARS")}</span> · deudas{" "}
-              <span className="money">{formatCurrency(totals.liabilities, "ARS")}</span>
-              {hasForeign && <span className="text-muted"> · convertido a pesos</span>}
             </p>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -227,8 +224,24 @@ export function NetWorthCard({ positions, monthlyBalances }: Props) {
           </p>
         )}
 
-        {/* Desglose por moneda */}
-        {(hasForeign || positions.length > 1) && (
+        {/* Desglose por moneda — plegado: la tarjeta muestra el total y recién
+            al pedir detalles aparece la letra chica de cada moneda. */}
+        {hasBreakdown && (
+          <button
+            type="button"
+            onClick={() => setShowBreakdown((v) => !v)}
+            aria-expanded={showBreakdown}
+            className="mb-3 inline-flex h-11 items-center gap-1.5 rounded-lg border border-border px-3.5 text-xs font-semibold text-muted transition-colors hover:border-primary/40 hover:text-foreground"
+          >
+            Detalles
+            <ChevronDown
+              size={14}
+              className={`transition-transform duration-200 ${showBreakdown ? "rotate-180" : ""}`}
+            />
+          </button>
+        )}
+
+        {hasBreakdown && showBreakdown && (
           <div className="mb-4 space-y-1.5 rounded-xl border border-border bg-surface-2/40 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">Por moneda</p>
             {resolved.map(({ position, rate, manual, reference }) => {
