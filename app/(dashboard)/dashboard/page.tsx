@@ -9,14 +9,12 @@ import { getInsights, getNetWorth } from "@/lib/db/insights";
 import { getTrends } from "@/lib/db/trends";
 import { getGoals } from "@/lib/db/goals";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatCurrency, percentageOf } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, PiggyBank, ChevronRight, ArrowUpRight, ArrowDownRight,
-  AlertTriangle, CheckCircle2, Info, Target, CalendarClock, Wallet, Newspaper,
+  AlertTriangle, CheckCircle2, Info, Target, CalendarClock, Wallet,
 } from "lucide-react";
 import { getAgenda } from "@/lib/db/agenda";
-import { getLatestEdition, hasUnreadTodayEdition } from "@/lib/db/newsletter";
-import { startOfTodayArg } from "@/lib/timezone";
 import { DashboardQuickAdd } from "./DashboardQuickAdd";
 import { CategoryChart } from "./CategoryChart";
 import { IncomeExpenseChart, BalanceSparkline, NetWorthChart } from "./DashboardCharts";
@@ -33,6 +31,7 @@ import { nextStreakMilestone } from "@/lib/streak-utils";
 import { StreakCelebration } from "./StreakCelebration";
 import { UpdateReminderBanner } from "./UpdateReminderBanner";
 import { InviteCard } from "./InviteCard";
+import { ProjectedCashFlowCard } from "./ProjectedCashFlowCard";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -68,7 +67,7 @@ export default async function DashboardPage({
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo, netWorth, lastMovementAt, agenda, isTester, latestEdition, newsletterUnread] =
+  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo, netWorth, lastMovementAt, agenda, isTester] =
     await Promise.all([
       getMonthSummary(user.id, month, year),
       getAccounts(user.id),
@@ -84,22 +83,10 @@ export default async function DashboardPage({
       getLastMovementDate(user.id).catch(() => null),
       getAgenda(user.id, 30).catch(() => []),
       getIsTester(user.id).catch(() => false),
-      getLatestEdition(user.id).catch(() => null),
-      hasUnreadTodayEdition(user.id).catch(() => false),
     ]);
 
   // Código para vincular WhatsApp en 1 toque (solo se genera si aún no vinculó).
   const whatsappLinkCode = whatsappNumber ? "" : await getOrCreateWhatsappLinkCode(user.id).catch(() => "");
-
-  // Banner del newsletter: solo si la edición sin leer es la de HOY.
-  const todayArgMs = startOfTodayArg().getTime();
-  const showNewsletterBanner =
-    newsletterUnread &&
-    latestEdition != null &&
-    new Date(latestEdition.date).getTime() === todayArgMs;
-  const newsletterTopics = latestEdition
-    ? new Set(latestEdition.articles.map((a) => a.topic)).size
-    : 0;
 
   const daysSinceLastMovement = lastMovementAt
     ? Math.floor((Date.now() - new Date(lastMovementAt).getTime()) / 86_400_000)
@@ -115,7 +102,6 @@ export default async function DashboardPage({
         : "¡de racha! 💪";
 
   const { totalIncome, totalExpense, balance, byCategory } = summary;
-  const savingsRate = totalIncome > 0 ? percentageOf(balance, totalIncome) : 0;
 
   // Series mensuales (para charts + comparativas vs mes anterior)
   const series = trends?.months ?? [];
@@ -255,46 +241,6 @@ export default async function DashboardPage({
         </Link>
       )}
 
-      {hasFeature("tareas", { isTester }) && (
-        <Link
-          href="/calendario"
-          className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 transition-colors hover:border-primary/50"
-        >
-          <span className="shrink-0">🗓️</span>
-          <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-            Organización <span className="font-normal text-muted">— calendario, tareas y recordatorios</span>
-          </p>
-          <ChevronRight size={15} className="shrink-0 text-primary" />
-        </Link>
-      )}
-
-      {/* Newsletter del día listo para leer */}
-      {showNewsletterBanner && latestEdition && (
-        <Link
-          href="/newsletter"
-          className="block rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 to-transparent px-4 py-3 transition-colors hover:border-primary/50"
-        >
-          <div className="flex items-center gap-3">
-            <span className="w-9 h-9 rounded-xl bg-primary/15 text-primary flex items-center justify-center shrink-0">
-              <Newspaper size={18} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-foreground leading-tight flex items-center gap-2">
-                Tu newsletter de hoy está listo
-                <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-              </p>
-              <p className="text-xs text-muted truncate mt-0.5">
-                {newsletterTopics > 0
-                  ? `${newsletterTopics} ${newsletterTopics === 1 ? "tema" : "temas"} · `
-                  : ""}
-                {latestEdition.summary}
-              </p>
-            </div>
-            <ChevronRight size={16} className="shrink-0 text-primary" />
-          </div>
-        </Link>
-      )}
-
       <OnboardingChecklist state={onboarding} />
       <GuidedTour enabled={welcome === "1"} userName={name} />
       <DashboardQuickAdd accounts={accounts} categories={categories} />
@@ -321,8 +267,9 @@ export default async function DashboardPage({
         </Card>
       )}
 
+      <div className="flex flex-col gap-4">
       {/* ── HERO ROW ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="order-1 grid grid-cols-1 gap-4 lg:order-2 lg:grid-cols-3">
 
         {/* Balance del mes (ingresos − gastos) — NO es el saldo total de cuentas */}
         <Card>
@@ -379,7 +326,7 @@ export default async function DashboardPage({
       </div>
 
       {/* ── CHARTS ROW ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="order-2 grid grid-cols-1 gap-4 lg:order-1 lg:grid-cols-2">
 
         {/* Patrimonio neto en el tiempo */}
         {netWorth && (
@@ -435,6 +382,9 @@ export default async function DashboardPage({
             </CardContent>
           </Card>
         )}
+
+        <ProjectedCashFlowCard startingBalance={totalBalanceARS} events={agenda} />
+      </div>
       </div>
 
       {/* Invitá a un amigo — loop de crecimiento WhatsApp-native */}

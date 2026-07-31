@@ -163,6 +163,7 @@ function CloseSessionModal({
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onClick={onClose}>
       <div
+        data-keyboard-aware-modal
         className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-border bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 space-y-4 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
@@ -283,7 +284,7 @@ function EditBlockModal({ block, onClose, onDone }: { block: BlockDTO; onClose: 
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onClick={onClose}>
-      <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-border bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 space-y-3 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div data-keyboard-aware-modal className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-border bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 space-y-3 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] font-mono text-muted">{block.code} · {block.subjectCode}</p>
@@ -352,7 +353,12 @@ function RecallModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onClick={onClose}>
-      <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-border bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div
+        data-keyboard-aware-modal
+        data-study-reader-modal
+        className="w-full sm:max-w-md lg:max-w-5xl rounded-t-3xl sm:rounded-2xl border border-border bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 lg:p-7 space-y-4 max-h-[90vh] lg:max-h-[calc(100vh-3rem)] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] font-mono text-muted">{block.code} · {block.subjectCode}</p>
@@ -373,10 +379,10 @@ function RecallModal({
           </button>
         ) : (
           <>
-            <div className="rounded-xl border border-border bg-surface-2/30 p-4">
+            <div className="rounded-xl border border-border bg-surface-2/30 p-4 lg:px-7 lg:py-6">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted mb-1.5">Tus puntos clave</p>
               {block.summary ? (
-                <MathText text={block.summary} className="text-sm text-foreground/90" />
+                <MathText text={block.summary} className="study-reader-content text-sm leading-6 text-foreground/90 lg:text-[15px] lg:leading-7" />
               ) : (
                 <p className="text-sm text-muted">No guardaste puntos clave de este tema — comparalo con tu apunte real y calificate honesto.</p>
               )}
@@ -690,7 +696,7 @@ function AvailabilityModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={onClose}>
-      <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-border bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 space-y-3 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div data-keyboard-aware-modal className="w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-border bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 space-y-3 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-foreground flex items-center gap-2"><CalendarDays size={17} /> Disponibilidad semanal</h3>

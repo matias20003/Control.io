@@ -64,7 +64,7 @@ export async function toggleTask(userId: string, id: string): Promise<void> {
   if (!t) throw new Error("No encontrada");
   await prisma.task.update({
     where: { id },
-    data: { done: !t.done, doneAt: !t.done ? new Date() : null },
+    data: { done: !t.done, status: !t.done ? "DONE" : "TODO", doneAt: !t.done ? new Date() : null },
   });
 }
 

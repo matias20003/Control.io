@@ -34,9 +34,9 @@ export function VencimientosCard() {
         </div>
 
         <p className="text-xs text-muted">
-          Cada mañana te avisamos lo que <span className="text-foreground">vence hoy o mañana</span>: cuotas de
-          tarjeta y deudas a pagar. Te llega por notificación push (y por WhatsApp si lo tenés vinculado), así no
-          se te pasa ninguna fecha.
+          Cada mañana te avisamos lo que <span className="text-foreground">vence hoy o mañana</span>: cuotas,
+          deudas y gastos fijos. Si tiene una cuenta asignada, te mostramos de dónde se descuenta; si no, te
+          indicamos que requiere pago. Llega por notificación push y por WhatsApp si lo tenés vinculado.
         </p>
 
         <button

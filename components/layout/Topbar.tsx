@@ -3,14 +3,15 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, Bell, ChevronDown, Settings, LogOut, Calculator as CalcIcon, MessageSquarePlus } from "lucide-react";
+import { Search, ChevronDown, Settings, LogOut, Calculator as CalcIcon, MessageSquarePlus } from "lucide-react";
 import { signOutAction } from "@/app/actions/auth";
+import { NotificationCenter, type AppNotification } from "@/components/layout/NotificationCenter";
 
 /**
  * Topbar — barra superior compartida (solo desktop). En mobile sigue el Header.
  * Buscador global + accesos (alertas / ayuda) + menú de usuario con logout.
  */
-export function Topbar({ name, email }: { name: string; email: string }) {
+export function Topbar({ name, email, notifications }: { name: string; email: string; notifications: AppNotification[] }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
@@ -58,14 +59,7 @@ export function Topbar({ name, email }: { name: string; email: string }) {
         <CalcIcon size={16} />
       </button>
 
-      {/* Alertas */}
-      <Link
-        href="/reporte"
-        title="Alertas y novedades"
-        className="w-9 h-9 rounded-xl bg-surface border border-border flex items-center justify-center text-muted hover:text-foreground transition-colors shrink-0"
-      >
-        <Bell size={16} />
-      </Link>
+      <NotificationCenter notifications={notifications} />
 
       {/* Menú de usuario */}
       <div ref={ref} className="relative shrink-0">

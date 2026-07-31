@@ -74,9 +74,15 @@ model Profile {
 
   // Reporte semanal por email — preferencia de envío por usuario.
   // weeklyReportDay: 0=Domingo … 6=Sábado (JS getDay). weeklyReportHour: 0–23 hora ARG.
-  weeklyReportEnabled Boolean @default(false)
-  weeklyReportDay     Int?
-  weeklyReportHour    Int?
+  weeklyReportEnabled  Boolean @default(false)
+  weeklyReportDay      Int?
+  weeklyReportHour     Int?
+  // WEEKLY | FORTNIGHTLY | MONTHLY. El día se interpreta según la frecuencia:
+  // semanal=0..6, quincenal=1 o 15, mensual=1..28.
+  reportFrequency      String  @default("WEEKLY")
+  reportNotifyApp      Boolean @default(true)
+  reportNotifyWhatsapp Boolean @default(true)
+  reportNotifyEmail    Boolean @default(false)
 
   // Recordatorio diario por WhatsApp — pregunta a las 20hs ARG si registró sus gastos.
   dailyReminderEnabled Boolean @default(false)
@@ -118,13 +124,18 @@ model Profile {
   gruposCreados         GrupoGasto[]           @relation("GruposCreados")
   gruposMiembro         MiembroGrupo[]         @relation("GruposMiembro")
   tasks                 Task[]
+  organizationLists     OrganizationList[]
+  habits                Habit[]
+  googleCalendarSync    GoogleCalendarSync?
   reminders             Reminder[]
   recurringReminders    RecurringReminder[]
   newsletterConfig      NewsletterConfig?
   newsletterEditions    NewsletterEdition[]
+  deviceSessions        DeviceSession[]
   briefSources          BriefSource[]
   discoveryCandidates   DiscoveryCandidate[]
   briefFeedback         BriefFeedback[]
+  reportDeliveries      ReportDelivery[]
 
   @@map("profiles")
 }
@@ -372,17 +383,108 @@ model Goal {
 // Tareas / pendientes del día a día (experimento: convertir control.io en
 // asistente de vida, no solo de finanzas). title cifrado como el resto.
 model Task {
-  id        String    @id @default(cuid())
-  userId    String
-  user      Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String
-  dueDate   DateTime?
-  done      Boolean   @default(false)
-  doneAt    DateTime?
-  createdAt DateTime  @default(now())
+  id              String    @id @default(cuid())
+  userId          String
+  user            Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listId          String?
+  list            OrganizationList? @relation(fields: [listId], references: [id], onDelete: SetNull)
+  title           String
+  description     String?
+  dueDate         DateTime?
+  scheduledStart  DateTime?
+  scheduledEnd    DateTime?
+  status          String    @default("TODO")
+  priority        String    @default("NONE")
+  urgent          Boolean   @default(false)
+  important       Boolean   @default(false)
+  order           Int       @default(0)
+  recurrenceRule  String?
+  reminderMinutes Int?
+  source          String    @default("CONTROL_IO")
+  googleEventId   String?
+  googleCalendarId String?
+  googleEtag      String?
+  googleUpdatedAt DateTime?
+  syncStatus      String    @default("LOCAL")
+  syncError       String?
+  done            Boolean   @default(false)
+  doneAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([userId, done, dueDate])
+  @@index([userId, status, scheduledStart])
+  @@index([listId, status, order])
+  @@unique([userId, googleCalendarId, googleEventId])
   @@map("tasks")
+}
+
+model OrganizationList {
+  id        String   @id @default(cuid())
+  userId    String
+  user      Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  color     String   @default("#2563eb")
+  icon      String?
+  position  Int      @default(0)
+  isInbox   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tasks     Task[]
+
+  @@index([userId, position])
+  @@unique([userId, name])
+  @@map("organization_lists")
+}
+
+model Habit {
+  id              String   @id @default(cuid())
+  userId          String
+  user            Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  icon            String?
+  color           String   @default("#2563eb")
+  frequency       String   @default("DAILY")
+  daysOfWeek      Int[]
+  targetPerPeriod Int      @default(1)
+  scheduledTime   String?
+  googleEventId   String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  completions     HabitCompletion[]
+
+  @@index([userId, isActive])
+  @@map("habits")
+}
+
+model HabitCompletion {
+  id        String   @id @default(cuid())
+  habitId   String
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  @@unique([habitId, date])
+  @@index([date])
+  @@map("habit_completions")
+}
+
+model GoogleCalendarSync {
+  userId          String   @id
+  user            Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  calendarId      String?
+  syncToken       String?
+  channelId       String?  @unique
+  channelToken    String?
+  resourceId      String?
+  channelExpiresAt DateTime?
+  lastSyncedAt    DateTime?
+  lastError       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("google_calendar_sync")
 }
 
 // Recordatorios con hora exacta ("haceme acordar en 5 min de X"). Se disparan
@@ -606,6 +708,110 @@ model WhatsappProcessedMessage {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("whatsapp_processed_messages")
+}
+
+model DeviceSession {
+  id         String   @id @default(cuid())
+  userId     String
+  deviceId   String
+  deviceType String
+  browser    String
+  os         String
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([userId, lastSeenAt])
+}
+
+model ReportDelivery {
+  id          String   @id @default(cuid())
+  userId      String
+  user        Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  frequency   String
+  periodStart DateTime
+  periodEnd   DateTime
+  title       String
+  summary     String
+  snapshot    Json
+  publicToken String   @unique @default(cuid())
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, frequency, periodStart, periodEnd])
+  @@index([userId, createdAt])
+  @@map("report_deliveries")
+}
+
+model WhatsappPendingAction {
+  id        BigInt   @id @default(autoincrement())
+  userId    String   @map("user_id")
+  payload   String
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId, expiresAt], map: "wpa_user_expires_idx")
+  @@map("whatsapp_pending_actions")
+}
+
+model WhatsappAgentEvent {
+  id          BigInt   @id @default(autoincrement())
+  userId      String   @map("user_id")
+  event       String
+  intent      String?
+  actionTypes String?  @map("action_types")
+  provider    String?
+  latencyMs   Int?     @map("latency_ms")
+  success     Boolean  @default(true)
+  errorCode   String?  @map("error_code")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt, event], map: "wae_created_event_idx")
+  @@index([userId, createdAt], map: "wae_user_created_idx")
+  @@map("whatsapp_agent_events")
+}
+
+model WhatsappAgentRule {
+  id          BigInt   @id @default(autoincrement())
+  userId      String   @map("user_id")
+  kind        String
+  matchValue  String   @map("match_value")
+  resultValue String   @map("result_value")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId, enabled, id], map: "war_user_enabled_idx")
+  @@map("whatsapp_agent_rules")
+}
+
+model WhatsappInsightDelivery {
+  id         BigInt   @id @default(autoincrement())
+  userId     String   @map("user_id")
+  insightKey String   @map("insight_key")
+  severity   String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([userId, insightKey])
+  @@index([createdAt], map: "wid_created_idx")
+  @@map("whatsapp_insight_deliveries")
+}
+
+model WhatsappOrganizerSettings {
+  userId        String   @id @map("user_id")
+  briefEnabled  Boolean  @default(false) @map("brief_enabled")
+  briefHour     Int      @default(8) @map("brief_hour")
+  workStart     Int      @default(8) @map("work_start")
+  workEnd       Int      @default(20) @map("work_end")
+  focusMinutes  Int      @default(50) @map("focus_minutes")
+  bufferMinutes Int      @default(10) @map("buffer_minutes")
+  lastBriefDate String?  @map("last_brief_date")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([briefEnabled, briefHour], map: "wos_brief_idx")
+  @@map("whatsapp_organizer_settings")
 }
 
 // Correos ya notificados por el vigilante de UTN (dedup: no avisar 2 veces el

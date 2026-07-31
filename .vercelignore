@@ -1,0 +1,26 @@
+# Dependencias y builds locales
+node_modules
+.next
+.next-*
+out
+build
+output
+
+# Herramientas, cachés y reportes locales
+.git
+.claude
+.playwright-mcp
+coverage
+test-results
+playwright-report
+blob-report
+*.log
+*.tsbuildinfo
+
+# Configuración y secretos locales
+.env*
+.mcp.json
+.vercel
+
+# Artefactos que se regeneran durante el build
+app/generated/prisma

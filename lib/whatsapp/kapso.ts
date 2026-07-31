@@ -37,6 +37,69 @@ export async function sendText(to: string, text: string): Promise<void> {
   }
 }
 
+/** Envía un PDF como documento nativo de WhatsApp desde una URL pública HTTPS. */
+export async function sendDocument(
+  to: string,
+  documentUrl: string,
+  filename: string,
+  caption?: string,
+): Promise<void> {
+  const apiKey = process.env.KAPSO_API_KEY;
+  const phoneId = process.env.KAPSO_PHONE_NUMBER_ID;
+  if (!apiKey || !phoneId) throw new Error("Kapso no configurado");
+  const res = await fetch(`${apiUrl()}/meta/whatsapp/v24.0/${phoneId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "document",
+      document: { link: documentUrl, filename, ...(caption ? { caption } : {}) },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Kapso sendDocument falló (${res.status}): ${body}`);
+  }
+}
+
+/** Envía hasta 3 botones de respuesta nativos de WhatsApp. */
+export async function sendReplyButtons(
+  to: string,
+  text: string,
+  buttons: { id: string; title: string }[]
+): Promise<void> {
+  const apiKey = process.env.KAPSO_API_KEY;
+  if (!apiKey) throw new Error("KAPSO_API_KEY no configurada");
+  const phoneId = process.env.KAPSO_PHONE_NUMBER_ID;
+  if (!phoneId) throw new Error("KAPSO_PHONE_NUMBER_ID no configurada");
+  if (!buttons.length || buttons.length > 3) throw new Error("WhatsApp admite entre 1 y 3 botones");
+
+  const res = await fetch(`${apiUrl()}/meta/whatsapp/v24.0/${phoneId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text },
+        action: {
+          buttons: buttons.map((button) => ({
+            type: "reply",
+            reply: { id: button.id, title: button.title.slice(0, 20) },
+          })),
+        },
+      },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Kapso sendReplyButtons falló (${res.status}): ${body}`);
+  }
+}
+
 // Hosts permitidos para descargar media (Kapso + CDNs oficiales de WhatsApp/Meta).
 // Evita SSRF: el media_url viene del payload del webhook y no debe poder apuntar
 // a IPs internas / servicios del propio servidor.
@@ -46,6 +109,8 @@ const ALLOWED_MEDIA_HOSTS = [
   /(^|\.)fbcdn\.net$/i,
   /(^|\.)fbsbx\.com$/i,
   /(^|\.)cdninstagram\.com$/i,
+  // Bucket R2 oficial usado por Kapso para media entrante antes de entregarla.
+  /^kapso-ai-prod\.[a-f0-9]+\.r2\.cloudflarestorage\.com$/i,
 ];
 const MAX_MEDIA_BYTES = 30 * 1024 * 1024; // 30 MB (PDFs de apuntes pueden ser pesados)
 
@@ -69,6 +134,25 @@ function assertSafeMediaUrl(raw: string): URL {
     throw new Error(`media_url de host no permitido: ${host}`);
   }
   return u;
+}
+
+/**
+ * Sigue manualmente los redirects de Kapso al CDN de Meta, validando cada
+ * destino para mantener la protección SSRF. La API key no sale de kapso.ai.
+ */
+async function fetchSafeMediaResponse(rawUrl: string): Promise<Response> {
+  let url = assertSafeMediaUrl(rawUrl);
+  const apiKey = process.env.KAPSO_API_KEY;
+  for (let hop = 0; hop <= 4; hop++) {
+    const headers: Record<string, string> = {};
+    if (apiKey && url.hostname.toLowerCase().endsWith("kapso.ai")) headers["X-API-Key"] = apiKey;
+    const res = await fetch(url, { headers, redirect: "manual" });
+    if (res.status < 300 || res.status >= 400) return res;
+    const location = res.headers.get("location");
+    if (!location) throw new Error(`Redirección de media sin destino (${res.status})`);
+    url = assertSafeMediaUrl(new URL(location, url).toString());
+  }
+  throw new Error("Demasiadas redirecciones al descargar la imagen");
 }
 
 /**
@@ -114,13 +198,7 @@ export async function sendTemplate(
  * limita el tamaño.
  */
 export async function fetchMediaAsDataUrl(mediaUrl: string, mimeType?: string): Promise<string> {
-  const url = assertSafeMediaUrl(mediaUrl);
-  const apiKey = process.env.KAPSO_API_KEY;
-  const headers: Record<string, string> = {};
-  // La auth solo va a los hosts de Kapso; los CDN públicos de WhatsApp no la necesitan.
-  if (apiKey && url.hostname.toLowerCase().endsWith("kapso.ai")) headers["X-API-Key"] = apiKey;
-
-  const res = await fetch(url, { headers, redirect: "error" });
+  const res = await fetchSafeMediaResponse(mediaUrl);
   if (!res.ok) throw new Error(`No pude descargar el archivo (${res.status})`);
 
   const len = Number(res.headers.get("content-length") ?? 0);
@@ -138,12 +216,7 @@ export async function fetchMediaAsDataUrl(mediaUrl: string, mimeType?: string): 
  * pasar a un modelo con visión (para eso está fetchMediaAsDataUrl).
  */
 export async function fetchMediaBuffer(mediaUrl: string): Promise<Buffer> {
-  const url = assertSafeMediaUrl(mediaUrl);
-  const apiKey = process.env.KAPSO_API_KEY;
-  const headers: Record<string, string> = {};
-  if (apiKey && url.hostname.toLowerCase().endsWith("kapso.ai")) headers["X-API-Key"] = apiKey;
-
-  const res = await fetch(url, { headers, redirect: "error" });
+  const res = await fetchSafeMediaResponse(mediaUrl);
   if (!res.ok) throw new Error(`No pude descargar el archivo (${res.status})`);
   const len = Number(res.headers.get("content-length") ?? 0);
   if (len > MAX_MEDIA_BYTES) throw new Error("archivo demasiado grande");

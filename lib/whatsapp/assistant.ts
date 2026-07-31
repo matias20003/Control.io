@@ -28,22 +28,35 @@ import { getDebts, createDebt, payDebt, deleteDebt, type SerializedDebt } from "
 import { getBudgets, createOrUpdateBudget, deleteBudget, type SerializedBudget } from "@/lib/db/budgets";
 import { getGoals, createGoal, addFundsToGoal, updateGoal, deleteGoal, type SerializedGoal } from "@/lib/db/goals";
 import { getInvestments, type SerializedInvestment } from "@/lib/db/investments";
-import { getTasks, createTask, toggleTask, deleteTask, type SerializedTask } from "@/lib/db/tasks";
+import { getTasks, toggleTask, deleteTask, type SerializedTask } from "@/lib/db/tasks";
 import { createReminder, getPendingReminders, type SerializedReminder } from "@/lib/db/reminders";
 import { createRecurringReminder, listRecurringReminders, updateRecurringReminder, deleteRecurringReminder, type SerializedRecurringReminder } from "@/lib/db/recurring-reminders";
 import { isStudyOwner } from "@/lib/study/ingest";
 import { listSubjects as listStudySubjects, listUnits as listStudyUnits, createUnit as createStudyUnit, createBlocksDistributed } from "@/lib/db/study-system";
-import { createCalendarEvent, createGoogleTask, getGoogleStatus, listCalendarEvents, listGoogleTasks, deleteCalendarEvent, updateCalendarEvent, completeGoogleTask } from "@/lib/google";
+import { createCalendarEvent, getGoogleStatus, listCalendarEvents, listGoogleTasks, deleteCalendarEvent, updateCalendarEvent, completeGoogleTask, type GoogleCalendarEvent } from "@/lib/google";
 import { getIsTester } from "@/lib/db/profile";
 import { hasFeature } from "@/lib/feature-flags";
 import { ARG_TZ } from "@/lib/timezone";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import { format as formatDateFn } from "date-fns";
-import { getChatHistory, saveChatTurn, getMemory, addMemory, type ChatTurn } from "@/lib/whatsapp/memory";
+import { getChatHistory, saveChatTurn, getMemory, addMemory, clearAssistantMemory, type ChatTurn } from "@/lib/whatsapp/memory";
 import { geminiEnabled, geminiChatJson, openaiChatJson, LlmError } from "@/lib/ai/chat";
 import { notifyAdminThrottled, bumpDailyCounter } from "@/lib/alerts";
 import { escalateSupport } from "@/lib/db/support";
 import { todayStringArg } from "@/lib/timezone";
+import { getCotizaciones, type CotizacionItem } from "@/lib/cotizaciones";
+import { formatMarketReply, formatRatesForContext, parseMarketQuery } from "@/lib/whatsapp/market-data";
+import { z } from "zod";
+import { cancelPendingAction, hasPendingAction, savePendingAction, takePendingAction } from "@/lib/whatsapp/pending-action";
+import { recordAgentEvent } from "@/lib/whatsapp/telemetry";
+import { applyRulesToMovement, createAgentRule, deleteAgentRule, formatRulesForPrompt, listAgentRules, type AgentRule, type AgentRuleKind } from "@/lib/whatsapp/rules";
+import { getProactiveInsights, type ProactiveInsight } from "@/lib/whatsapp/insights";
+import { findFirstFreeSlot, formatOrganizerReply, overlappingEvents, parseOrganizerQuery } from "@/lib/whatsapp/organizer";
+import { getOrganizerSettings, updateOrganizerSettings, type OrganizerSettings } from "@/lib/whatsapp/organizer-settings";
+import { createHabit, createOrganizationList, createOrganizationTask, toggleHabitCompletion, updateOrganizationTask } from "@/lib/db/organization";
+import { prisma } from "@/lib/prisma";
+import { syncTaskToGoogle } from "@/lib/google-organization";
+import { decrypt } from "@/lib/crypto";
 
 type Intent = "action" | "query" | "chat";
 
@@ -96,6 +109,23 @@ interface Action {
   unit?: string;            // create_study: nombre de la unidad/capítulo
   topics?: string[];        // create_study: lista de temas de la unidad
   initialSessions?: number; // create_study: sesiones de estudio inicial (1-4)
+  ruleKind?: AgentRuleKind;
+  match?: string;
+  value?: string;
+  ruleRef?: number;
+  allowConflict?: boolean;
+  briefEnabled?: boolean;
+  briefHour?: number;
+  workStart?: number;
+  workEnd?: number;
+  focusMinutes?: number;
+  bufferMinutes?: number;
+  listName?: string;
+  habitName?: string;
+  status?: "TODO" | "IN_PROGRESS" | "DONE";
+  priority?: "NONE" | "LOW" | "MEDIUM" | "HIGH";
+  urgent?: boolean;
+  important?: boolean;
 }
 
 interface AssistantOutput {
@@ -126,15 +156,86 @@ interface FinancialContext {
   nowArg: string; // "YYYY-MM-DDTHH:mm" hora Argentina (para recordatorios)
   dateRef: string; // tabla de los próximos días con su fecha exacta (ARG)
   googleConnected: boolean;
-  gcalEvents: { id: string; summary: string; start: string }[];
+  gcalEvents: GoogleCalendarEvent[];
   gtasks: { id: string; title: string; due: string | null }[];
   referralUrl: string;
   isStudyOwner: boolean; // solo el dueño del estudio puede cargar materias/temas
   studySubjects: { code: string; name: string }[];
+  marketRates: CotizacionItem[];
+  rules: AgentRule[];
+  proactiveInsights: ProactiveInsight[];
+  organizerSettings: OrganizerSettings;
 }
 
-function baseUrl(): string {
-  return (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/+$/, "");
+const assistantOutputSchema = z.object({
+  intent: z.enum(["action", "query", "chat"]).catch("chat"),
+  actions: z.array(z.object({
+    type: z.string().min(1),
+    amount: z.number().positive().optional(),
+    currency: z.enum(["ARS", "USD"]).optional(),
+    description: z.string().max(300).optional(),
+    date: z.string().max(40).optional(),
+    category: z.string().max(120).nullable().optional(),
+    account: z.string().max(120).nullable().optional(),
+    reportOnly: z.boolean().optional(),
+    fromAccount: z.string().max(120).nullable().optional(),
+    toAccount: z.string().max(120).nullable().optional(),
+    name: z.string().max(200).optional(),
+    accountType: z.string().max(60).optional(),
+    balance: z.number().optional(),
+    direction: z.enum(["i_owe", "they_owe"]).optional(),
+    personName: z.string().max(200).optional(),
+    targetAmount: z.number().positive().optional(),
+    currentAmount: z.number().nonnegative().optional(),
+    goalName: z.string().max(200).optional(),
+    ref: z.coerce.number().int().positive().optional(),
+    fact: z.string().max(500).optional(),
+    title: z.string().max(500).optional(),
+    dueDate: z.string().max(40).optional(),
+    taskRef: z.coerce.number().int().positive().optional(),
+    inMinutes: z.number().positive().max(525_600).optional(),
+    remindAt: z.string().max(40).optional(),
+    daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+    atTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    link: z.string().url().max(1000).optional(),
+    recRef: z.coerce.number().int().positive().optional(),
+    eventStart: z.string().max(40).optional(),
+    durationMin: z.number().positive().max(1440).optional(),
+    eventRef: z.coerce.number().int().positive().optional(),
+    motivo: z.string().max(600).optional(),
+    subjectCode: z.string().max(40).optional(),
+    unit: z.string().max(300).optional(),
+    topics: z.array(z.string().max(500)).max(100).optional(),
+    initialSessions: z.number().int().min(1).max(4).optional(),
+    ruleKind: z.enum(["MERCHANT_CATEGORY", "MERCHANT_ACCOUNT", "DEFAULT_ACCOUNT"]).optional(),
+    match: z.string().max(160).optional(),
+    value: z.string().max(160).optional(),
+    ruleRef: z.coerce.number().int().positive().optional(),
+    allowConflict: z.boolean().optional(),
+    briefEnabled: z.boolean().optional(),
+    briefHour: z.number().int().min(0).max(23).optional(),
+    workStart: z.number().int().min(0).max(23).optional(),
+    workEnd: z.number().int().min(1).max(24).optional(),
+    focusMinutes: z.number().int().min(15).max(240).optional(),
+    bufferMinutes: z.number().int().min(0).max(120).optional(),
+    listName: z.string().max(120).optional(),
+    habitName: z.string().max(160).optional(),
+    status: z.enum(["TODO", "IN_PROGRESS", "DONE"]).optional(),
+    priority: z.enum(["NONE", "LOW", "MEDIUM", "HIGH"]).optional(),
+    urgent: z.boolean().optional(),
+    important: z.boolean().optional(),
+  }).strict()).max(50),
+  answer: z.string().max(4000).catch(""),
+}).strict();
+
+function stripModelNulls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripModelNulls);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key, item]) => item !== null || ["category", "account", "fromAccount", "toAccount"].includes(key))
+      .map(([key, item]) => [key, stripModelNulls(item)])
+  );
 }
 
 const DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
@@ -148,10 +249,6 @@ function fmt(n: number): string {
 
 function money(n: number, currency = "ARS"): string {
   return currency === "USD" ? `USD ${fmt(n)}` : `$${fmt(n)}`;
-}
-
-function fail(msg: string): never {
-  throw new Error(msg);
 }
 
 /** Devuelve la fecha de la acción (ISO) si es válida y no futura, sino hoy. */
@@ -203,6 +300,8 @@ function findByName<T extends { name: string }>(list: T[], q: string | null | un
 
 function formatFinancialState(c: FinancialContext): string {
   const s: string[] = [];
+
+  s.push(`COTIZACIONES ACTUALES (DolarAPI, no inventar ni usar conocimiento propio):\n${formatRatesForContext(c.marketRates)}`);
 
   s.push(
     `CUENTAS Y SALDOS:\n` +
@@ -373,6 +472,20 @@ function formatFinancialState(c: FinancialContext): string {
     );
   }
 
+  s.push(`REGLAS PERSONALES:\n${formatRulesForPrompt(c.rules)}`);
+  if (c.proactiveInsights.length) {
+    s.push(
+      `INSIGHTS CALCULADOS:\n` +
+      c.proactiveInsights.map((insight) => `- ${insight.title}: ${insight.message.replaceAll("*", "")}`).join("\n")
+    );
+  }
+  s.push(
+    `PREFERENCIAS DE ORGANIZACIÓN:\n` +
+    `- Jornada ${String(c.organizerSettings.workStart).padStart(2, "0")}:00–${String(c.organizerSettings.workEnd).padStart(2, "0")}:00\n` +
+    `- Bloque de foco: ${c.organizerSettings.focusMinutes} min · margen: ${c.organizerSettings.bufferMinutes} min\n` +
+    `- Resumen diario: ${c.organizerSettings.briefEnabled ? `activo a las ${String(c.organizerSettings.briefHour).padStart(2, "0")}:00` : "desactivado"}`
+  );
+
   return s.join("\n\n");
 }
 
@@ -406,12 +519,22 @@ usuario (los de abajo) y das recomendaciones CONCRETAS y accionables, nunca gen�
   alto nivel. SIEMPRE como ORIENTACIÓN GENERAL, no asesoramiento de inversión formal: no digas
   "comprá X", explicá las opciones y sus pros/contras para que el usuario decida mejor.
 
-ASISTENTE DEL DÍA A DÍA — además de finanzas, respondés CUALQUIER pregunta con conocimiento real y
-utilidad: organización y productividad, planificación, cálculos, ideas, cómo hacer algo, dudas
-generales, recomendaciones cotidianas, explicaciones simples. NUNCA cortes con "solo cargo gastos":
-ayudás de verdad primero y, si viene al caso, recién ahí ofrecés lo de la app. Si el tema es de
-salud/legal/impositivo específico o algo que no sabés con certeza, das una orientación útil y
-sugerís confirmarlo con un profesional — pero jamás dejás al usuario sin una respuesta que sume.
+ALCANCE ESPECIALIZADO — sos el agente de control.io para finanzas personales, cotizaciones,
+presupuestos, ahorro, organización, agenda y soporte del producto. No sos un asistente de IA
+generalista. Si preguntan algo totalmente ajeno, respondé amable y breve y orientá la conversación
+a cómo podés ayudar con sus finanzas u organización. En salud, derecho o impuestos específicos,
+limitá la respuesta a orientación general y sugerí consultar a un profesional.
+
+ORGANIZADOR PERSONAL EXPERTO — Google Calendar, Google Tasks, tareas de control.io y recordatorios
+son la fuente de verdad. Nunca inventes disponibilidad. Aplicá estos principios:
+- Diferenciá evento (hora fija), tarea (resultado pendiente) y recordatorio (aviso puntual).
+- Priorizá por urgencia e impacto; proponé como máximo 3 prioridades principales por día.
+- Convertí trabajo importante en bloques de foco realistas, con pausas y margen entre compromisos.
+- Antes de agendar verificá conflictos; no superpongas salvo que el usuario insista explícitamente.
+- Si una jornada está sobrecargada, decilo y proponé mover, reducir o delegar, sin prometer magia.
+- Para "organizame el día/semana", combiná agenda + tareas + vencimientos y ordená cronológicamente.
+- Después de una reunión importante, sugerí una tarea breve de seguimiento solo si aporta valor.
+- La disponibilidad siempre se calcula con inicio Y fin reales de cada evento.
 
 SOPORTE TÉCNICO DE control.io — TAMBIÉN sos el soporte de la app: si el usuario pregunta CÓMO se usa
 algo, DÓNDE está una función o algo NO le funciona, resolvele la duda con pasos claros y cortos.
@@ -432,6 +555,9 @@ pide hablar con una persona), emití la acción "escalar_soporte" y avisale que 
 • DEUDAS y CUOTAS: lo que debés/te deben y las cuotas de tarjeta. GRUPOS: gastos compartidos.
 • ANÁLISIS: Reporte, Tendencias y Gastos hormiga. COTIZACIONES: dólar (oficial/MEP/blue). NEWSLETTER:
   resumen automático de tus finanzas.
+• COTIZACIONES EN WHATSAPP: si pregunta "a cuánto está el dólar" o cualquier cotización, respondé
+  el valor completo ACÁ MISMO con compra y venta usando COTIZACIONES ACTUALES. NUNCA lo mandes a
+  la web para conocer el valor y nunca respondas solo con un enlace.
 • NOTIFICACIONES: para recibir avisos/recordatorios, instalá la app (en el navegador → "Agregar a
   pantalla de inicio") y permití notificaciones.
 • PRIVACIDAD: los datos están cifrados y son privados de cada usuario.
@@ -476,6 +602,8 @@ CON QUÉ CUENTA es (Efectivo, Mercado Pago, banco, etc.). Si el usuario NO menci
 tiene MÁS DE UNA, NO registres todavía: respondé (intent "chat") preguntando con qué cuenta fue,
 nombrando las cuentas disponibles. Recién cuando sepas la cuenta emití la acción con "account".
 Si tiene UNA sola cuenta, usala sin preguntar.
+EXCEPCIÓN: si una REGLA PERSONAL de comercio→cuenta o cuenta predeterminada resuelve la cuenta,
+emití la acción sin preguntar; el ejecutor aplicará esa regla automáticamente.
 
 AJUSTAR SALDO (set_balance): si el usuario te dice CUÁNTO TIENE en una cuenta —"en Mercado Pago
 tengo 50.000", "mi saldo del banco es 120 lucas", "tengo 30k en efectivo", "corregí/poné el saldo
@@ -502,6 +630,7 @@ calculá la fecha respecto de HOY (${c.today}) y ponela en "date". Si solo dice 
 usá el día 15 de ese mes. Si no menciona fecha, OMITÍ "date" (se usa hoy). Nunca uses fechas futuras.
 
 Si te mandan una IMAGEN:
+- Si contiene [CLASIFICACIÓN_VISUAL: COMPROBANTE_FINANCIERO], la imagen ES FINANCIERA de forma vinculante. PROHIBIDO tratarla como material de estudio o preguntar de qué materia es. Extraé el movimiento y generá expense/income/transfer según corresponda.
 - Si es UN ticket/recibo/factura/captura: generá la acción (normalmente "expense", o "income"
   si es un cobro). En un ticket de compra con varios ítems, sumalos en UN solo gasto con el total,
   salvo que el usuario pida separarlos.
@@ -538,23 +667,34 @@ TIPOS DE ACCIÓN (campo "type"):
 - "delete_transaction": { ref }                                // ref = número [#N] de la lista
 - "update_transaction": { ref, amount, description, category, account }  // solo los campos a cambiar
 - "remember": { fact }   // guardar un DATO DURABLE del usuario (cómo es su plata/vida: "cobro los días 10", "mi alquiler es 200k"). NO es una tarea.
+- "create_rule": { ruleKind, match, value } // regla durable: MERCHANT_CATEGORY comercio→categoría; MERCHANT_ACCOUNT comercio→cuenta; DEFAULT_ACCOUNT todos→cuenta.
+- "delete_rule": { ruleRef } // desactivar una regla [#N] de REGLAS PERSONALES.
+- "clear_memory": {} // borrar memoria, historial y reglas cuando el usuario pide "olvidá todo lo que sabés de mí". Requiere confirmación.
+- Si dice "Coto siempre es Supermercado", "Uber siempre sale de Mercado Pago" o "usá Efectivo por defecto", creá una regla; no uses solo remember.
 - "escalar_soporte": { motivo }   // DERIVAR al equipo humano de soporte cuando NO podés resolver una duda del SISTEMA, el usuario reporta un ERROR/bug o algo roto, o pide hablar con una persona. motivo = resumen corto del problema. Primero SIEMPRE intentá resolverlo vos con los pasos; usá esto solo si de verdad no alcanza. Tras emitirlo, "answer" avisa que se derivó.
-${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, dueDate }   // un PENDIENTE/recordatorio a HACER ("recordame entregar el TP el martes", "tengo que comprar pilas", "anotá llamar al banco"). dueDate "YYYY-MM-DD" opcional, relativo a HOY. Diferente de "remember": esto es algo PENDIENTE, no un dato.
+${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, dueDate, eventStart, durationMin, listName, priority, urgent, important } // crea un pendiente. Si tiene hora, eventStart="YYYY-MM-DDTHH:mm" y se sincroniza con Google Calendar.
 - "complete_task": { taskRef, title }   // marcar una tarea como HECHA ("marcá comprar pan como hecha", "ya entregué el TP", "listo lo de las pilas"). Pasá taskRef = [#N] de TUS TAREAS PENDIENTES, Y TAMBIÉN title = el texto de la tarea (ej: "comprar pan"). Siempre mandá title.
-- "delete_task": { taskRef }   // borrar/cancelar una tarea. taskRef = [#N] de TUS TAREAS PENDIENTES.` : ``}
+- "update_task": { taskRef, title, dueDate, eventStart, durationMin, listName, status, priority, urgent, important } // reprograma, mueve de lista o cambia prioridad/estado.
+- "delete_task": { taskRef }   // borrar/cancelar una tarea. taskRef = [#N] de TUS TAREAS PENDIENTES.
+- "create_list": { listName } // crea una lista de organización.
+- "create_habit": { habitName, daysOfWeek, atTime } // crea un hábito.
+- "complete_habit": { habitName, date } // marca el hábito cumplido; date YYYY-MM-DD, hoy si se omite.
+Todo lo de organización se refleja en la app. Una tarea con horario se refleja también en Google Calendar.` : ``}
 ${hasFeature("recordatorios", { isTester: c.isTester }) ? `- "create_reminder": { title, inMinutes, remindAt }   // recordatorio CON HORA que te aviso UNA SOLA VEZ ("haceme acordar en 5 min de sacar la comida", "recordame mañana a las 9 llamar al banco"). title = qué recordar. Para "en X minutos/horas" usá inMinutes (5, 120). Para una hora/fecha puntual usá remindAt "YYYY-MM-DDTHH:mm" en hora Argentina (calculada desde AHORA). Es distinto de create_task: el recordatorio DISPARA un aviso a una hora exacta.
 - "create_recurring_reminder": { title, daysOfWeek, atTime, link }   // recordatorio que SE REPITE ("recordame todos los lunes a viernes a las 17:00 sacar la basura", "todos los días a las 21 cargá tus gastos", "cada lunes a las 9 pagar el alquiler"). title = qué recordar. daysOfWeek = array de días donde 0=Domingo,1=Lunes,2=Martes,3=Miércoles,4=Jueves,5=Viernes,6=Sábado (ej: lunes a viernes = [1,2,3,4,5]; todos los días = [0,1,2,3,4,5,6]; fin de semana = [0,6]). atTime = hora ARG "HH:mm" (ej "17:00"). link = URL opcional que se manda JUNTO al aviso (ej: link de asistencia de la facultad). Usalo SIEMPRE que el pedido tenga una repetición ("todos", "cada", "los lunes", "de lunes a viernes"). Distinto de create_reminder (que es una sola vez).
   ⚠️ LINK: si el usuario quiere adjuntar un link pero TODAVÍA NO lo pasó ("quiero dejar un link", "con un link"), NO crees el recordatorio aún: respondé intent "chat" pidiéndoselo ("Dale, pasame el link y lo dejo listo 👍"). En el PRÓXIMO mensaje (lo vas a ver en el HISTORIAL con los datos del recordatorio pendiente) creá el recordatorio con ese "link". Si el usuario ya incluyó el link en el mismo mensaje, ponelo directo en "link".
 - "edit_recurring_reminder": { recRef, title, daysOfWeek, atTime, link }   // EDITAR un recordatorio recurrente existente ("cambiá el de asistencia a las 20", "el recordatorio de la basura ponelo también los sábados", "agregale este link al de asistencia: ..."). recRef = [#N] de RECORDATORIOS RECURRENTES. Mandá SOLO los campos que cambian. Para quitar el link mandá link:"".
 - "delete_recurring_reminder": { recRef }   // BORRAR un recordatorio recurrente ("borrá el recordatorio de asistencia", "sacá el de la basura"). recRef = [#N] de RECORDATORIOS RECURRENTES.` : ``}
-${hasFeature("google", { isTester: c.isTester }) && c.googleConnected ? `- "agendar_evento": { title, eventStart, durationMin }   // crea un EVENTO en Google Calendar ("agendá turno médico el jueves 10hs", "reunión mañana 15hs", "cumple de Ana el 20"). title = qué. eventStart = "YYYY-MM-DDTHH:mm" en hora Argentina (relativo a HOY). durationMin opcional (default 60). Usalo para citas/eventos con fecha y hora; create_task es para to-dos sin hora.
+${hasFeature("google", { isTester: c.isTester }) && c.googleConnected ? `- "agendar_evento": { title, eventStart, durationMin, allowConflict }   // crea un EVENTO en Google Calendar y verifica conflictos. allowConflict=true SOLO si el usuario insiste explícitamente después de ser avisado. eventStart = "YYYY-MM-DDTHH:mm" en hora Argentina.
+- "plan_task": { title, dueDate, durationMin } // busca automáticamente el primer hueco libre antes del vencimiento y crea un bloque de foco en Google Calendar. durationMin opcional; usa la preferencia de foco si se omite.
+- "configure_organizer": { briefEnabled, briefHour, workStart, workEnd, focusMinutes, bufferMinutes } // configura jornada, foco, margen y resumen diario. Mandá solo lo pedido.
 - "borrar_evento": { eventRef }   // borra un evento del calendario ("borrá la reunión del lunes", "cancelá el turno"). eventRef = [#N] de AGENDA.
 - "editar_evento": { eventRef, title, eventStart, durationMin }   // reprograma o renombra un evento ("movélo a las 16", "cambialo para el martes 11hs"). eventRef = [#N] de AGENDA. Mandá solo lo que cambia (title y/o eventStart).` : ``}
-${c.isStudyOwner ? `- "create_study": { subjectCode, unit, topics, initialSessions }   // CARGAR UNA UNIDAD + SUS TEMAS en el sistema de Estudio (repetición espaciada). Usalo cuando te mandan una unidad/capítulo con sus temas, por FOTO (un índice, mapa o lista) o por TEXTO ("agregá la unidad Integrales dobles y triples con estos temas: ..."). subjectCode = código de una de TUS MATERIAS (ver la lista de arriba). unit = nombre de la unidad/capítulo tal cual. topics = array con CADA tema, uno por elemento, LEÍDOS EXACTO de la imagen/texto (NO inventes, NO resumas, NO agregues). initialSessions opcional (1-4, default 1). Es DISTINTO de create_task: NO es un pendiente, son temas de estudio.
-  ⚠️ Si el pedido es de estudio (una unidad con lista de temas), usá create_study, NUNCA create_task. Si NO podés leer bien la imagen, o no sabés a qué materia va y no es obvio por el nombre, NO inventes: respondé intent "chat" preguntando (qué materia, o que reenvíe la foto).` : ``}
+${c.isStudyOwner ? `- "create_study": { subjectCode, unit, topics, initialSessions }   // CARGAR UNA UNIDAD + SUS TEMAS en el sistema de Estudio. Solo para pedidos explícitos de estudio o [CLASIFICACIÓN_VISUAL: MATERIAL_DE_ESTUDIO]. NUNCA para [CLASIFICACIÓN_VISUAL: COMPROBANTE_FINANCIERO]. subjectCode = código de una de TUS MATERIAS. unit = nombre de la unidad/capítulo. topics = array con cada tema leído exactamente, sin inventar. initialSessions opcional (1-4).
+  ⚠️ La clasificación COMPROBANTE_FINANCIERO tiene prioridad absoluta. Solo preguntá la materia cuando sea MATERIAL_DE_ESTUDIO y no resulte identificable.` : ``}
 REGLAS:
 - "intent":"action" cuando hay que ejecutar algo (llená "actions"). Podés poner varias acciones.
-- "intent":"query" para CUALQUIER pregunta o pedido de análisis/consejo/información —de finanzas, de la vida cotidiana, organización o conocimiento general—: "actions" vacío, respondé en "answer" con una respuesta EXPERTA y útil. Si es financiera, usá los datos reales (montos con $ y miles) con diagnóstico + recomendación concreta. Si es de otro tema, respondé igual de bien con tu conocimiento. NUNCA contestes "solo puedo cargar gastos" ni redirijas sin ayudar primero.
+- "intent":"query" para preguntas de finanzas, cotizaciones, organización, agenda o uso de control.io: "actions" vacío y respuesta útil. Si es financiera, usá los datos reales. Si es totalmente ajena al alcance, contestá brevemente y ofrecé ayuda dentro de finanzas u organización.
 - "intent":"chat" para saludos, charla suelta o confirmaciones ("hola", "gracias", "dale", "listo"): "actions" vacío, "answer" cordial y breve. Si el saludo trae una pregunta real, tratala como "query" y respondela.
 ${hasFeature("recordatorios", { isTester: c.isTester }) ? `- ⚠️ CRÍTICO: si el usuario pide que le RECUERDES o le AVISES algo ("haceme acordar", "recordame", "avisame en 5 min", "avisame mañana a las 9"), es SIEMPRE intent "action" con UNA acción create_reminder. PROHIBIDO responder solo con texto como "te recordaré en 2 minutos" o "dale, te aviso" — eso NO programa nada y el recordatorio NO existe. TENÉS que emitir la acción: { "type": "create_reminder", "title": "<qué recordar>", "inMinutes": <N> } para "en N minutos/horas", o "remindAt":"YYYY-MM-DDTHH:mm" para una hora puntual. Ejemplo — usuario: "haceme acordar en 2 min de tomar agua" → {"intent":"action","actions":[{"type":"create_reminder","title":"tomar agua","inMinutes":2}],"answer":""}. Y si REPITE — usuario: "recordame todos los lunes a viernes a las 17:00 sacar la basura" → {"intent":"action","actions":[{"type":"create_recurring_reminder","title":"sacar la basura","daysOfWeek":[1,2,3,4,5],"atTime":"17:00"}],"answer":""}` : ``}
 ${hasFeature("tareas", { isTester: c.isTester }) ? `- Si el usuario pide ANOTAR un pendiente sin hora ("anotá comprar pilas", "tengo que llamar al banco"), es intent "action" con create_task — NO lo prometas por texto.
@@ -599,9 +739,9 @@ FORMATO de "answer" (WhatsApp): ordenado y fácil de escanear.
 
   let parsed: AssistantOutput;
   try {
-    parsed = JSON.parse(content);
+    parsed = assistantOutputSchema.parse(stripModelNulls(JSON.parse(content))) as AssistantOutput;
   } catch {
-    throw new Error("El modelo no devolvió JSON válido");
+    throw new Error("El modelo no devolvió una respuesta estructurada válida");
   }
 
   return {
@@ -654,6 +794,7 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
   switch (a.type) {
     case "expense":
     case "income": {
+      applyRulesToMovement(a, c.rules);
       const type = a.type === "expense" ? "EXPENSE" : "INCOME";
       if (!a.amount || a.amount <= 0) throw new Error("monto inválido");
       const desc = a.description || (type === "EXPENSE" ? "Gasto" : "Ingreso");
@@ -845,18 +986,104 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       return `🧠 Anotado en tu memoria: ${a.fact}`;
     }
 
+    case "create_rule": {
+      if (!a.ruleKind || !a.value) throw new Error("falta completar la regla");
+      const match = a.ruleKind === "DEFAULT_ACCOUNT" ? (a.match || "todos") : a.match;
+      if (!match) throw new Error("falta indicar cuándo aplicar la regla");
+      await createAgentRule(userId, a.ruleKind, match, a.value);
+      c.rules = await listAgentRules(userId);
+      return `🧠 Regla guardada: ${match} → ${a.value}`;
+    }
+
+    case "delete_rule": {
+      if (!a.ruleRef) throw new Error("falta el número de regla");
+      await deleteAgentRule(userId, a.ruleRef);
+      c.rules = await listAgentRules(userId);
+      return `🗑️ Desactivé la regla [#${a.ruleRef}]`;
+    }
+
+    case "clear_memory": {
+      await clearAssistantMemory(userId);
+      c.memory = [];
+      c.rules = [];
+      return "🧹 Borré tu memoria, historial conversacional y reglas personales.";
+    }
+
     case "create_task": {
       if (!hasFeature("tareas", { isTester: c.isTester })) throw new Error("esa función todavía no está disponible");
       if (!a.title) throw new Error("falta la tarea");
       const due = a.dueDate ? new Date(a.dueDate) : null;
       const validDue = due && !isNaN(due.getTime()) ? due : null;
-      await createTask(userId, { title: a.title, dueDate: validDue });
-      // Si tiene Google conectado, también la cargamos en Google Tasks.
+      const start = a.eventStart ? fromZonedTime(a.eventStart, ARG_TZ) : null;
+      const list = a.listName ? await prisma.organizationList.findFirst({
+        where: { userId, name: { equals: a.listName, mode: "insensitive" } },
+      }) : null;
+      const task = await createOrganizationTask(userId, {
+        title: a.title,
+        dueDate: validDue,
+        scheduledStart: start && !isNaN(start.getTime()) ? start : null,
+        scheduledEnd: start && !isNaN(start.getTime()) ? new Date(start.getTime() + (a.durationMin ?? 60) * 60_000) : null,
+        listId: list?.id ?? null,
+        priority: a.priority,
+        urgent: a.urgent,
+        important: a.important,
+      });
       let enGoogle = false;
-      if (hasFeature("google", { isTester: c.isTester }) && c.googleConnected) {
-        enGoogle = (await createGoogleTask(userId, { title: a.title, due: validDue }).catch(() => ({ ok: false }))).ok;
+      if (task.scheduledStart && c.googleConnected) {
+        enGoogle = await syncTaskToGoogle(userId, task.id).then(() => true).catch(() => false);
       }
-      return `✅ Anotado: ${a.title}${validDue ? ` (para el ${validDue.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })})` : ""}${enGoogle ? " · también en tu Google Tasks 📋" : ""}`;
+      return `✅ Anotado: ${a.title}${task.scheduledStart ? ` · ${formatDateFn(toZonedTime(new Date(task.scheduledStart), ARG_TZ), "dd/MM 'a las' HH:mm")}` : validDue ? ` (para el ${validDue.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })})` : ""}${enGoogle ? " · sincronizado con Google Calendar" : ""}`;
+    }
+
+    case "update_task": {
+      const task = a.taskRef ? c.tasks[a.taskRef - 1] : undefined;
+      if (!task) throw new Error("no identifiqué la tarea");
+      const start = a.eventStart ? fromZonedTime(a.eventStart, ARG_TZ) : undefined;
+      const due = a.dueDate ? new Date(a.dueDate) : undefined;
+      const list = a.listName ? await prisma.organizationList.findFirst({
+        where: { userId, name: { equals: a.listName, mode: "insensitive" } },
+      }) : undefined;
+      await updateOrganizationTask(userId, task.id, {
+        ...(a.title ? { title: a.title } : {}),
+        ...(due && !isNaN(due.getTime()) ? { dueDate: due } : {}),
+        ...(start && !isNaN(start.getTime()) ? {
+          scheduledStart: start,
+          scheduledEnd: new Date(start.getTime() + (a.durationMin ?? 60) * 60_000),
+        } : {}),
+        ...(a.listName ? { listId: list?.id ?? null } : {}),
+        ...(a.status ? { status: a.status } : {}),
+        ...(a.priority ? { priority: a.priority } : {}),
+        ...(a.urgent !== undefined ? { urgent: a.urgent } : {}),
+        ...(a.important !== undefined ? { important: a.important } : {}),
+      });
+      if (start && c.googleConnected) await syncTaskToGoogle(userId, task.id).catch(() => null);
+      return `✏️ Actualicé la tarea: ${a.title ?? task.title}`;
+    }
+
+    case "create_list": {
+      if (!a.listName) throw new Error("falta el nombre de la lista");
+      await createOrganizationList(userId, a.listName);
+      return `📁 Creé la lista *${a.listName}*.`;
+    }
+
+    case "create_habit": {
+      if (!a.habitName) throw new Error("falta el nombre del hábito");
+      await createHabit(userId, {
+        name: a.habitName,
+        daysOfWeek: a.daysOfWeek ?? [],
+        scheduledTime: a.atTime ?? null,
+      });
+      return `🔥 Creé el hábito *${a.habitName}*.`;
+    }
+
+    case "complete_habit": {
+      if (!a.habitName) throw new Error("falta el hábito");
+      const habits = await prisma.habit.findMany({ where: { userId, isActive: true } });
+      const habit = habits.find((h) => norm(decrypt(h.name) ?? h.name).includes(norm(a.habitName!)));
+      if (!habit) throw new Error("no encontré ese hábito");
+      const completedOn = a.date ? new Date(`${a.date.slice(0, 10)}T12:00:00Z`) : new Date();
+      const completed = await toggleHabitCompletion(userId, habit.id, completedOn);
+      return completed ? `✅ Marqué *${a.habitName}* como cumplido.` : `↩️ Quité la marca de *${a.habitName}*.`;
     }
 
     case "create_study": {
@@ -1040,9 +1267,51 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
       const start = fromZonedTime(a.eventStart, ARG_TZ);
       if (isNaN(start.getTime())) throw new Error("no entendí la fecha/hora del evento");
       const dur = a.durationMin && a.durationMin > 0 ? a.durationMin : 60;
-      const r = await createCalendarEvent(userId, { summary: a.title, start, end: new Date(start.getTime() + dur * 60_000) });
+      const end = new Date(start.getTime() + Math.min(dur, 24 * 60) * 60_000);
+      const conflicts = overlappingEvents(
+        await listCalendarEvents(userId, { from: start, to: end }),
+        start,
+        end
+      );
+      if (conflicts.length && !a.allowConflict) {
+        throw new Error(`ese horario se superpone con "${conflicts[0].summary}". Elegí otro horario o decime que lo agende igual`);
+      }
+      const r = await createCalendarEvent(userId, { summary: a.title, start, end });
       if (!r.ok) throw new Error(r.error ?? "no pude crear el evento en tu Google Calendar");
       return `📅 Agendado en tu Google Calendar: ${a.title} — ${formatDateFn(toZonedTime(start, ARG_TZ), "dd/MM 'a las' HH:mm")}`;
+    }
+
+    case "plan_task": {
+      if (!c.googleConnected) throw new Error("primero conectá Google Calendar");
+      if (!a.title) throw new Error("falta la tarea a planificar");
+      const from = new Date();
+      const due = a.dueDate
+        ? fromZonedTime(`${a.dueDate.slice(0, 10)}T${String(c.organizerSettings.workEnd).padStart(2, "0")}:00`, ARG_TZ)
+        : new Date(from.getTime() + 7 * 86_400_000);
+      if (isNaN(due.getTime()) || due <= from) throw new Error("el vencimiento debe ser futuro");
+      const events = await listCalendarEvents(userId, { from, to: due });
+      const duration = a.durationMin ?? c.organizerSettings.focusMinutes;
+      const slot = findFirstFreeSlot(events, from, due, duration, c.organizerSettings);
+      if (!slot) throw new Error("no encontré un hueco suficiente antes del vencimiento");
+      const r = await createCalendarEvent(userId, {
+        summary: `Foco: ${a.title}`,
+        start: slot.start,
+        end: slot.end,
+      });
+      if (!r.ok) throw new Error(r.error ?? "no pude crear el bloque de foco");
+      return `🎯 Bloqueé *${a.title}* el ${formatDateFn(toZonedTime(slot.start, ARG_TZ), "dd/MM 'de' HH:mm")} a ${formatDateFn(toZonedTime(slot.end, ARG_TZ), "HH:mm")} en Google Calendar.`;
+    }
+
+    case "configure_organizer": {
+      c.organizerSettings = await updateOrganizerSettings(userId, {
+        ...(a.briefEnabled !== undefined ? { briefEnabled: a.briefEnabled } : {}),
+        ...(a.briefHour !== undefined ? { briefHour: a.briefHour } : {}),
+        ...(a.workStart !== undefined ? { workStart: a.workStart } : {}),
+        ...(a.workEnd !== undefined ? { workEnd: a.workEnd } : {}),
+        ...(a.focusMinutes !== undefined ? { focusMinutes: a.focusMinutes } : {}),
+        ...(a.bufferMinutes !== undefined ? { bufferMinutes: a.bufferMinutes } : {}),
+      });
+      return `⚙️ Organizador actualizado: jornada ${c.organizerSettings.workStart}:00–${c.organizerSettings.workEnd}:00, foco ${c.organizerSettings.focusMinutes} min, margen ${c.organizerSettings.bufferMinutes} min${c.organizerSettings.briefEnabled ? `, resumen a las ${c.organizerSettings.briefHour}:00` : ""}.`;
     }
 
     case "borrar_evento": {
@@ -1089,14 +1358,76 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
  * Procesa un mensaje entrante y devuelve el texto a responder por WhatsApp.
  */
 export async function handleUserMessage(userId: string, message: string, imageUrl?: string): Promise<string> {
+  const startedAt = Date.now();
   const clean = message.trim();
   if (!clean && !imageUrl) return "No entendí el mensaje. Probá escribiendo, mandando un audio o una foto 🙂";
+
+  const normalizedReply = norm(clean);
+  const wantsCancel = /^(cancelar|cancela|no|mejor no|olvidalo)$/.test(normalizedReply);
+  if (wantsCancel && await hasPendingAction(userId).catch(() => false)) {
+    await cancelPendingAction(userId).catch(() => {});
+    const reply = "Listo, cancelé la operación. No cambié nada 👍";
+    await saveChatTurn(userId, clean, reply);
+    await recordAgentEvent({ userId, event: "pending_cancelled", latencyMs: Date.now() - startedAt }).catch(() => {});
+    return reply;
+  }
+  const wantsConfirm = /^(confirmar|confirmo|si confirmar|si hacelo|si hacele|dale confirmar)$/.test(normalizedReply);
+
+  // Las cotizaciones son datos vivos: se contestan desde la misma fuente y caché
+  // que usa la web, sin pedirle al LLM que recuerde o estime valores.
+  const marketQuery = !imageUrl ? parseMarketQuery(clean) : null;
+  if (marketQuery) {
+    const rates = await getCotizaciones().catch(() => [] as CotizacionItem[]);
+    const marketReply = formatMarketReply(marketQuery, rates);
+    if (marketReply) {
+      await saveChatTurn(userId, clean, marketReply);
+      await recordAgentEvent({
+        userId,
+        event: "market_query",
+        intent: "query",
+        latencyMs: Date.now() - startedAt,
+      }).catch(() => {});
+      return marketReply;
+    }
+  }
+
+  // Disponibilidad y agenda siempre se responden desde Google Calendar,
+  // consultando exactamente el intervalo pedido y sin delegar hechos al LLM.
+  const organizerQuery = !imageUrl ? parseOrganizerQuery(clean, new Date()) : null;
+  if (organizerQuery) {
+    const status = await getGoogleStatus(userId).catch(() => ({ connected: false, email: null }));
+    if (!status.connected) {
+      const reply = "📅 Para consultar tu disponibilidad real, conectá Google Calendar en *Configuración → Google Calendar y Tareas*.";
+      await saveChatTurn(userId, clean, reply);
+      return reply;
+    }
+    let events: GoogleCalendarEvent[];
+    try {
+      events = await listCalendarEvents(userId, {
+        from: organizerQuery.from,
+        to: organizerQuery.to,
+      });
+    } catch {
+      const reply = "⚠️ No pude verificar tu Google Calendar ahora. No voy a asumir que estás libre. Reconectá Google desde Configuración o probá nuevamente en un momento.";
+      await saveChatTurn(userId, clean, reply);
+      return reply;
+    }
+    const reply = formatOrganizerReply(organizerQuery, events);
+    await saveChatTurn(userId, clean, reply);
+    await recordAgentEvent({
+      userId,
+      event: "organizer_query",
+      intent: "query",
+      latencyMs: Date.now() - startedAt,
+    }).catch(() => {});
+    return reply;
+  }
 
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage, history, memory, isTester, allTasks, reminders, recurringReminders, googleConnected] =
+  const [accounts, categories, summary, netWorth, debts, budgets, goals, investments, txPage, history, memory, isTester, allTasks, reminders, recurringReminders, googleConnected, marketRates, rules, proactiveInsights, organizerSettings] =
     await Promise.all([
       getAccounts(userId),
       getCategories(userId),
@@ -1114,6 +1445,10 @@ export async function handleUserMessage(userId: string, message: string, imageUr
       getPendingReminders(userId).catch(() => [] as SerializedReminder[]),
       listRecurringReminders(userId).catch(() => [] as SerializedRecurringReminder[]),
       getGoogleStatus(userId).then((s) => s.connected).catch(() => false),
+      getCotizaciones().catch(() => [] as CotizacionItem[]),
+      listAgentRules(userId).catch(() => [] as AgentRule[]),
+      getProactiveInsights(userId).catch(() => [] as ProactiveInsight[]),
+      getOrganizerSettings(userId),
     ]);
 
   // timeZone ARG explícito: sin esto el server (UTC) cree que es el día siguiente
@@ -1133,7 +1468,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
 
   // Si tiene Google conectado, traemos su agenda (eventos + tasks) para poder
   // responder "¿qué tengo el lunes?" y demás consultas de organización.
-  let gcalEvents: { id: string; summary: string; start: string }[] = [];
+  let gcalEvents: GoogleCalendarEvent[] = [];
   let gtasks: { id: string; title: string; due: string | null }[] = [];
   if (googleConnected && hasFeature("google", { isTester })) {
     [gcalEvents, gtasks] = await Promise.all([
@@ -1175,14 +1510,43 @@ export async function handleUserMessage(userId: string, message: string, imageUr
     referralUrl: `https://controlio.site/?ref=${userId}`,
     isStudyOwner: studyOwner,
     studySubjects,
+    marketRates,
+    rules,
+    proactiveInsights,
+    organizerSettings,
   };
 
-  const result = await interpret(clean, ctx, imageUrl, history);
+  let result: AssistantOutput;
+  if (wantsConfirm) {
+    const pending = await takePendingAction(userId).catch(() => null);
+    if (!pending) {
+      const reply = "No hay ninguna operación pendiente para confirmar.";
+      await saveChatTurn(userId, clean, reply);
+      return reply;
+    }
+    result = {
+      intent: "action",
+      actions: pending.actions as Action[],
+      answer: pending.answer,
+    };
+  } else {
+    result = await interpret(clean, ctx, imageUrl, history);
+  }
 
-  const reply = await buildReply(userId, result, ctx, now);
+  const requireSourceConfirmation =
+    !!imageUrl && result.actions.length > 1 ||
+    clean.startsWith("[DOCUMENTO_FINANCIERO:");
+  const reply = await buildReply(userId, result, ctx, now, wantsConfirm, requireSourceConfirmation);
 
   // Guardamos el turno para que el bot recuerde la conversación.
   await saveChatTurn(userId, clean || "[imagen/audio]", reply);
+  await recordAgentEvent({
+    userId,
+    event: wantsConfirm ? "pending_confirmed" : "message_processed",
+    intent: result.intent,
+    actionTypes: result.actions.map((action) => action.type),
+    latencyMs: Date.now() - startedAt,
+  }).catch(() => {});
 
   return reply;
 }
@@ -1192,10 +1556,42 @@ async function buildReply(
   userId: string,
   result: AssistantOutput,
   ctx: FinancialContext,
-  now: Date
+  now: Date,
+  confirmed = false,
+  requireSourceConfirmation = false
 ): Promise<string> {
   if (result.intent !== "action" || result.actions.length === 0) {
     return result.answer || "Listo 👍";
+  }
+
+  const sensitive = result.actions.filter((action) =>
+    action.type.startsWith("delete_") ||
+    action.type.startsWith("borrar_") ||
+    action.type === "delete" ||
+    action.type === "clear_memory" ||
+    action.type === "transfer" ||
+    action.type === "set_balance"
+  );
+  if (!confirmed && (sensitive.length > 0 || requireSourceConfirmation)) {
+    await savePendingAction(userId, { actions: result.actions, answer: result.answer });
+    const descriptions = (sensitive.length ? sensitive : result.actions).slice(0, 8).map((action) => {
+      if (action.type === "transfer") {
+        return `transferir ${money(action.amount ?? 0, action.currency)} de ${action.fromAccount ?? "una cuenta"} a ${action.toAccount ?? "otra cuenta"}`;
+      }
+      if (action.type === "set_balance") {
+        return `fijar el saldo de ${action.account ?? "la cuenta"} en ${money(action.balance ?? 0, action.currency)}`;
+      }
+      if (action.type === "expense" || action.type === "income") {
+        return `${action.type === "expense" ? "registrar gasto" : "registrar ingreso"} de ${money(action.amount ?? 0, action.currency)} · ${action.description ?? "sin descripción"}`;
+      }
+      return `ejecutar ${action.type.replaceAll("_", " ")}`;
+    });
+    if (result.actions.length > 8) descriptions.push(`y ${result.actions.length - 8} movimientos más`);
+    return (
+      `⚠️ Antes de hacerlo, necesito tu confirmación:\n\n` +
+      descriptions.map((text) => `• ${text}`).join("\n") +
+      `\n\nRespondé *CONFIRMAR* para continuar o *CANCELAR*. Vence en 15 minutos.`
+    );
   }
 
   const isoDate = now.toISOString();

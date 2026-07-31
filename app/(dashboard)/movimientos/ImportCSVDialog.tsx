@@ -156,7 +156,7 @@ export function ImportCSVDialog({ open, onOpenChange, accounts, categories, onIm
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent title="Importar CSV" className="max-w-lg w-full">
+      <DialogContent title="Importar CSV" className="w-full">
         {/* ── STEP: upload ── */}
         {step === "upload" && (
           <div className="space-y-5">

@@ -155,18 +155,29 @@ export type ReportPrefs = {
   day: number | null;
   /** 0–23, hora Argentina. null si nunca se configuró. */
   hour: number | null;
+  frequency: "WEEKLY" | "FORTNIGHTLY" | "MONTHLY";
+  notifyApp: boolean;
+  notifyWhatsapp: boolean;
+  notifyEmail: boolean;
 };
 
 /** Preferencia de reporte semanal por email del usuario. */
 export async function getReportPrefs(userId: string): Promise<ReportPrefs> {
   const p = await prisma.profile.findUnique({
     where: { id: userId },
-    select: { weeklyReportEnabled: true, weeklyReportDay: true, weeklyReportHour: true },
+    select: {
+      weeklyReportEnabled: true, weeklyReportDay: true, weeklyReportHour: true,
+      reportFrequency: true, reportNotifyApp: true, reportNotifyWhatsapp: true, reportNotifyEmail: true,
+    },
   });
   return {
     enabled: p?.weeklyReportEnabled ?? false,
     day: p?.weeklyReportDay ?? null,
     hour: p?.weeklyReportHour ?? null,
+    frequency: (p?.reportFrequency as ReportPrefs["frequency"]) ?? "WEEKLY",
+    notifyApp: p?.reportNotifyApp ?? true,
+    notifyWhatsapp: p?.reportNotifyWhatsapp ?? true,
+    notifyEmail: p?.reportNotifyEmail ?? false,
   };
 }
 
@@ -225,12 +236,23 @@ export async function updateReportPrefs(
       weeklyReportEnabled: prefs.enabled,
       weeklyReportDay: day,
       weeklyReportHour: hour,
+      reportFrequency: prefs.frequency,
+      reportNotifyApp: prefs.notifyApp,
+      reportNotifyWhatsapp: prefs.notifyWhatsapp,
+      reportNotifyEmail: prefs.notifyEmail,
     },
-    select: { weeklyReportEnabled: true, weeklyReportDay: true, weeklyReportHour: true },
+    select: {
+      weeklyReportEnabled: true, weeklyReportDay: true, weeklyReportHour: true,
+      reportFrequency: true, reportNotifyApp: true, reportNotifyWhatsapp: true, reportNotifyEmail: true,
+    },
   });
   return {
     enabled: updated.weeklyReportEnabled,
     day: updated.weeklyReportDay,
     hour: updated.weeklyReportHour,
+    frequency: updated.reportFrequency as ReportPrefs["frequency"],
+    notifyApp: updated.reportNotifyApp,
+    notifyWhatsapp: updated.reportNotifyWhatsapp,
+    notifyEmail: updated.reportNotifyEmail,
   };
 }

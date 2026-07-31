@@ -56,3 +56,13 @@ export async function addMemory(userId: string, fact: string): Promise<void> {
   const enc = encrypt(clean);
   await prisma.$executeRaw`INSERT INTO "whatsapp_memory" (user_id, fact) VALUES (${userId}, ${enc})`;
 }
+
+/** Borra toda la memoria conversacional durable y el historial del usuario. */
+export async function clearAssistantMemory(userId: string): Promise<void> {
+  await prisma.$transaction([
+    prisma.$executeRaw`DELETE FROM "whatsapp_memory" WHERE user_id = ${userId}`,
+    prisma.$executeRaw`DELETE FROM "whatsapp_chat_history" WHERE user_id = ${userId}`,
+    prisma.$executeRaw`DELETE FROM "whatsapp_agent_rules" WHERE user_id = ${userId}`,
+    prisma.$executeRaw`DELETE FROM "whatsapp_pending_actions" WHERE user_id = ${userId}`,
+  ]);
+}

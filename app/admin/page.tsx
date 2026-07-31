@@ -17,6 +17,8 @@ import { AdminShell, type AdminSection } from "./AdminShell";
 import { listSupportTickets } from "@/lib/db/support";
 import { SupportTickets } from "./SupportTickets";
 import type { SummaryData } from "./DashboardSummary";
+import { getAgentMetrics } from "@/lib/db/agent-metrics";
+import { AgentMetricsPanel } from "./AgentMetricsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -192,13 +194,14 @@ export default async function AdminPage() {
     redirect("/dashboard");
   }
 
-  const [s, analytics, domainStatus, followup, business, users] = await Promise.all([
+  const [s, analytics, domainStatus, followup, business, users, agentMetrics] = await Promise.all([
     getStats(),
     getAdminAnalytics(),
     getResendDomainStatus(),
     getReactivationFollowup(),
     getBusinessMetrics(),
     getUsersOverview(),
+    getAgentMetrics(),
   ]);
   const feedback = await prisma.feedback
     .findMany({ orderBy: { createdAt: "desc" }, take: 50 })
@@ -238,6 +241,11 @@ export default async function AdminPage() {
   const openTickets = tickets.filter((t) => t.status === "abierto").length;
 
   const sections: AdminSection[] = [
+    {
+      key: "agente",
+      label: "Agente IA",
+      node: <AgentMetricsPanel metrics={agentMetrics} />,
+    },
     {
       key: "soporte",
       label: openTickets > 0 ? `Soporte (${openTickets})` : "Soporte",

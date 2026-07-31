@@ -44,7 +44,7 @@ export function LoadMaterialModal({ block, onClose, onDone }: { block: BlockDTO;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onClick={onClose}>
-      <div className="w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl border border-border bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 space-y-3 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div data-keyboard-aware-modal className="w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl border border-border bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 space-y-3 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] font-mono text-muted">{block.code} · {block.subjectCode}</p>

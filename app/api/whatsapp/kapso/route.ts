@@ -1,11 +1,13 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sendText, markReadAndType, fetchMediaAsDataUrl, verifySignature } from "@/lib/whatsapp/kapso";
+import { sendText, sendReplyButtons, markReadAndType, fetchMediaAsDataUrl, fetchMediaBuffer, verifySignature } from "@/lib/whatsapp/kapso";
+import { extractFinancialPdfText } from "@/lib/whatsapp/documents";
 import { isStudyOwner } from "@/lib/study/ingest";
 import { findProfileByPhone } from "@/lib/whatsapp/users";
 import { linkWhatsappByCode } from "@/lib/db/profile";
 import { rateLimitKey } from "@/lib/rate-limit";
 import { handleUserMessage } from "@/lib/whatsapp/assistant";
+import { classifyWhatsappImage, routingInstruction } from "@/lib/whatsapp/image-routing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +20,11 @@ type KapsoMessage = {
   text?: { body?: string };
   image?: { id?: string; mime_type?: string; caption?: string };
   document?: { id?: string; mime_type?: string; filename?: string; caption?: string };
+  interactive?: {
+    button_reply?: { id?: string; title?: string };
+    list_reply?: { id?: string; title?: string };
+  };
+  button?: { payload?: string; text?: string };
   kapso?: {
     direction?: string;
     content?: string;
@@ -44,7 +51,13 @@ function extractMessage(body: Record<string, unknown>): KapsoMessage | null {
 /** Obtiene el texto del mensaje: texto directo o transcripción del audio. */
 function getText(message: KapsoMessage): string | null {
   if (message.text?.body) return message.text.body;
+  if (message.interactive?.button_reply?.id) return message.interactive.button_reply.id;
+  if (message.interactive?.list_reply?.id) return message.interactive.list_reply.id;
+  if (message.button?.payload) return message.button.payload;
   if (message.image?.caption) return message.image.caption;
+  // `kapso.content` puede contener texto histórico/auxiliar y no es OCR fiable.
+  // Para una imagen sin caption, la única fuente válida es la imagen descargada.
+  if (message.type === "image") return null;
   if (message.kapso?.transcript?.text) return message.kapso.transcript.text;
   if (message.kapso?.content) return message.kapso.content;
   return null;
@@ -163,15 +176,40 @@ export async function POST(req: NextRequest) {
 
     // Si mandó una imagen (ticket, recibo, captura), la descargamos para que la lea la IA.
     let imageUrl: string | undefined;
+    let imageRouting = "";
     if (message.type === "image" && message.kapso?.media_url) {
       try {
         imageUrl = await fetchMediaAsDataUrl(message.kapso.media_url, message.image?.mime_type);
+        const classification = await classifyWhatsappImage(imageUrl).catch(() => null);
+        if (classification) imageRouting = routingInstruction(classification);
       } catch (err) {
         console.error("[kapso webhook] no pude descargar la imagen:", err);
+        await sendText(from, "No pude descargar esa imagen desde WhatsApp. Reintentá enviándola como foto o documento; no voy a registrar nada sin poder leerla.");
+        processed = true;
+        return Response.json({ ok: true, imageDownloadFailed: true });
       }
     }
 
-    const text = getText(message);
+    let text = getText(message);
+    if (imageRouting) text = `${imageRouting}\n\n${text ?? ""}`.trim();
+    if (
+      message.type === "document" &&
+      message.kapso?.media_url &&
+      (message.document?.mime_type === "application/pdf" || message.document?.filename?.toLowerCase().endsWith(".pdf"))
+    ) {
+      try {
+        const pdf = await fetchMediaBuffer(message.kapso.media_url);
+        const extracted = await extractFinancialPdfText(pdf);
+        text =
+          `[DOCUMENTO_FINANCIERO: ${message.document?.filename ?? "archivo.pdf"}]\n` +
+          `Analizá estos movimientos. No inventes datos ausentes. Si son muchos, preparalos para confirmación.\n\n${extracted}`;
+      } catch (err) {
+        console.error("[kapso webhook] no pude leer el PDF:", err);
+        await sendText(from, "No pude leer ese PDF. Probá con un archivo de hasta 20 páginas y texto seleccionable, o mandame capturas.");
+        processed = true;
+        return Response.json({ ok: true, unsupportedPdf: true });
+      }
+    }
     if (!text && !imageUrl) {
       const isAudio = message.type === "audio" || message.kapso?.has_media;
       await sendText(
@@ -190,7 +228,14 @@ export async function POST(req: NextRequest) {
     // de la respuesta — reprocesarlo duplicaría el gasto.
     processed = true;
     try {
-      await sendText(from, reply);
+      if (reply.includes("Respondé *CONFIRMAR*")) {
+        await sendReplyButtons(from, reply, [
+          { id: "confirmar", title: "Confirmar" },
+          { id: "cancelar", title: "Cancelar" },
+        ]);
+      } else {
+        await sendText(from, reply);
+      }
     } catch (err) {
       console.error("[kapso webhook] no pude enviar la respuesta:", err);
     }

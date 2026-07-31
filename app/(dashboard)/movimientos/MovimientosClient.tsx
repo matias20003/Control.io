@@ -365,14 +365,16 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
           )}
 
           {type === "TRANSFER" ? (
-            <TransferFields
-              accounts={accounts}
-              idPrefix={defaultValues?.id ? `transfer-${defaultValues.id}` : "transfer-new"}
-              defaultFromId={defaultValues?.accountId}
-              defaultToId={defaultValues?.toAccountId}
-              defaultAmount={defaultValues?.amount}
-              defaultExchangeRate={defaultValues?.exchangeRate}
-            />
+            <div className="desktop-form-full">
+              <TransferFields
+                accounts={accounts}
+                idPrefix={defaultValues?.id ? `transfer-${defaultValues.id}` : "transfer-new"}
+                defaultFromId={defaultValues?.accountId}
+                defaultToId={defaultValues?.toAccountId}
+                defaultAmount={defaultValues?.amount}
+                defaultExchangeRate={defaultValues?.exchangeRate}
+              />
+            </div>
           ) : (
             <div className="space-y-1.5">
               <Label htmlFor="f-amount">Monto *</Label>
@@ -437,13 +439,13 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
 
           {/* Más opciones — moneda y notas colapsadas */}
           <button type="button" onClick={() => setShowMore((v) => !v)}
-            className="flex items-center gap-1.5 text-xs text-muted hover:text-foreground transition-colors">
+            className="desktop-form-full flex items-center gap-1.5 text-xs text-muted hover:text-foreground transition-colors">
             <ChevronDown size={13} className={`transition-transform duration-200 ${showMore ? "rotate-180" : ""}`} />
             {showMore ? "Menos opciones" : "Más opciones"}
           </button>
 
           {showMore && (
-            <div className="space-y-4">
+            <div className="desktop-form-full grid gap-4 lg:grid-cols-2">
               {type !== "TRANSFER" && (
                 <div className="space-y-1.5">
                   <Label htmlFor="f-currency">Moneda</Label>
@@ -462,7 +464,7 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
             </div>
           )}
 
-          <div className="flex gap-2 pt-1">
+          <div className="mobile-form-actions desktop-form-full flex gap-2 pt-1 lg:justify-end">
             <Button type="button" variant="ghost" className="flex-shrink-0 px-3"
               onClick={() => { setIsOpen(false); setEditingTx(null); }}>
               Cancelar

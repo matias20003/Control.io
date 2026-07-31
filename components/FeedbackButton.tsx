@@ -139,9 +139,10 @@ export function FeedbackButton({ registeredAt }: { registeredAt?: string }) {
             onClick={() => !sending && setOpen(false)}
           >
             <form
+              data-keyboard-aware-modal
               onSubmit={submit}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl"
+              className="max-h-[calc(var(--visual-viewport-height,100dvh)-1rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl"
             >
               <div className="mb-1 flex items-center justify-between">
                 <p className="text-sm font-semibold text-foreground">Contanos qué te pareció</p>

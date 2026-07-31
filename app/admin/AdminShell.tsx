@@ -25,6 +25,7 @@ const META: Record<string, { icon: typeof LayoutDashboard; desc: string }> = {
   feedback:     { icon: MessageSquareText,  desc: "Comentarios de testers" },
   waitlist:     { icon: ListChecks,         desc: "Lista de espera" },
   whatsapp:     { icon: MessageCircle,      desc: "Uso del bot" },
+  agente:       { icon: MessageCircle,      desc: "Calidad, latencia y acciones de IA" },
   herramientas: { icon: Wrench,             desc: "Mantenimiento de datos" },
 };
 

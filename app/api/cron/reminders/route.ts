@@ -6,6 +6,7 @@ import { fireStudyReviews } from "@/lib/study/ingest";
 import { fireDailyStudyPlan } from "@/lib/study/notify";
 import { sendPushToUser } from "@/lib/push/send";
 import { sendText } from "@/lib/whatsapp/kapso";
+import { fireOrganizerBriefs } from "@/lib/whatsapp/organizer-brief";
 
 // Dispara los recordatorios cuya hora ya llegó. Pensado para correr cada minuto
 // (precisión de "en 5 min"). En Vercel Hobby no hay cron por minuto, así que lo
@@ -66,6 +67,7 @@ export async function GET(req: NextRequest) {
   // Plan de estudio diario del dueño a la hora que configuró. Best-effort,
   // idempotente por día (no necesita un pinger propio).
   const plan = await fireDailyStudyPlan().catch(() => ({ sent: false }));
+  const organizer = await fireOrganizerBriefs().catch(() => ({ sent: 0, attempted: 0 }));
 
-  return Response.json({ ok: true, due: due.length, sent, recurring: recurring.fired, study: study.sent, studyPlan: plan.sent });
+  return Response.json({ ok: true, due: due.length, sent, recurring: recurring.fired, study: study.sent, studyPlan: plan.sent, organizer });
 }

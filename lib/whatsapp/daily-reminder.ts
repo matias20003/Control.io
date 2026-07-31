@@ -4,6 +4,7 @@ import { getDailyReminderRecipients } from "@/lib/db/profile";
 import { getStreak } from "@/lib/db/streak";
 import { sendPushToUser } from "@/lib/push/send";
 import { startOfTodayArg } from "@/lib/timezone";
+import { claimInsightDelivery, getProactiveInsights, type ProactiveInsight } from "@/lib/whatsapp/insights";
 
 const MESSAGE =
   "📝 ¿Registraste tus gastos de hoy?\n\nTe toma menos de 1 minuto y mantenés todo bajo control. Mandame un texto, un audio o la foto de un ticket 👇";
@@ -42,12 +43,19 @@ export async function sendDailyReminders(): Promise<{ sent: number; skipped: num
     }
 
     const streak = await getStreak(r.id).catch(() => 0);
+    const candidates = await getProactiveInsights(r.id).catch(() => []);
+    let insight: ProactiveInsight | undefined = candidates[0];
+    if (insight && !(await claimInsightDelivery(r.id, insight).catch(() => false))) insight = undefined;
+    const baseMessage = streak >= 2 ? streakMessage(streak) : MESSAGE;
+    const personalizedMessage = insight
+      ? `${baseMessage}\n\n💡 *${insight.title}*\n${insight.message}`
+      : baseMessage;
 
     // 1) WhatsApp primero (si está vinculado). Si Meta lo entrega, listo: no
     //    mandamos también el push para no duplicar.
     if (r.whatsappNumber) {
       try {
-        await sendText(r.whatsappNumber, streak >= 2 ? streakMessage(streak) : MESSAGE);
+        await sendText(r.whatsappNumber, personalizedMessage);
         sent++;
         continue;
       } catch {

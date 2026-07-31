@@ -3,7 +3,7 @@ import { SectionTabs } from "@/components/layout/SectionTabs";
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, RefreshCw, Power, Pencil, TrendingDown, TrendingUp } from "lucide-react";
+import { Trash2, RefreshCw, Power, Pencil, TrendingDown, TrendingUp } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,14 +81,20 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
 
   /* ── Handlers ── */
 
+  const openCreate = (type: "EXPENSE" | "INCOME") => {
+    setCreateType(type);
+    setIsCreateOpen(true);
+  };
+
   const handleCreate = (formData: FormData) => {
+    const type = formData.get("type") === "INCOME" ? "INCOME" : "EXPENSE";
     startTransition(async () => {
       const result = await createRecurrenteAction(formData);
       if (result.error) toast.error(result.error);
       else if (result.success && result.recurrente) {
         setItems((prev) => [result.recurrente!, ...prev]);
         setIsCreateOpen(false);
-        toast.success("Gasto fijo creado");
+        toast.success(type === "INCOME" ? "Ingreso fijo creado" : "Gasto fijo creado");
       }
     });
   };
@@ -100,6 +106,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
 
   const handleUpdate = (formData: FormData) => {
     if (!editingItem) return;
+    const type = formData.get("type") === "INCOME" ? "INCOME" : "EXPENSE";
     startTransition(async () => {
       const result = await updateRecurrenteAction(editingItem.id, formData);
       if (result.error) toast.error(result.error);
@@ -108,7 +115,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
           prev.map((r) => (r.id === editingItem.id ? result.recurrente! : r))
         );
         setEditingItem(null);
-        toast.success("Gasto fijo actualizado");
+        toast.success(type === "INCOME" ? "Ingreso fijo actualizado" : "Gasto fijo actualizado");
       }
     });
   };
@@ -313,13 +320,19 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
       <SectionTabs />
       {/* Header */}
       <PageHeader
-        title="Gastos fijos"
-        subtitle="Subscripciones, alquileres y pagos periódicos automatizados."
+        title="Ingresos y gastos fijos"
+        subtitle="Sueldos, suscripciones, alquileres y otros movimientos periódicos automatizados."
         actions={
-          <Button size="sm" onClick={() => setIsCreateOpen(true)}>
-            <Plus size={16} className="mr-1.5" />
-            Nuevo
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button size="sm" variant="secondary" onClick={() => openCreate("EXPENSE")}>
+              <TrendingDown size={16} className="mr-1.5 text-danger" />
+              Nuevo gasto fijo
+            </Button>
+            <Button size="sm" onClick={() => openCreate("INCOME")}>
+              <TrendingUp size={16} className="mr-1.5" />
+              Nuevo ingreso fijo
+            </Button>
+          </div>
         }
       />
 
@@ -328,7 +341,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard label="Gasto mensual estimado" value={formatCurrency(monthlyExpense, "ARS")} icon={TrendingDown} accent="danger" />
           <StatCard label="Ingreso mensual estimado" value={formatCurrency(monthlyIncome, "ARS")} icon={TrendingUp} accent="success" />
-          <StatCard label="Gastos fijos activos" value={active.length} hint={inactive.length > 0 ? `${inactive.length} pausado${inactive.length !== 1 ? "s" : ""}` : undefined} icon={RefreshCw} accent="primary" />
+          <StatCard label="Movimientos fijos activos" value={active.length} hint={inactive.length > 0 ? `${inactive.length} pausado${inactive.length !== 1 ? "s" : ""}` : undefined} icon={RefreshCw} accent="primary" />
         </div>
       )}
 
@@ -336,13 +349,19 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
       {items.length === 0 && (
         <EmptyState
           icon={RefreshCw}
-          title="Sin gastos fijos"
-          description="Registrá subscripciones, alquileres y pagos periódicos."
+          title="Sin movimientos fijos"
+          description="Registrá ingresos, suscripciones, alquileres y otros movimientos periódicos."
           action={
-            <Button onClick={() => setIsCreateOpen(true)}>
-              <Plus size={16} className="mr-1.5" />
-              Nuevo gasto fijo
-            </Button>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button variant="secondary" onClick={() => openCreate("EXPENSE")}>
+                <TrendingDown size={16} className="mr-1.5 text-danger" />
+                Nuevo gasto fijo
+              </Button>
+              <Button onClick={() => openCreate("INCOME")}>
+                <TrendingUp size={16} className="mr-1.5" />
+                Nuevo ingreso fijo
+              </Button>
+            </div>
           }
         />
       )}
@@ -386,7 +405,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
 
       {/* Create dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent title="Nuevo gasto fijo">
+        <DialogContent title={createType === "INCOME" ? "Nuevo ingreso fijo" : "Nuevo gasto fijo"}>
           <RecurringForm
             txType={createType}
             onTypeChange={setCreateType}
@@ -399,7 +418,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
 
       {/* Edit dialog */}
       <Dialog open={!!editingItem} onOpenChange={(o) => { if (!o) setEditingItem(null); }}>
-        <DialogContent title="Editar gasto fijo">
+        <DialogContent title={editType === "INCOME" ? "Editar ingreso fijo" : "Editar gasto fijo"}>
           {editingItem && (
             <RecurringForm
               key={editingItem.id}

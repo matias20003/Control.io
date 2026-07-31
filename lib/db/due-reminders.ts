@@ -3,6 +3,7 @@ import { decrypt } from "@/lib/crypto";
 import { sendPushToUser } from "@/lib/push/send";
 import { sendText } from "@/lib/whatsapp/kapso";
 import { startOfTodayArg } from "@/lib/timezone";
+import { getRecurringOccurrences } from "@/lib/recurrence-schedule";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -22,7 +23,7 @@ export async function sendDueReminders(): Promise<{ users: number }> {
   const today = startOfTodayArg();
   const upper = new Date(today.getTime() + 2 * DAY_MS); // hoy + mañana (exclusivo)
 
-  const [credits, debts] = await Promise.all([
+  const [credits, debts, recurring] = await Promise.all([
     prisma.creditInstallment.findMany({
       where: { isPaid: false, dueDate: { gte: today, lt: upper } },
       include: { creditPurchase: { select: { userId: true, description: true, currency: true } } },
@@ -30,6 +31,15 @@ export async function sendDueReminders(): Promise<{ users: number }> {
     prisma.debt.findMany({
       where: { isCompleted: false, direction: "I_OWE", dueDate: { gte: today, lt: upper } },
       select: { userId: true, personName: true, totalAmount: true, paidAmount: true, currency: true, dueDate: true },
+    }),
+    prisma.recurringTransaction.findMany({
+      where: {
+        isActive: true,
+        type: "EXPENSE",
+        startDate: { lt: upper },
+        OR: [{ endDate: null }, { endDate: { gte: today } }],
+      },
+      include: { account: { select: { name: true } } },
     }),
   ]);
 
@@ -54,6 +64,23 @@ export async function sendDueReminders(): Promise<{ users: number }> {
       d.userId,
       `${when(new Date(d.dueDate))}: 💸 Pagarle a ${decrypt(d.personName) ?? d.personName} — ${money(num(d.totalAmount) - num(d.paidAmount), d.currency)}`
     );
+  }
+  for (const r of recurring) {
+    const dates = getRecurringOccurrences(r, today, new Date(upper.getTime() - 1));
+    const executedToday =
+      !!r.lastExecuted &&
+      r.lastExecuted.getTime() >= today.getTime() &&
+      r.lastExecuted.getTime() < today.getTime() + DAY_MS;
+    if (executedToday) dates.unshift(today);
+    for (const date of dates) {
+      if (date >= upper) continue;
+      const description = decrypt(r.description) ?? r.description;
+      const account = r.account ? decrypt(r.account.name) ?? r.account.name : null;
+      const status = account
+        ? `${executedToday && date.getTime() < today.getTime() + DAY_MS ? "descontado" : "se descuenta"} de ${account}`
+        : "requiere pago · asigná una cuenta";
+      add(r.userId, `${when(date)}: 🔁 ${description} — ${money(num(r.amount), r.currency)} · ${status}`);
+    }
   }
 
   if (!byUser.size) return { users: 0 };
@@ -94,7 +121,7 @@ export async function sendDueReminderToUser(
   const today = startOfTodayArg();
   const upper = new Date(today.getTime() + 30 * DAY_MS);
 
-  const [credits, debts] = await Promise.all([
+  const [credits, debts, recurring] = await Promise.all([
     prisma.creditInstallment.findMany({
       where: { isPaid: false, creditPurchase: { userId }, dueDate: { gte: today, lt: upper } },
       include: { creditPurchase: { select: { description: true, currency: true } } },
@@ -106,6 +133,16 @@ export async function sendDueReminderToUser(
       select: { personName: true, totalAmount: true, paidAmount: true, currency: true, dueDate: true },
       orderBy: { dueDate: "asc" },
       take: 5,
+    }),
+    prisma.recurringTransaction.findMany({
+      where: {
+        userId,
+        isActive: true,
+        type: "EXPENSE",
+        startDate: { lt: upper },
+        OR: [{ endDate: null }, { endDate: { gte: today } }],
+      },
+      include: { account: { select: { name: true } } },
     }),
   ]);
 
@@ -128,9 +165,26 @@ export async function sendDueReminderToUser(
       `${label(new Date(d.dueDate))}: 💸 Pagarle a ${decrypt(d.personName) ?? d.personName} — ${money(num(d.totalAmount) - num(d.paidAmount), d.currency)}`
     );
   }
+  for (const r of recurring) {
+    const occurrences = getRecurringOccurrences(r, today, new Date(upper.getTime() - 1));
+    const executedToday =
+      !!r.lastExecuted &&
+      r.lastExecuted.getTime() >= today.getTime() &&
+      r.lastExecuted.getTime() < today.getTime() + DAY_MS;
+    if (executedToday) occurrences.unshift(today);
+    for (const date of occurrences.slice(0, 3)) {
+      const description = decrypt(r.description) ?? r.description;
+      const account = r.account ? decrypt(r.account.name) ?? r.account.name : null;
+      lines.push(
+        `${label(date)}: 🔁 ${description} — ${money(num(r.amount), r.currency)} · ${
+          account ? `${executedToday && date.getTime() < today.getTime() + DAY_MS ? "descontado" : "se descuenta"} de ${account}` : "requiere pago · asigná una cuenta"
+        }`
+      );
+    }
+  }
 
   if (!lines.length) {
-    return { ok: false, count: 0, error: "No tenés cuotas ni deudas con vencimiento en los próximos 30 días." };
+    return { ok: false, count: 0, error: "No tenés cuotas, deudas ni gastos fijos próximos en los próximos 30 días." };
   }
 
   const title = lines.length === 1 ? "🔔 Tu próximo vencimiento" : `🔔 Tus próximos ${lines.length} vencimientos`;

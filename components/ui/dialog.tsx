@@ -49,9 +49,11 @@ export function DialogContent({
         )}
       />
       <DialogPrimitive.Content
+        data-dialog-content
+        data-keyboard-aware-modal
         className={cn(
           "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[70]",
-          "w-[calc(100vw-1rem)] sm:w-[calc(100vw-2rem)] max-w-md",
+          "w-[calc(100vw-1rem)] max-w-md sm:w-[calc(100vw-2rem)]",
           // Límite de alto al viewport + columna flex: el header queda fijo y el
           // cuerpo scrollea. Sin esto, los formularios largos se salían de la
           // pantalla y el botón "Guardar" quedaba inalcanzable.
@@ -98,7 +100,11 @@ export function DialogContent({
         </div>
 
         {/* Cuerpo — scrolleable */}
-        <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-4 sm:px-6 sm:pb-6">
+        <div
+          data-dialog-scroll
+          data-desktop-dialog-body
+          className="min-h-0 scroll-pb-24 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6"
+        >
           {children}
         </div>
       </DialogPrimitive.Content>

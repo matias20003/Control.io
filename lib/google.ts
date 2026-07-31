@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 // Scopes: crear/editar eventos del calendario + tareas + email para saber qué cuenta.
 const SCOPES = [
-  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/tasks",
   "openid",
   "email",
@@ -86,7 +86,7 @@ export async function getGoogleStatus(userId: string): Promise<{ connected: bool
 }
 
 /** Access token: usa el cacheado si sigue vigente; si no, lo refresca y lo guarda. */
-async function getAccessToken(userId: string): Promise<string | null> {
+export async function getAccessToken(userId: string): Promise<string | null> {
   const p = await prisma.profile.findUnique({
     where: { id: userId },
     select: { googleRefreshToken: true, googleAccessToken: true, googleTokenExpiry: true },
@@ -133,9 +133,9 @@ async function getAccessToken(userId: string): Promise<string | null> {
 export async function listCalendarEvents(
   userId: string,
   opts: { daysAhead?: number; from?: Date; to?: Date } = {}
-): Promise<{ id: string; summary: string; start: string }[]> {
+): Promise<GoogleCalendarEvent[]> {
   const token = await getAccessToken(userId);
-  if (!token) return [];
+  if (!token) throw new Error("No pude renovar el acceso a Google Calendar");
   const now = opts.from ?? new Date();
   const max = opts.to ?? new Date(now.getTime() + (opts.daysAhead ?? 7) * 86_400_000);
   const url =
@@ -143,16 +143,42 @@ export async function listCalendarEvents(
     `timeMin=${encodeURIComponent(now.toISOString())}&timeMax=${encodeURIComponent(max.toISOString())}` +
     `&singleEvents=true&orderBy=startTime&maxResults=250`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) return [];
-  const data = (await res.json()) as { items?: { id?: string; summary?: string; start?: { dateTime?: string; date?: string } }[] };
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Google Calendar ${res.status}: ${body.slice(0, 180)}`);
+  }
+  const data = (await res.json()) as {
+    items?: {
+      id?: string; summary?: string; description?: string; location?: string;
+      status?: string; transparency?: string;
+      start?: { dateTime?: string; date?: string };
+      end?: { dateTime?: string; date?: string };
+    }[];
+  };
   return (data.items ?? [])
-    .filter((e) => e.id)
+    .filter((e) => e.id && e.status !== "cancelled")
     .map((e) => ({
       id: e.id!,
       summary: e.summary ?? "(sin título)",
       start: e.start?.dateTime ?? e.start?.date ?? "",
+      end: e.end?.dateTime ?? e.end?.date ?? e.start?.dateTime ?? e.start?.date ?? "",
+      allDay: !!e.start?.date && !e.start?.dateTime,
+      location: e.location ?? null,
+      description: e.description ?? null,
+      busy: e.transparency !== "transparent",
     }));
 }
+
+export type GoogleCalendarEvent = {
+  id: string;
+  summary: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  location: string | null;
+  description: string | null;
+  busy: boolean;
+};
 
 /** Borra un evento del calendario primario. */
 export async function deleteCalendarEvent(userId: string, eventId: string): Promise<GoogleResult> {

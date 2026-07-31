@@ -14,8 +14,12 @@ import {
 
 const schema = z.object({
   enabled: z.boolean(),
-  day: z.coerce.number().int().min(0).max(6).nullable(),
+  day: z.coerce.number().int().min(0).max(28).nullable(),
   hour: z.coerce.number().int().min(0).max(23).nullable(),
+  frequency: z.enum(["WEEKLY", "FORTNIGHTLY", "MONTHLY"]),
+  notifyApp: z.boolean(),
+  notifyWhatsapp: z.boolean(),
+  notifyEmail: z.boolean(),
 });
 
 /** Lee la preferencia de reporte semanal del usuario actual. */
@@ -44,6 +48,13 @@ export async function updateReportPrefsAction(
   // Si está activado, día y hora son obligatorios.
   if (parsed.data.enabled && (parsed.data.day == null || parsed.data.hour == null)) {
     return { error: "Elegí un día y una hora para el reporte." };
+  }
+
+  if (parsed.data.enabled && !parsed.data.notifyApp && !parsed.data.notifyWhatsapp && !parsed.data.notifyEmail) {
+    return { error: "Elegí al menos un canal para recibir el reporte." };
+  }
+  if (parsed.data.enabled && parsed.data.notifyWhatsapp && !(await getProfileWhatsapp(user.id))) {
+    return { error: "Vinculá tu WhatsApp antes de activar ese canal." };
   }
 
   try {

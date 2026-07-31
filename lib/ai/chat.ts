@@ -1,5 +1,6 @@
 import "server-only";
 import type { ChatTurn } from "@/lib/whatsapp/memory";
+import { recordAiProviderUsage } from "@/lib/ai/provider-usage";
 
 // Capa de chat del bot con DOS proveedores:
 //  1) Gemini nativo (GRATIS) → principal
@@ -50,9 +51,19 @@ export async function geminiChatJson({ system, history, userText, imageDataUrl }
   });
   if (!res.ok) {
     const b = await res.text().catch(() => "");
+    await recordAiProviderUsage({ provider: "gemini", model, success: false, statusCode: res.status }).catch(() => {});
     throw new LlmError(res.status, `gemini ${res.status}: ${b.slice(0, 180)}`);
   }
-  const j = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+  const j = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
+  };
+  await recordAiProviderUsage({
+    provider: "gemini", model, success: true, statusCode: 200,
+    promptTokens: j.usageMetadata?.promptTokenCount,
+    completionTokens: j.usageMetadata?.candidatesTokenCount,
+    totalTokens: j.usageMetadata?.totalTokenCount,
+  }).catch(() => {});
   return (j.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("") || "{}";
 }
 
@@ -81,8 +92,23 @@ export async function openaiChatJson({ system, history, userText, imageDataUrl }
   });
   if (!res.ok) {
     const b = await res.text().catch(() => "");
+    if (baseUrl.includes("openrouter")) {
+      await recordAiProviderUsage({ provider: "openrouter", model, success: false, statusCode: res.status }).catch(() => {});
+    }
     throw new LlmError(res.status, `LLM falló (${res.status}): ${b}`);
   }
-  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; cost?: number };
+  };
+  if (baseUrl.includes("openrouter")) {
+    await recordAiProviderUsage({
+      provider: "openrouter", model, success: true, statusCode: 200,
+      promptTokens: data.usage?.prompt_tokens,
+      completionTokens: data.usage?.completion_tokens,
+      totalTokens: data.usage?.total_tokens,
+      costUsd: data.usage?.cost,
+    }).catch(() => {});
+  }
   return data.choices?.[0]?.message?.content ?? "{}";
 }

@@ -185,6 +185,68 @@ body {
     --text-xs: 0.875rem;
     --text-sm: 0.875rem;
   }
+
+  [data-keyboard-aware-modal] {
+    max-height: calc(var(--visual-viewport-height, 100dvh) - 1rem);
+  }
+
+  [data-dialog-scroll] input,
+  [data-dialog-scroll] textarea,
+  [data-dialog-scroll] select,
+  form input,
+  form textarea,
+  form select {
+    scroll-margin-block: 5rem;
+  }
+
+  .mobile-form-actions {
+    position: sticky;
+    bottom: -1rem;
+    z-index: 5;
+    margin-inline: -1rem;
+    margin-bottom: -1rem;
+    padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
+    background: linear-gradient(to top, var(--color-surface) 78%, transparent);
+  }
+
+  .mobile-keyboard-open [data-bottom-nav] {
+    visibility: hidden;
+  }
+}
+
+/* Ventanas de carga en escritorio: aprovechan el ancho disponible y ordenan
+   formularios directos en dos columnas. Los grupos complejos pueden declararse
+   full-width con .desktop-form-full. Mobile conserva el flujo apilado. */
+@media (min-width: 1024px) {
+  [data-dialog-content]:has(input:not([type="hidden"]), textarea, select),
+  [data-keyboard-aware-modal]:has(input:not([type="hidden"]), textarea, select) {
+    max-width: 64rem !important;
+  }
+
+  [data-desktop-dialog-body] > form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.25rem;
+    row-gap: 1rem;
+  }
+
+  [data-desktop-dialog-body] > form > * {
+    min-width: 0;
+    margin-top: 0 !important;
+  }
+
+  [data-desktop-dialog-body] > form > input[type="hidden"] {
+    display: none;
+  }
+
+  [data-desktop-dialog-body] > form > :last-child,
+  [data-desktop-dialog-body] > form > .desktop-form-full {
+    grid-column: 1 / -1;
+  }
+
+  [data-desktop-dialog-body] > form > :last-child {
+    justify-self: stretch;
+  }
 }
 
 /* ── Ambient mesh: gradientes radiales tonales detrás de toda la app.

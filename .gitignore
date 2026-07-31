@@ -18,6 +18,7 @@
 
 # next.js
 /.next/
+/.next-stale-*/
 /out/
 
 # production
@@ -51,7 +52,13 @@ next-env.d.ts
 # Playwright MCP scratch output
 .playwright-mcp/
 
+# Skills locales del agente: tooling, no codigo de la app. Sus assets pueden
+# arrastrar credenciales (levy.png tenia una API key de OpenRouter embebida).
+.claude/skills/
+
 # logs sueltos / scratch
 dev-verify.log
 *-verify.log
 logo-concepts.html
+/tmp/
+/output/

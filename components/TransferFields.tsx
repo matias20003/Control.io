@@ -148,8 +148,8 @@ export function TransferFields({
     : null;
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-3 items-end">
+    <div className="space-y-4 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0">
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-3 items-end lg:col-span-2">
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-from`}>Desde *</Label>
           <Select id={`${idPrefix}-from`} name="accountId" value={fromId}
@@ -187,7 +187,7 @@ export function TransferFields({
       <input type="hidden" name="currency" value={from?.currency ?? ""} />
 
       {isConversion && (
-        <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-3">
+        <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-3 lg:row-span-2">
           {foreignCurrency && (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
@@ -270,7 +270,7 @@ export function TransferFields({
       )}
 
       {!isConversion && from && to && (
-        <p className="text-xs text-muted">
+        <p className="text-xs text-muted lg:self-center">
           Se acreditará el mismo importe en {to.name} porque ambas cuentas están en {from.currency}.
         </p>
       )}

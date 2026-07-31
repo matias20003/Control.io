@@ -2,10 +2,13 @@ import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { addDays, startOfDay, format, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
+import { getRecurringOccurrences } from "@/lib/recurrence-schedule";
+import { startOfTodayArg } from "@/lib/timezone";
 
 export type AgendaEvent = {
   id: string;
   type: "recurring" | "credit" | "debt";
+  cashFlow: "income" | "expense";
   title: string;
   subtitle: string;
   amount: number;
@@ -32,7 +35,7 @@ function dateLabel(date: Date, today: Date): string {
 }
 
 export async function getAgenda(userId: string, days = 30): Promise<AgendaEvent[]> {
-  const today    = startOfDay(new Date());
+  const today    = startOfTodayArg();
   const fromDate = today;
   const toDate   = addDays(today, days);
 
@@ -66,7 +69,10 @@ export async function getAgenda(userId: string, days = 30): Promise<AgendaEvent[
     }),
     prisma.recurringTransaction.findMany({
       where: { userId, isActive: true },
-      include: { category: { select: { name: true, icon: true } } },
+      include: {
+        category: { select: { name: true, icon: true } },
+        account: { select: { name: true } },
+      },
     }),
   ]);
 
@@ -77,6 +83,7 @@ export async function getAgenda(userId: string, days = 30): Promise<AgendaEvent[
     events.push({
       id: `credit-${inst.id}`,
       type: "credit",
+      cashFlow: "expense",
       title: decrypt(inst.creditPurchase.description) ?? inst.creditPurchase.description,
       subtitle: `Cuota ${inst.installmentNumber}/${inst.creditPurchase.totalInstallments}`,
       amount: toNum(inst.amount),
@@ -96,6 +103,7 @@ export async function getAgenda(userId: string, days = 30): Promise<AgendaEvent[
     events.push({
       id: `debt-${debt.id}`,
       type: "debt",
+      cashFlow: debt.direction === "I_OWE" ? "expense" : "income",
       title: decrypt(debt.personName) ?? debt.personName,
       subtitle: debt.direction === "I_OWE" ? "Debés" : "Te deben",
       amount: toNum(debt.totalAmount) - toNum(debt.paidAmount),
@@ -110,60 +118,27 @@ export async function getAgenda(userId: string, days = 30): Promise<AgendaEvent[
 
   // ── 3. Recurrentes que van a ejecutarse ────────────────────
   for (const r of recurrentes) {
-    const nextDate = getNextExecutionDate(r, today);
-    if (!nextDate) continue;
-    if (nextDate > toDate) continue;
-
-    events.push({
-      id: `recurring-${r.id}`,
-      type: "recurring",
-      title: decrypt(r.description) ?? r.description,
-      subtitle: `${r.category?.name ?? "Sin categoría"} · ${r.frequency}`,
-      amount: toNum(r.amount),
-      currency: r.currency,
-      date: nextDate.toISOString(),
-      dateLabel: dateLabel(nextDate, today),
-      daysUntil: differenceInDays(startOfDay(nextDate), today),
-      icon: r.type === "INCOME" ? "💚" : r.category?.icon ?? "🔄",
-      color: r.type === "INCOME" ? "#22c55e" : "#ef4444",
-    });
+    const dates = getRecurringOccurrences(r, today, toDate);
+    for (const executionDate of dates) {
+      events.push({
+        id: `recurring-${r.id}-${format(executionDate, "yyyy-MM-dd")}`,
+        type: "recurring",
+        cashFlow: r.type === "INCOME" ? "income" : "expense",
+        title: decrypt(r.description) ?? r.description,
+        subtitle: `${r.category?.name ?? "Sin categoría"} · ${
+          r.account ? `se descuenta de ${decrypt(r.account.name) ?? r.account.name}` : "requiere pago"
+        }`,
+        amount: toNum(r.amount),
+        currency: r.currency,
+        date: executionDate.toISOString(),
+        dateLabel: dateLabel(executionDate, today),
+        daysUntil: differenceInDays(startOfDay(executionDate), today),
+        icon: r.type === "INCOME" ? "💚" : r.category?.icon ?? "🔄",
+        color: r.type === "INCOME" ? "#22c55e" : "#ef4444",
+      });
+    }
   }
 
   // Ordenar por fecha
   return events.sort((a, b) => a.daysUntil - b.daysUntil);
-}
-
-function getNextExecutionDate(
-  r: { frequency: string; dayOfMonth: number | null; startDate: Date; endDate: Date | null; lastExecuted: Date | null },
-  today: Date
-): Date | null {
-  if (r.endDate && r.endDate < today) return null;
-
-  const last = r.lastExecuted ? startOfDay(r.lastExecuted) : null;
-
-  const freq: Record<string, number> = {
-    DAILY: 1,
-    WEEKLY: 7,
-    BIWEEKLY: 14,
-    QUARTERLY: 90,
-    YEARLY: 365,
-  };
-
-  if (r.frequency === "MONTHLY") {
-    const targetDay = r.dayOfMonth ?? (last?.getDate() ?? today.getDate());
-    let next = new Date(today.getFullYear(), today.getMonth(), targetDay);
-    if (next <= today) next = new Date(today.getFullYear(), today.getMonth() + 1, targetDay);
-    return next;
-  }
-
-  const interval = freq[r.frequency];
-  if (!interval) return null;
-
-  if (!last) {
-    const start = startOfDay(r.startDate);
-    return start >= today ? start : today;
-  }
-
-  const next = addDays(last, interval);
-  return next >= today ? next : addDays(today, 0);
 }

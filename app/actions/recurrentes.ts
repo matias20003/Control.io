@@ -30,6 +30,12 @@ const schema = z.object({
   endDate: z.string().optional(),
 });
 
+function revalidateRecurringViews() {
+  revalidatePath("/recurrentes");
+  revalidatePath("/dashboard");
+  revalidatePath("/agenda");
+}
+
 export async function createRecurrenteAction(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -55,7 +61,7 @@ export async function createRecurrenteAction(formData: FormData) {
 
   try {
     const rec = await createRecurrente(user.id, result.data);
-    revalidatePath("/recurrentes");
+    revalidateRecurringViews();
     return { success: true, recurrente: rec };
   } catch {
     return { error: "Error al crear el recurrente" };
@@ -87,7 +93,7 @@ export async function updateRecurrenteAction(id: string, formData: FormData) {
 
   try {
     const rec = await updateRecurrente(user.id, id, result.data);
-    revalidatePath("/recurrentes");
+    revalidateRecurringViews();
     return { success: true, recurrente: rec };
   } catch {
     return { error: "Error al actualizar el recurrente" };
@@ -103,7 +109,7 @@ export async function toggleRecurrenteAction(id: string) {
 
   try {
     const rec = await toggleRecurrente(user.id, id);
-    revalidatePath("/recurrentes");
+    revalidateRecurringViews();
     return { success: true, recurrente: rec };
   } catch {
     return { error: "Error al actualizar" };
@@ -119,7 +125,7 @@ export async function deleteRecurrenteAction(id: string) {
 
   try {
     await deleteRecurrente(user.id, id);
-    revalidatePath("/recurrentes");
+    revalidateRecurringViews();
     return { success: true };
   } catch {
     return { error: "Error al eliminar" };
