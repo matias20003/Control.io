@@ -1,13 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-/** Franja horaria del saludo. Madrugada cuenta como noche. */
-export function greetingFor(hour: number): string {
-  if (hour >= 6 && hour < 12) return "Buenos días";
-  if (hour >= 12 && hour < 20) return "Buenas tardes";
-  return "Buenas noches";
-}
+import { greetingFor } from "@/lib/greeting";
 
 /** Primer nombre, con la inicial en mayúscula (el fallback sale del email). */
 function firstName(name: string): string {

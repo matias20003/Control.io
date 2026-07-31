@@ -21,7 +21,8 @@ import { IncomeExpenseChart, BalanceSparkline } from "./DashboardCharts";
 import { NetWorthCard } from "./NetWorthCard";
 import { PrivacyToggle } from "@/components/PrivacyToggle";
 import { TodayDate } from "./TodayDate";
-import { Greeting, greetingFor } from "./Greeting";
+import { Greeting } from "./Greeting";
+import { greetingFor } from "@/lib/greeting";
 import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 import { GuidedTour } from "@/components/GuidedTour";
 import { WhatsappPromoModal } from "@/components/WhatsappPromoModal";
@@ -77,7 +78,9 @@ export default async function DashboardPage({
       hour: "numeric",
       hourCycle: "h23",
       timeZone: "America/Argentina/Buenos_Aires",
-    }).format(now),
+    })
+      .formatToParts(now)
+      .find((part) => part.type === "hour")?.value ?? "0",
   );
 
   const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo, netWorth, lastMovementAt, agenda, isTester] =
