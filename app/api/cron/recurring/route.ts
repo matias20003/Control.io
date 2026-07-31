@@ -1,10 +1,12 @@
 import { NextRequest } from "next/server";
 import { bearerMatches } from "@/lib/cron-auth";
 import { prisma } from "@/lib/prisma";
-import { differenceInDays, isAfter, isBefore } from "date-fns";
 import { sendPushToUser } from "@/lib/push/send";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { startOfTodayArg } from "@/lib/timezone";
+// Misma fuente de verdad que la agenda y los recordatorios de vencimiento: lo
+// que el panel proyecta como próximo pago es exactamente lo que se ejecuta.
+import { isRecurringDue } from "@/lib/recurrence-schedule";
 import { snapshotConversion } from "@/lib/exchange";
 import { sendReactivationNudges } from "@/lib/reactivation";
 import { sendDueReminders } from "@/lib/db/due-reminders";
@@ -19,50 +21,6 @@ function authorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false; // Si no hay secret configurado, denegar siempre
   return bearerMatches(req.headers.get("authorization"), secret);
-}
-
-function shouldExecuteToday(
-  r: {
-    frequency: string;
-    dayOfMonth: number | null;
-    startDate: Date;
-    endDate: Date | null;
-    lastExecuted: Date | null;
-  },
-  today: Date
-): boolean {
-  if (r.endDate && isBefore(r.endDate, today)) return false;
-  if (isAfter(r.startDate, today)) return false;
-
-  if (!r.lastExecuted) return true; // nunca ejecutado
-
-  const daysSinceLast = differenceInDays(today, r.lastExecuted);
-
-  switch (r.frequency) {
-    case "DAILY":
-      return daysSinceLast >= 1;
-    case "WEEKLY":
-      return daysSinceLast >= 7;
-    case "BIWEEKLY":
-      return daysSinceLast >= 14;
-    case "MONTHLY": {
-      // Día objetivo, acotado al último día en meses cortos (ej: 31 → 30/28).
-      const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-      const targetDay = Math.min(r.dayOfMonth ?? r.lastExecuted.getDate(), daysInMonth);
-      const notYetThisMonth =
-        today.getMonth() !== r.lastExecuted.getMonth() ||
-        today.getFullYear() !== r.lastExecuted.getFullYear();
-      // Dispara el día objetivo O cualquier día posterior si el cron se lo
-      // perdió, mientras no se haya ejecutado ya este mes (a lo sumo 1 vez/mes).
-      return notYetThisMonth && today.getDate() >= targetDay;
-    }
-    case "QUARTERLY":
-      return daysSinceLast >= 90;
-    case "YEARLY":
-      return daysSinceLast >= 365;
-    default:
-      return false;
-  }
 }
 
 export async function GET(req: NextRequest) {
@@ -81,7 +39,7 @@ export async function GET(req: NextRequest) {
   let skipped = 0;
 
   for (const r of recurrentes) {
-    if (!shouldExecuteToday(r, today)) {
+    if (!isRecurringDue(r, today)) {
       skipped++;
       continue;
     }

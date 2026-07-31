@@ -455,3 +455,17 @@ body {
   .splash-c { animation: none; stroke-dashoffset: 0; }
   .splash-word { animation: none; }
 }
+
+/* ── Modo privacidad: el botón de ojo del panel ──────────────────────────────
+   PrivacyToggle marca <html data-hide-values="true"> y acá difuminamos todo lo
+   que sea un importe dentro del panel. Se apunta a .font-mono (la convención
+   con la que el dashboard renderiza los números), a .money para los importes
+   que van en texto corrido, y a los gráficos completos, cuyos ejes y tooltips
+   son SVG y no se pueden marcar uno por uno. */
+html[data-hide-values="true"] .dashboard-panel :is(.font-mono, .money),
+html[data-hide-values="true"] .dashboard-panel .recharts-wrapper {
+  filter: blur(7px);
+  /* Que no se pueda copiar el valor tapado ni seleccionarlo por accidente. */
+  user-select: none;
+  pointer-events: none;
+}

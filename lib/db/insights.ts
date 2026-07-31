@@ -208,28 +208,68 @@ export async function getInsights(userId: string): Promise<Insight[]> {
 }
 
 // ── Patrimonio neto ───────────────────────────────────────────
+/** Posición neta en una moneda concreta, sin convertir. */
+export type CurrencyPosition = {
+  currency: string;
+  assets: number;      // saldo de cuentas en esa moneda
+  liabilities: number; // deudas pendientes + cuotas pendientes en esa moneda
+  net: number;
+};
+
 export type NetWorth = {
-  totalAssets: number;     // saldo de cuentas ARS
-  totalLiabilities: number; // deudas pendientes + cuotas pendientes ARS
+  // Posición en pesos. Se mantienen con este nombre y este significado porque
+  // el asistente de WhatsApp los reporta como "PATRIMONIO NETO (ARS)".
+  totalAssets: number;
+  totalLiabilities: number;
   netWorth: number;
+  /** Todas las monedas con posición, ARS incluida. Ordenadas por peso. */
+  byCurrency: CurrencyPosition[];
 };
 
 export async function getNetWorth(userId: string): Promise<NetWorth> {
   const [accounts, debts, creditPurchases] = await Promise.all([
-    prisma.account.findMany({ where: { userId, isActive: true, currency: "ARS" }, select: { balance: true } }),
-    prisma.debt.findMany({ where: { userId, isCompleted: false, currency: "ARS" }, select: { totalAmount: true, paidAmount: true } }),
-    prisma.creditPurchase.findMany({ where: { userId, currency: "ARS" }, include: { installments: { where: { isPaid: false }, select: { amount: true } } } }),
+    prisma.account.findMany({ where: { userId, isActive: true }, select: { balance: true, currency: true } }),
+    prisma.debt.findMany({ where: { userId, isCompleted: false }, select: { totalAmount: true, paidAmount: true, currency: true } }),
+    prisma.creditPurchase.findMany({ where: { userId }, include: { installments: { where: { isPaid: false }, select: { amount: true } } } }),
   ]);
 
-  const totalAssets = accounts.reduce((s, a) => s + toNum(a.balance), 0);
+  // Acumulamos activos y pasivos por moneda en una sola pasada.
+  const positions = new Map<string, CurrencyPosition>();
+  const bucket = (currency: string): CurrencyPosition => {
+    let position = positions.get(currency);
+    if (!position) {
+      position = { currency, assets: 0, liabilities: 0, net: 0 };
+      positions.set(currency, position);
+    }
+    return position;
+  };
 
-  const debtLiability = debts.reduce((s, d) => s + (toNum(d.totalAmount) - toNum(d.paidAmount)), 0);
-  const creditLiability = creditPurchases.reduce(
-    (s, cp) => s + cp.installments.reduce((ss, i) => ss + toNum(i.amount), 0),
-    0
-  );
+  for (const account of accounts) bucket(account.currency).assets += toNum(account.balance);
+  for (const debt of debts) {
+    bucket(debt.currency).liabilities += toNum(debt.totalAmount) - toNum(debt.paidAmount);
+  }
+  for (const purchase of creditPurchases) {
+    const pending = purchase.installments.reduce((sum, i) => sum + toNum(i.amount), 0);
+    if (pending) bucket(purchase.currency).liabilities += pending;
+  }
 
-  const totalLiabilities = debtLiability + creditLiability;
+  const byCurrency = [...positions.values()]
+    .map((position) => ({ ...position, net: position.assets - position.liabilities }))
+    // Descartamos monedas que quedaron en cero por ambos lados (ruido).
+    .filter((position) => position.assets !== 0 || position.liabilities !== 0)
+    // ARS primero; el resto por tamaño de la posición.
+    .sort((a, b) => {
+      if (a.currency === "ARS") return -1;
+      if (b.currency === "ARS") return 1;
+      return Math.abs(b.net) - Math.abs(a.net);
+    });
 
-  return { totalAssets, totalLiabilities, netWorth: totalAssets - totalLiabilities };
+  const ars = positions.get("ARS");
+
+  return {
+    totalAssets: ars?.assets ?? 0,
+    totalLiabilities: ars?.liabilities ?? 0,
+    netWorth: (ars?.assets ?? 0) - (ars?.liabilities ?? 0),
+    byCurrency,
+  };
 }

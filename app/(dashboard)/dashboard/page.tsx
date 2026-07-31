@@ -17,7 +17,9 @@ import {
 import { getAgenda } from "@/lib/db/agenda";
 import { DashboardQuickAdd } from "./DashboardQuickAdd";
 import { CategoryChart } from "./CategoryChart";
-import { IncomeExpenseChart, BalanceSparkline, NetWorthChart } from "./DashboardCharts";
+import { IncomeExpenseChart, BalanceSparkline } from "./DashboardCharts";
+import { NetWorthCard } from "./NetWorthCard";
+import { PrivacyToggle } from "@/components/PrivacyToggle";
 import { TodayDate } from "./TodayDate";
 import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 import { GuidedTour } from "@/components/GuidedTour";
@@ -109,17 +111,6 @@ export default async function DashboardPage({
   const prev = series[series.length - 2];
   const balanceSeries = series.map((m) => ({ label: m.label, balance: m.balance }));
 
-  // Patrimonio neto en el tiempo: anclamos el último mes en el patrimonio actual
-  // y caminamos hacia atrás restando el neto (ingresos − gastos) de cada mes.
-  const nwSeries: { label: string; patrimonio: number }[] = [];
-  if (netWorth && series.length) {
-    let nw = netWorth.netWorth;
-    for (let i = series.length - 1; i >= 0; i--) {
-      nwSeries[i] = { label: series[i].label, patrimonio: Math.round(nw) };
-      nw -= series[i].balance;
-    }
-  }
-  const nwDelta = nwSeries.length > 1 ? nwSeries[nwSeries.length - 1].patrimonio - nwSeries[0].patrimonio : null;
   const ieSeries = series.map((m) => ({ label: m.label, income: m.income, expense: m.expense, balance: m.balance }));
   const balanceDelta = cur && prev ? cur.balance - prev.balance : null;
   const incomeDelta = pctDelta(cur?.income, prev?.income);
@@ -166,7 +157,8 @@ export default async function DashboardPage({
               {topGoal.percentage}%
             </p>
             <p className="text-xs text-muted mt-1">
-              {formatCurrency(topGoal.currentAmount, topGoal.currency)} de {formatCurrency(topGoal.targetAmount, topGoal.currency)}
+              <span className="money">{formatCurrency(topGoal.currentAmount, topGoal.currency)}</span> de{" "}
+              <span className="money">{formatCurrency(topGoal.targetAmount, topGoal.currency)}</span>
             </p>
             <div className="h-2 rounded-full bg-surface-2 overflow-hidden mt-3">
               <div
@@ -187,7 +179,8 @@ export default async function DashboardPage({
   );
 
   return (
-    <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-5">
+    /* dashboard-panel: alcance del modo privacidad (ver globals.css) */
+    <div className="dashboard-panel p-4 md:p-6 max-w-[1440px] mx-auto space-y-5">
 
       <WhatsappPromoModal isLinked={!!whatsappNumber} />
 
@@ -216,6 +209,7 @@ export default async function DashboardPage({
             <span className="text-xs font-medium text-muted">Sin racha</span>
           </div>
         )}
+        <PrivacyToggle />
         <StreakCelebration current={streak} />
       </div>
 
@@ -282,7 +276,7 @@ export default async function DashboardPage({
             {balanceDelta != null && (
               <div className={`inline-flex items-center gap-1.5 mt-3 px-2.5 py-1.5 rounded-lg text-xs font-medium ${balanceBetter ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
                 {balanceBetter ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                {formatCurrency(Math.abs(balanceDelta), "ARS")} {balanceBetter ? "más" : "menos"} que el mes pasado
+                <span className="money">{formatCurrency(Math.abs(balanceDelta), "ARS")}</span> {balanceBetter ? "más" : "menos"} que el mes pasado
               </div>
             )}
             {balanceSeries.length > 1 && (
@@ -328,30 +322,9 @@ export default async function DashboardPage({
       {/* ── CHARTS ROW ── */}
       <div className="order-2 grid grid-cols-1 gap-4 lg:order-1 lg:grid-cols-2">
 
-        {/* Patrimonio neto en el tiempo */}
-        {netWorth && (
-          <Card>
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Patrimonio neto</p>
-                  <p className="text-2xl md:text-3xl font-bold font-mono mt-1 text-foreground">
-                    {formatCurrency(netWorth.netWorth, "ARS")}
-                  </p>
-                  <p className="text-xs text-muted mt-0.5">
-                    activos {formatCurrency(netWorth.totalAssets, "ARS")} · deudas {formatCurrency(netWorth.totalLiabilities, "ARS")}
-                  </p>
-                </div>
-                {nwDelta != null && (
-                  <div className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium ${nwDelta >= 0 ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
-                    {nwDelta >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                    {formatCurrency(Math.abs(nwDelta), "ARS")} en {series.length} meses
-                  </div>
-                )}
-              </div>
-              {nwSeries.length > 1 && <NetWorthChart data={nwSeries} />}
-            </CardContent>
-          </Card>
+        {/* Patrimonio neto — multi-moneda, convertido con la cotización del día */}
+        {netWorth && netWorth.byCurrency.length > 0 && (
+          <NetWorthCard positions={netWorth.byCurrency} monthlyBalances={balanceSeries} />
         )}
 
         {/* Evolución ingresos vs gastos */}
