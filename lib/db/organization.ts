@@ -145,9 +145,61 @@ export async function updateOrganizationTask(userId: string, id: string, input: 
   return serializeOrganizationTask(row);
 }
 
-export async function createOrganizationList(userId: string, name: string, color = "#2563eb") {
+/** Borra la tarea. Devuelve los datos de Google para poder limpiar el evento. */
+export async function deleteOrganizationTask(userId: string, id: string) {
+  const task = await prisma.task.findFirst({
+    where: { id, userId },
+    select: { id: true, googleEventId: true, googleCalendarId: true },
+  });
+  if (!task) throw new Error("Tarea no encontrada");
+  await prisma.task.delete({ where: { id } });
+  return { googleEventId: task.googleEventId, googleCalendarId: task.googleCalendarId };
+}
+
+// ── Listas ───────────────────────────────────────────────────
+// El Inbox no es una fila: son las tareas con listId = null. La FK de Task es
+// onDelete: SetNull, así que al borrar una lista sus tareas caen solas ahí.
+
+export async function createOrganizationList(userId: string, name: string, color = "#2563eb", icon?: string | null) {
   const position = await prisma.organizationList.count({ where: { userId } });
-  return prisma.organizationList.create({ data: { userId, name, color, position } });
+  return prisma.organizationList.create({ data: { userId, name, color, icon: icon ?? null, position } });
+}
+
+export async function updateOrganizationList(
+  userId: string,
+  id: string,
+  input: { name?: string; color?: string; icon?: string | null },
+) {
+  const list = await prisma.organizationList.findFirst({ where: { id, userId }, select: { id: true } });
+  if (!list) throw new Error("Lista no encontrada");
+  return prisma.organizationList.update({
+    where: { id },
+    data: {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.color !== undefined ? { color: input.color } : {}),
+      ...(input.icon !== undefined ? { icon: input.icon } : {}),
+    },
+  });
+}
+
+/** Borra la lista. Sus tareas no se pierden: quedan en el Inbox. */
+export async function deleteOrganizationList(userId: string, id: string) {
+  const list = await prisma.organizationList.findFirst({ where: { id, userId }, select: { id: true } });
+  if (!list) throw new Error("Lista no encontrada");
+  const moved = await prisma.task.count({ where: { userId, listId: id } });
+  await prisma.organizationList.delete({ where: { id } });
+  return { movedToInbox: moved };
+}
+
+/** Reordena las listas según el orden de los ids recibidos. */
+export async function reorderOrganizationLists(userId: string, ids: string[]) {
+  const owned = await prisma.organizationList.findMany({ where: { userId, id: { in: ids } }, select: { id: true } });
+  const valid = new Set(owned.map((list) => list.id));
+  await prisma.$transaction(
+    ids
+      .filter((id) => valid.has(id))
+      .map((id, position) => prisma.organizationList.update({ where: { id }, data: { position } })),
+  );
 }
 
 export async function createHabit(userId: string, input: {
@@ -166,6 +218,33 @@ export async function createHabit(userId: string, input: {
       scheduledTime: input.scheduledTime,
     },
   });
+}
+
+export async function updateHabit(userId: string, id: string, input: {
+  name?: string; icon?: string | null; color?: string; frequency?: string;
+  daysOfWeek?: number[]; targetPerPeriod?: number; scheduledTime?: string | null;
+}) {
+  const habit = await prisma.habit.findFirst({ where: { id, userId }, select: { id: true } });
+  if (!habit) throw new Error("Hábito no encontrado");
+  return prisma.habit.update({
+    where: { id },
+    data: {
+      ...(input.name !== undefined ? { name: encrypt(input.name) ?? input.name } : {}),
+      ...(input.icon !== undefined ? { icon: input.icon } : {}),
+      ...(input.color !== undefined ? { color: input.color } : {}),
+      ...(input.frequency !== undefined ? { frequency: input.frequency } : {}),
+      ...(input.daysOfWeek !== undefined ? { daysOfWeek: input.daysOfWeek } : {}),
+      ...(input.targetPerPeriod !== undefined ? { targetPerPeriod: input.targetPerPeriod } : {}),
+      ...(input.scheduledTime !== undefined ? { scheduledTime: input.scheduledTime } : {}),
+    },
+  });
+}
+
+/** Borra el hábito y todo su historial. Irreversible. */
+export async function deleteHabit(userId: string, id: string) {
+  const habit = await prisma.habit.findFirst({ where: { id, userId }, select: { id: true } });
+  if (!habit) throw new Error("Hábito no encontrado");
+  await prisma.habit.delete({ where: { id } });
 }
 
 export async function toggleHabitCompletion(userId: string, habitId: string, date: Date) {

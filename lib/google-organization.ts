@@ -82,6 +82,24 @@ export async function syncTaskToGoogle(userId: string, taskId: string) {
   }
 }
 
+/**
+ * Borra el evento espejo en Google. Se llama después de borrar la tarea, así que
+ * un 404/410 (ya no existe) es un resultado válido, no un error.
+ */
+export async function deleteTaskFromGoogle(userId: string, googleEventId: string | null, googleCalendarId: string | null) {
+  if (!googleEventId) return;
+  const calendarId = googleCalendarId ?? await ensureControlCalendar(userId);
+  try {
+    await google(userId, `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(googleEventId)}`, {
+      method: "DELETE",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("404") || message.includes("410")) return;
+    throw error;
+  }
+}
+
 type GoogleEvent = {
   id: string; etag?: string; status?: string; summary?: string; description?: string; updated?: string;
   start?: { dateTime?: string }; end?: { dateTime?: string };
@@ -138,6 +156,23 @@ export async function syncGoogleOrganization(userId: string) {
     update: { syncToken: data.nextSyncToken, lastSyncedAt: new Date(), lastError: null },
   });
   return { count: data.items?.length ?? 0 };
+}
+
+/**
+ * Sincroniza sólo si pasó `maxAgeMs` desde la última vez.
+ *
+ * La página corría un sync completo en cada render, y como cada acción del
+ * cliente hace router.refresh(), marcar una tarea disparaba un round-trip contra
+ * Google. Los cambios que vienen de Google ya entran por el webhook, así que
+ * este sync es sólo una red de seguridad.
+ */
+export async function syncGoogleOrganizationIfStale(userId: string, maxAgeMs = 5 * 60_000) {
+  const state = await prisma.googleCalendarSync.findUnique({
+    where: { userId },
+    select: { lastSyncedAt: true },
+  });
+  if (state?.lastSyncedAt && Date.now() - state.lastSyncedAt.getTime() < maxAgeMs) return null;
+  return syncGoogleOrganization(userId);
 }
 
 export async function ensureCalendarWatch(userId: string) {

@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getOrganization } from "@/lib/db/organization";
 import { getAgenda } from "@/lib/db/agenda";
 import { getGoogleStatus } from "@/lib/google";
-import { ensureCalendarWatch, syncGoogleOrganization } from "@/lib/google-organization";
+import { ensureCalendarWatch, syncGoogleOrganizationIfStale } from "@/lib/google-organization";
 import { OrganizationClient } from "./OrganizationClient";
 
 export const metadata: Metadata = { title: "Organización" };
@@ -16,7 +16,9 @@ export default async function OrganizationPage() {
 
   const google = await getGoogleStatus(user.id).catch(() => ({ connected: false, email: null }));
   if (google.connected) {
-    await syncGoogleOrganization(user.id).catch(() => null);
+    // Con throttle: sin esto, cada router.refresh() del cliente (o sea, cada
+    // tarea que se marca) bloqueaba el render con dos llamadas a Google.
+    await syncGoogleOrganizationIfStale(user.id).catch(() => null);
     await ensureCalendarWatch(user.id).catch(() => null);
   }
   const [initial, financeEvents] = await Promise.all([
