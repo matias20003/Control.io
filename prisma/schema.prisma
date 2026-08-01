@@ -391,9 +391,15 @@ model Task {
   list            OrganizationList? @relation(fields: [listId], references: [id], onDelete: SetNull)
   title           String
   description     String?
+  // dueDate = "cuándo vence" (lo impone algo de afuera).
+  // scheduledStart = "cuándo lo hago" (lo decidís vos). Son cosas distintas:
+  // Hoy muestra lo que decidiste hacer hoy, no todo lo que existe.
   dueDate         DateTime?
   scheduledStart  DateTime?
   scheduledEnd    DateTime?
+  // Algún día: no lo descartaste pero tampoco lo agendaste. Queda fuera de
+  // todas las vistas activas para que la lista principal no se vuelva impasable.
+  someday         Boolean   @default(false)
   status          String    @default("TODO")
   priority        String    @default("NONE")
   urgent          Boolean   @default(false)

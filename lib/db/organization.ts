@@ -13,6 +13,7 @@ export type OrganizationTask = {
   urgent: boolean;
   important: boolean;
   listId: string | null;
+  someday: boolean;
   order: number;
   recurrenceRule: string | null;
   reminderMinutes: number | null;
@@ -26,7 +27,7 @@ type TaskRow = {
   id: string; title: string; description: string | null; dueDate: Date | null;
   scheduledStart: Date | null; scheduledEnd: Date | null; status: string;
   priority: string; urgent: boolean; important: boolean; listId: string | null;
-  order: number; recurrenceRule: string | null; reminderMinutes: number | null;
+  someday: boolean; order: number; recurrenceRule: string | null; reminderMinutes: number | null;
   source: string; syncStatus: string; syncError: string | null; done: boolean;
 };
 
@@ -86,6 +87,7 @@ export type OrganizationTaskInput = {
   urgent?: boolean;
   important?: boolean;
   listId?: string | null;
+  someday?: boolean;
   recurrenceRule?: string | null;
   reminderMinutes?: number | null;
 };
@@ -100,7 +102,10 @@ export async function createOrganizationTask(userId: string, input: Organization
       userId,
       title: encrypt(input.title) ?? input.title,
       description: input.description ? (encrypt(input.description) ?? input.description) : null,
-      dueDate: input.dueDate ?? input.scheduledStart ?? null,
+      // NO se autocompleta con scheduledStart: "cuando lo hago" y "cuando
+      // vence" son cosas distintas, y fusionarlas hacia que Hoy mostrara todo
+      // lo que tuviera fecha en vez de lo que decidiste hacer hoy.
+      dueDate: input.dueDate ?? null,
       scheduledStart: input.scheduledStart ?? null,
       scheduledEnd: input.scheduledEnd ?? null,
       status: input.status ?? "TODO",
@@ -108,6 +113,7 @@ export async function createOrganizationTask(userId: string, input: Organization
       urgent: input.urgent ?? false,
       important: input.important ?? false,
       listId: input.listId ?? null,
+      someday: input.someday ?? false,
       recurrenceRule: input.recurrenceRule ?? null,
       reminderMinutes: input.reminderMinutes ?? null,
       syncStatus: input.scheduledStart ? "PENDING" : "LOCAL",
@@ -137,6 +143,7 @@ export async function updateOrganizationTask(userId: string, id: string, input: 
       ...(input.urgent !== undefined ? { urgent: input.urgent } : {}),
       ...(input.important !== undefined ? { important: input.important } : {}),
       ...(input.listId !== undefined ? { listId: input.listId } : {}),
+      ...(input.someday !== undefined ? { someday: input.someday } : {}),
       ...(input.order !== undefined ? { order: input.order } : {}),
       ...(input.recurrenceRule !== undefined ? { recurrenceRule: input.recurrenceRule } : {}),
       ...(input.reminderMinutes !== undefined ? { reminderMinutes: input.reminderMinutes } : {}),

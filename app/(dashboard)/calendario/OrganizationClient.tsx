@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Columns3,
+  AlertTriangle, Archive, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Columns3,
   Flame, Pencil, Plus, RefreshCw, Sparkles, Target, Trash2, Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -17,7 +17,9 @@ import {
   updateOrganizationListAction, updateOrganizationTaskAction,
 } from "@/app/actions/organization";
 import { getHabitStreak, isHabitDue } from "@/lib/habit-streak";
+import { hasTime, inboxOf, planForDay, scheduledOn } from "@/lib/organization-day";
 import { TaskDetailPanel, type TaskPatch } from "./TaskDetailPanel";
+import { DayShutdown, WeekPlanner } from "./Rituals";
 
 type List = { id: string; name: string; color: string; isInbox: boolean };
 type Habit = {
@@ -32,19 +34,8 @@ type Habit = {
  */
 type View = "today" | "week" | "organize";
 type WeekZoom = "week" | "month";
-type OrganizeAxis = "kanban" | "eisenhower" | "lists" | "habits";
+type OrganizeAxis = "kanban" | "eisenhower" | "someday" | "lists" | "habits";
 
-const PRIORITY_ORDER: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2, NONE: 3 };
-
-/** Sin hora que mande, el orden lo define la prioridad y después la matriz. */
-function byPriority(a: OrganizationTask, b: OrganizationTask): number {
-  const priority = (PRIORITY_ORDER[a.priority] ?? 3) - (PRIORITY_ORDER[b.priority] ?? 3);
-  if (priority !== 0) return priority;
-  const weight = (task: OrganizationTask) => (task.urgent ? 2 : 0) + (task.important ? 1 : 0);
-  const importance = weight(b) - weight(a);
-  if (importance !== 0) return importance;
-  return a.order - b.order;
-}
 const TZ = "America/Argentina/Buenos_Aires";
 const dayKey = (date: Date) => date.toLocaleDateString("en-CA", { timeZone: TZ });
 const today = () => dayKey(new Date());
@@ -144,15 +135,8 @@ function TodayView({ day, tasks, habits, finance, lists, update, onOpen, onToggl
   onOpen: (id: string) => void;
   onToggleHabit: (habitId: string, day: string) => void;
 }) {
-  // Primero lo que tiene hora, que es lo que tiene una restricción real; después
-  // lo que sólo vence hoy, ordenado por prioridad.
-  const timed = tasks
-    .filter((task) => task.scheduledStart && dayKey(new Date(task.scheduledStart)) === day)
-    .sort((a, b) => Date.parse(a.scheduledStart!) - Date.parse(b.scheduledStart!));
-  const untimed = tasks
-    .filter((task) => !task.scheduledStart && task.dueDate && dayKey(new Date(task.dueDate)) === day)
-    .sort(byPriority);
-  const total = timed.length + untimed.length + finance.length;
+  const plan = planForDay(tasks, day, today());
+  const total = plan.total + finance.length;
 
   return (
     <div className="space-y-6">
@@ -162,18 +146,29 @@ function TodayView({ day, tasks, habits, finance, lists, update, onOpen, onToggl
         <Empty text="No hay nada para este día. Disfrutalo o planificá algo." />
       ) : (
         <>
-          <Section icon={<Clock3 size={13} />} title="Con hora" count={timed.length}>
-            {timed.map((task) => (
+          {/* Lo atrasado va primero y nunca se esconde: es justo lo que más
+              importa ver, y lo que se pierde si el día se cierra sin decidir. */}
+          <Section icon={<AlertTriangle size={13} />} title="Atrasado" count={plan.overdue.length}>
+            {plan.overdue.map((task) => (
+              <TaskRow key={task.id} task={task} lists={lists} onChange={update} onOpen={onOpen} overdue />
+            ))}
+          </Section>
+
+          <Section icon={<Clock3 size={13} />} title="Con hora" count={plan.timed.length}>
+            {plan.timed.map((task) => (
               <TaskRow key={task.id} task={task} lists={lists} onChange={update} onOpen={onOpen} />
             ))}
           </Section>
 
-          <Section icon={<Wallet size={13} />} title="Vence hoy" count={finance.length}>
+          <Section icon={<Wallet size={13} />} title="Vence hoy" count={plan.due.length + finance.length}>
+            {plan.due.map((task) => (
+              <TaskRow key={task.id} task={task} lists={lists} onChange={update} onOpen={onOpen} />
+            ))}
             {finance.map((event) => <FinanceRow key={event.id} event={event} />)}
           </Section>
 
-          <Section icon={<Target size={13} />} title="Sin hora" count={untimed.length}>
-            {untimed.map((task) => (
+          <Section icon={<Target size={13} />} title="Sin hora" count={plan.untimed.length}>
+            {plan.untimed.map((task) => (
               <TaskRow key={task.id} task={task} lists={lists} onChange={update} onOpen={onOpen} />
             ))}
           </Section>
@@ -183,16 +178,22 @@ function TodayView({ day, tasks, habits, finance, lists, update, onOpen, onToggl
   );
 }
 
-/** Mueve una tarea a otro día conservando la hora si la tenía. */
+/**
+ * Mueve una tarea a otro día conservando la hora si tenía bloque.
+ *
+ * Toca "cuándo lo hago", nunca el vencimiento: arrastrar algo al jueves es una
+ * decisión tuya sobre cuándo trabajarlo, y no cambia la fecha que te impuso
+ * quien sea que la haya impuesto.
+ */
 function patchForDay(task: OrganizationTask, day: string): TaskPatch {
-  const dueDate = new Date(`${day}T12:00:00-03:00`).toISOString();
-  if (!task.scheduledStart) return { dueDate, scheduledStart: null, scheduledEnd: null };
-  const time = new Date(task.scheduledStart).toLocaleTimeString("es-AR", {
+  if (!hasTime(task)) {
+    return { scheduledStart: new Date(`${day}T00:00:00-03:00`).toISOString(), scheduledEnd: null };
+  }
+  const time = new Date(task.scheduledStart!).toLocaleTimeString("es-AR", {
     timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false,
   });
   const scheduledStart = new Date(`${day}T${time}:00-03:00`).toISOString();
   return {
-    dueDate,
     scheduledStart,
     scheduledEnd: new Date(Date.parse(scheduledStart) + 3_600_000).toISOString(),
   };
@@ -215,29 +216,43 @@ function WeekView({ week, tasks, undated, financeOn, lists, update, onOpen }: {
     const task = byId.get(event.dataTransfer.getData("task"));
     if (task) update(task.id, patchForDay(task, day));
   };
-  const tasksOn = (day: string) => tasks
-    .filter((task) => {
-      const source = task.scheduledStart ?? task.dueDate;
-      return source ? dayKey(new Date(source)) === day : false;
-    })
-    .sort((a, b) => {
-      if (a.scheduledStart && b.scheduledStart) return Date.parse(a.scheduledStart) - Date.parse(b.scheduledStart);
-      if (a.scheduledStart) return -1;
-      if (b.scheduledStart) return 1;
-      return byPriority(a, b);
-    });
+  const tasksOn = (day: string) => scheduledOn(tasks, day);
 
   const loads = week.map((date) => tasksOn(dayKey(date)).length);
   const busiest = Math.max(1, ...loads);
 
+  /**
+   * Plata que sale cada día. Es el segundo eje de la semana y la única ventaja
+   * que ningún gestor de tareas puede copiar: nadie más sabe que ese martes,
+   * además de seis tareas, te vence una cuota.
+   *
+   * Sólo se suma lo que está en pesos; mezclar monedas en un total daría un
+   * número falso. Lo que esté en otra moneda igual se lista en el día.
+   */
+  const outflowOn = (day: string) => financeOn(day)
+    .filter((event) => event.cashFlow === "expense" && event.currency === "ARS")
+    .reduce((sum, event) => sum + event.amount, 0);
+  const weekOutflow = week.reduce((sum, date) => sum + outflowOn(dayKey(date)), 0);
+  const heaviestOutflow = Math.max(0, ...week.map((date) => outflowOn(dayKey(date))));
+  const money = (value: number) =>
+    new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(value);
+
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <div className="space-y-3">
+      {weekOutflow > 0 && (
+        <p className="text-xs text-muted">
+          Esta semana salen <span className="font-semibold tabular-nums text-danger">{money(weekOutflow)}</span> en
+          vencimientos. El día marcado en rojo es el más caro: conviene no cargarlo de tareas.
+        </p>
+      )}
       <div className="grid gap-3 overflow-x-auto sm:grid-cols-2 lg:grid-cols-7 lg:min-w-[860px]">
         {week.map((date, index) => {
           const key = dayKey(date);
           const dayTasks = tasksOn(key);
-          const money = financeOn(key);
-          const scheduledHours = dayTasks.filter((task) => task.scheduledStart).length;
+          const dayEvents = financeOn(key);
+          const outflow = outflowOn(key);
+          const scheduledHours = dayTasks.filter(hasTime).length;
           const isToday = key === today();
           return (
             <section
@@ -262,8 +277,19 @@ function WeekView({ week, tasks, undated, financeOn, lists, update, onOpen }: {
               <p className="mt-1 text-[10px] text-muted">
                 {dayTasks.length} tarea{dayTasks.length === 1 ? "" : "s"}
                 {scheduledHours > 0 && ` · ${scheduledHours} con hora`}
-                {money.length > 0 && ` · ${money.length} vence`}
               </p>
+
+              {/* Segundo eje: la plata del día, con el día más caro marcado. */}
+              {outflow > 0 && (
+                <p
+                  className={`mt-1.5 inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
+                    outflow >= heaviestOutflow ? "bg-danger/12 text-danger" : "bg-surface-2 text-muted"
+                  }`}
+                  title={outflow >= heaviestOutflow ? "El día más caro de la semana" : undefined}
+                >
+                  −{money(outflow)}
+                </p>
+              )}
 
               <div className="mt-3 space-y-2">
                 {dayTasks.map((task) => (
@@ -271,11 +297,12 @@ function WeekView({ week, tasks, undated, financeOn, lists, update, onOpen }: {
                     <TaskRow task={task} lists={lists} onChange={update} onOpen={onOpen} />
                   </div>
                 ))}
-                {money.map((event) => <FinanceRow key={event.id} event={event} />)}
+                {dayEvents.map((event) => <FinanceRow key={event.id} event={event} />)}
               </div>
             </section>
           );
         })}
+      </div>
       </div>
 
       {/* Bandeja de lo que todavía no tiene día: se arrastra a cualquier columna. */}
@@ -304,17 +331,20 @@ const PRIORITY_TONE: Record<string, string> = {
   LOW: "text-primary", MEDIUM: "text-amber-500", HIGH: "text-danger",
 };
 
-function TaskRow({ task, lists, onChange, onOpen }: {
+function TaskRow({ task, lists, onChange, onOpen, overdue }: {
   task: OrganizationTask; lists: List[];
   onChange: (id: string, patch: Partial<OrganizationTask>) => void;
   onOpen?: (id: string) => void;
+  overdue?: boolean;
 }) {
-  const time = task.scheduledStart
-    ? new Date(task.scheduledStart).toLocaleTimeString("es-AR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" })
+  // Sólo hay hora si hay bloque: scheduledEnd null significa "reservada sin hora".
+  const time = hasTime(task)
+    ? new Date(task.scheduledStart!).toLocaleTimeString("es-AR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" })
     : null;
   const list = task.listId ? lists.find((l) => l.id === task.listId) : null;
+  const when = overdue ? (task.scheduledStart ?? task.dueDate) : null;
   return (
-    <article className="group flex items-center gap-3 rounded-xl border border-border/70 bg-surface px-3 py-3 transition-colors hover:border-primary/35">
+    <article className={`group flex items-center gap-3 rounded-xl border bg-surface px-3 py-3 transition-colors hover:border-primary/35 ${overdue ? "border-danger/40" : "border-border/70"}`}>
       <button
         aria-label={task.done ? "Reabrir tarea" : "Completar tarea"}
         onClick={() => onChange(task.id, { status: task.done ? "TODO" : "DONE" })}
@@ -331,6 +361,11 @@ function TaskRow({ task, lists, onChange, onOpen }: {
       >
         <p className={`truncate text-sm font-medium ${task.done ? "text-muted line-through" : "text-foreground"}`}>{task.title}</p>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted">
+          {when && (
+            <span className="font-medium text-danger">
+              era {new Date(when).toLocaleDateString("es-AR", { timeZone: TZ, day: "numeric", month: "short" })}
+            </span>
+          )}
           {time && <span className="inline-flex items-center gap-1"><Clock3 size={11} />{time}</span>}
           {list && <span style={{ color: list.color }}>{list.name}</span>}
           {task.priority !== "NONE" && <span className={PRIORITY_TONE[task.priority] ?? ""}>Prioridad {task.priority.toLowerCase()}</span>}
@@ -353,15 +388,21 @@ function AddTask({ lists, initialDay }: { lists: List[]; initialDay?: string }) 
   const [time, setTime] = useState("");
   const [listId, setListId] = useState("");
   const save = () => start(async () => {
-    const scheduledStart = time ? new Date(`${day}T${time}:00-03:00`).toISOString() : null;
+    // El día es "cuándo lo hago". El vencimiento se pone después, en el detalle:
+    // son cosas distintas y mezclarlas en la carga rápida las volvía a fusionar.
+    const timed = !!day && !!time;
+    const scheduledStart = day
+      ? new Date(`${day}T${timed ? time : "00:00"}:00-03:00`).toISOString()
+      : null;
     const result = await createOrganizationTaskAction({
-      title, dueDate: day ? new Date(`${day}T12:00:00-03:00`).toISOString() : null,
+      title,
+      dueDate: null,
       scheduledStart,
-      scheduledEnd: scheduledStart ? new Date(Date.parse(scheduledStart) + 60 * 60_000).toISOString() : null,
+      scheduledEnd: timed && scheduledStart ? new Date(Date.parse(scheduledStart) + 60 * 60_000).toISOString() : null,
       listId: listId || null,
     });
     if (result.error) { toast.error(result.error); return; }
-    toast.success(time ? "Tarea agendada y sincronizada" : "Tarea creada");
+    toast.success(timed ? "Tarea agendada y sincronizada" : day ? "Tarea reservada para ese día" : "Tarea al Inbox");
     setTitle(""); setOpen(false); router.refresh();
   });
   if (!open) return (
@@ -398,6 +439,7 @@ export function OrganizationClient({ initial, financeEvents, googleConnected }: 
   const [zoom, setZoom] = useState<WeekZoom>("week");
   const [axis, setAxis] = useState<OrganizeAxis>("kanban");
   const [listFilter, setListFilter] = useState<string | null | "all">("all");
+  const [ritual, setRitual] = useState<"shutdown" | "planner" | null>(null);
   const [pending, start] = useTransition();
   const currentDay = dayKey(anchor);
   const update = (id: string, patch: TaskPatch) => {
@@ -445,7 +487,8 @@ export function OrganizationClient({ initial, financeEvents, googleConnected }: 
     listFilter === "all" ? true : task.listId === listFilter;
   const visible = tasks.filter(matchesFilter);
   const visibleActive = visible.filter((task) => !task.done);
-  const undated = visibleActive.filter((task) => !task.dueDate && !task.scheduledStart);
+  const undated = inboxOf(visibleActive);
+  const somedayTasks = visible.filter((task) => task.someday && !task.done);
   const week = useMemo(() => {
     const d = new Date(anchor); const wd = (d.getDay() + 6) % 7;
     d.setDate(d.getDate() - wd);
@@ -453,6 +496,9 @@ export function OrganizationClient({ initial, financeEvents, googleConnected }: 
   }, [anchor]);
   const financeOn = (key: string) => financeEvents.filter((event) => dayKey(new Date(event.date)) === key);
   const step = view === "today" ? 1 : zoom === "week" ? 7 : 30;
+  // La cola del cierre: lo de hoy sin terminar, más lo que quedó atrás.
+  const todayPlan = planForDay(visibleActive, currentDay, today());
+  const pendingToday = [...todayPlan.overdue, ...todayPlan.timed, ...todayPlan.untimed, ...todayPlan.due];
 
   return (
     <main className="mx-auto w-full max-w-[1500px] space-y-5 pb-24">
@@ -535,6 +581,38 @@ export function OrganizationClient({ initial, financeEvents, googleConnected }: 
         </div>
       )}
 
+      {/* Los rituales están a un toque pero nunca bloquean: si no los abrís,
+          la sección funciona igual. */}
+      {view === "today" && pendingToday.length > 0 && (
+        <button
+          onClick={() => setRitual("shutdown")}
+          className="flex w-full items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/5 px-4 py-3 text-left transition-colors hover:border-primary/50"
+        >
+          <span>
+            <span className="block text-sm font-semibold text-foreground">Cerrar el día</span>
+            <span className="block text-xs text-muted">
+              {pendingToday.length} sin terminar · decidí qué pasa con cada una
+            </span>
+          </span>
+          <ChevronRight size={18} className="shrink-0 text-primary" />
+        </button>
+      )}
+
+      {view === "week" && zoom === "week" && undated.length > 0 && (
+        <button
+          onClick={() => setRitual("planner")}
+          className="flex w-full items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/5 px-4 py-3 text-left transition-colors hover:border-primary/50"
+        >
+          <span>
+            <span className="block text-sm font-semibold text-foreground">Planificar la semana</span>
+            <span className="block text-xs text-muted">
+              {undated.length} en el Inbox · asignales un día de a una
+            </span>
+          </span>
+          <ChevronRight size={18} className="shrink-0 text-primary" />
+        </button>
+      )}
+
       {view === "today" && (
         <TodayView
           day={currentDay}
@@ -584,17 +662,36 @@ export function OrganizationClient({ initial, financeEvents, googleConnected }: 
             options={[
               { value: "kanban", label: "Por estado" },
               { value: "eisenhower", label: "Por prioridad" },
+              { value: "someday", label: "Algún día" },
               { value: "lists", label: "Listas" },
               { value: "habits", label: "Hábitos" },
             ]}
           />
-          {axis === "kanban" && <Kanban tasks={visible} lists={initial.lists} update={update} onOpen={open} />}
-          {axis === "eisenhower" && <Eisenhower tasks={visibleActive} lists={initial.lists} update={update} onOpen={open} />}
-          {axis === "lists" && <ListsView lists={initial.lists} tasks={tasks.filter((task) => !task.done)} update={update} onOpen={open} />}
+          {axis === "kanban" && <Kanban tasks={visible.filter((task) => !task.someday)} lists={initial.lists} update={update} onOpen={open} />}
+          {axis === "eisenhower" && <Eisenhower tasks={visibleActive.filter((task) => !task.someday)} lists={initial.lists} update={update} onOpen={open} />}
+          {axis === "someday" && <SomedayView tasks={somedayTasks} lists={initial.lists} update={update} onOpen={open} />}
+          {axis === "lists" && <ListsView lists={initial.lists} tasks={tasks.filter((task) => !task.done && !task.someday)} update={update} onOpen={open} />}
           {axis === "habits" && <Habits habits={initial.habits} />}
         </div>
       )}
       {pending && <div className="fixed bottom-24 right-5 rounded-full bg-foreground px-3 py-2 text-xs text-background shadow-lg"><RefreshCw size={12} className="mr-1 inline animate-spin" />Guardando</div>}
+
+      <DayShutdown
+        open={ritual === "shutdown"}
+        onClose={() => setRitual(null)}
+        tasks={pendingToday}
+        day={currentDay}
+        update={update}
+        remove={remove}
+      />
+      <WeekPlanner
+        open={ritual === "planner"}
+        onClose={() => setRitual(null)}
+        tasks={undated}
+        week={week}
+        update={update}
+        remove={remove}
+      />
 
       <TaskDetailPanel
         task={selected}
@@ -757,6 +854,40 @@ function ListsView({ lists, tasks, update, onOpen }: {
         isPending={pending}
         onConfirm={() => deleting && remove(deleting)}
       />
+    </div>
+  );
+}
+
+/**
+ * Algún día: el estanque de lo que no descartás pero tampoco agendás.
+ * Sin este lugar, todo cae en la misma pila y la lista principal se vuelve
+ * impasable — el famoso "todo parece urgente".
+ */
+function SomedayView({ tasks, lists, update, onOpen }: {
+  tasks: OrganizationTask[]; lists: List[];
+  update: (id: string, patch: TaskPatch) => void;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted">
+        Lo que guardaste para más adelante. No aparece en Hoy ni en Semana hasta que lo saques de acá.
+      </p>
+      {tasks.map((task) => (
+        <div key={task.id} className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <TaskRow task={task} lists={lists} onChange={update} onOpen={onOpen} />
+          </div>
+          <button
+            onClick={() => update(task.id, { someday: false })}
+            title="Traer al Inbox"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-border px-3 text-xs font-medium text-muted transition-colors hover:border-primary hover:text-primary"
+          >
+            <Archive size={13} /> Traer
+          </button>
+        </div>
+      ))}
+      {!tasks.length && <Empty text="Nada guardado para algún día." />}
     </div>
   );
 }

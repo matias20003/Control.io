@@ -7,6 +7,7 @@ import { fireDailyStudyPlan } from "@/lib/study/notify";
 import { sendPushToUser } from "@/lib/push/send";
 import { sendText } from "@/lib/whatsapp/kapso";
 import { fireOrganizerBriefs } from "@/lib/whatsapp/organizer-brief";
+import { fireShutdownNudges } from "@/lib/whatsapp/shutdown-nudge";
 
 // Dispara los recordatorios cuya hora ya llegó. Pensado para correr cada minuto
 // (precisión de "en 5 min"). En Vercel Hobby no hay cron por minuto, así que lo
@@ -69,5 +70,8 @@ export async function GET(req: NextRequest) {
   const plan = await fireDailyStudyPlan().catch(() => ({ sent: false }));
   const organizer = await fireOrganizerBriefs().catch(() => ({ sent: 0, attempted: 0 }));
 
-  return Response.json({ ok: true, due: due.length, sent, recurring: recurring.fired, study: study.sent, studyPlan: plan.sent, organizer });
+  // Empujón para cerrar el día. Se puede ignorar: no bloquea nada.
+  const shutdown = await fireShutdownNudges().catch(() => ({ sent: 0, attempted: 0 }));
+
+  return Response.json({ ok: true, due: due.length, sent, recurring: recurring.fired, study: study.sent, studyPlan: plan.sent, organizer, shutdown });
 }

@@ -41,7 +41,10 @@ export async function ensureControlCalendar(userId: string): Promise<string> {
 
 export async function syncTaskToGoogle(userId: string, taskId: string) {
   const task = await prisma.task.findFirst({ where: { id: taskId, userId } });
-  if (!task?.scheduledStart) return;
+  // Sólo se espeja lo que tiene bloque horario real. Una tarea reservada para un
+  // día sin hora (scheduledEnd null) no es un evento: mandarla crearía uno a las
+  // 00:00 que el usuario nunca pidió.
+  if (!task?.scheduledStart || !task.scheduledEnd) return;
   const calendarId = task.googleCalendarId ?? await ensureControlCalendar(userId);
   const title = decrypt(task.title) ?? task.title;
   const description = task.description ? (decrypt(task.description) ?? task.description) : undefined;
@@ -49,7 +52,7 @@ export async function syncTaskToGoogle(userId: string, taskId: string) {
     summary: title,
     description,
     start: { dateTime: task.scheduledStart.toISOString(), timeZone: "America/Argentina/Buenos_Aires" },
-    end: { dateTime: (task.scheduledEnd ?? new Date(task.scheduledStart.getTime() + 3_600_000)).toISOString(), timeZone: "America/Argentina/Buenos_Aires" },
+    end: { dateTime: task.scheduledEnd.toISOString(), timeZone: "America/Argentina/Buenos_Aires" },
     reminders: task.reminderMinutes == null ? { useDefault: true } : {
       useDefault: false, overrides: [{ method: "popup", minutes: task.reminderMinutes }],
     },

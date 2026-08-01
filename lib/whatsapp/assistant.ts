@@ -39,6 +39,9 @@ import { hasFeature } from "@/lib/feature-flags";
 import { ARG_TZ } from "@/lib/timezone";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import { format as formatDateFn } from "date-fns";
+// El día de la semana en la confirmación evita el error más común: que el
+// usuario lea "07/08" y no registre que eso es un jueves.
+import { es } from "date-fns/locale";
 import { getChatHistory, saveChatTurn, getMemory, addMemory, clearAssistantMemory, type ChatTurn } from "@/lib/whatsapp/memory";
 import { geminiEnabled, geminiChatJson, openaiChatJson, LlmError } from "@/lib/ai/chat";
 import { notifyAdminThrottled, bumpDailyCounter } from "@/lib/alerts";
@@ -93,7 +96,8 @@ interface Action {
   ref?: number;
   fact?: string;
   title?: string;   // create_task / create_reminder (el texto)
-  dueDate?: string; // create_task (YYYY-MM-DD)
+  dueDate?: string;  // create_task: DIA EN QUE LO HACE (YYYY-MM-DD)
+  deadline?: string; // create_task: dia en que VENCE (YYYY-MM-DD). Son cosas distintas.
   taskRef?: number; // complete_task / delete_task ([#N] de TUS TAREAS)
   inMinutes?: number; // create_reminder: dentro de X minutos
   remindAt?: string;  // create_reminder: fecha/hora exacta ARG "YYYY-MM-DDTHH:mm"
@@ -192,6 +196,7 @@ const assistantOutputSchema = z.object({
     fact: z.string().max(500).optional(),
     title: z.string().max(500).optional(),
     dueDate: z.string().max(40).optional(),
+    deadline: z.string().max(40).optional(),
     taskRef: z.coerce.number().int().positive().optional(),
     inMinutes: z.number().positive().max(525_600).optional(),
     remindAt: z.string().max(40).optional(),
@@ -672,7 +677,10 @@ TIPOS DE ACCIÓN (campo "type"):
 - "clear_memory": {} // borrar memoria, historial y reglas cuando el usuario pide "olvidá todo lo que sabés de mí". Requiere confirmación.
 - Si dice "Coto siempre es Supermercado", "Uber siempre sale de Mercado Pago" o "usá Efectivo por defecto", creá una regla; no uses solo remember.
 - "escalar_soporte": { motivo }   // DERIVAR al equipo humano de soporte cuando NO podés resolver una duda del SISTEMA, el usuario reporta un ERROR/bug o algo roto, o pide hablar con una persona. motivo = resumen corto del problema. Primero SIEMPRE intentá resolverlo vos con los pasos; usá esto solo si de verdad no alcanza. Tras emitirlo, "answer" avisa que se derivó.
-${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, dueDate, eventStart, durationMin, listName, priority, urgent, important } // crea un pendiente. Si tiene hora, eventStart="YYYY-MM-DDTHH:mm" y se sincroniza con Google Calendar.
+${hasFeature("tareas", { isTester: c.isTester }) ? `- "create_task": { title, dueDate, deadline, eventStart, durationMin, listName, priority, urgent, important } // crea un pendiente.
+  OJO con las dos fechas, son distintas: dueDate = EL DIA EN QUE LO VA A HACER ("lo hago el jueves", "mañana", "el 7");
+  deadline = EL DIA EN QUE VENCE, solo si lo dice explicito ("vence el 10", "tengo hasta el 15", "para el viernes a mas tardar").
+  Si solo menciona un dia sin hablar de vencimiento, va en dueDate. Si tiene hora, eventStart="YYYY-MM-DDTHH:mm" y se sincroniza con Google Calendar.
 - "complete_task": { taskRef, title }   // marcar una tarea como HECHA ("marcá comprar pan como hecha", "ya entregué el TP", "listo lo de las pilas"). Pasá taskRef = [#N] de TUS TAREAS PENDIENTES, Y TAMBIÉN title = el texto de la tarea (ej: "comprar pan"). Siempre mandá title.
 - "update_task": { taskRef, title, dueDate, eventStart, durationMin, listName, status, priority, urgent, important } // reprograma, mueve de lista o cambia prioridad/estado.
 - "delete_task": { taskRef }   // borrar/cancelar una tarea. taskRef = [#N] de TUS TAREAS PENDIENTES.
@@ -1012,27 +1020,45 @@ async function runAction(userId: string, a: Action, c: FinancialContext, isoDate
     case "create_task": {
       if (!hasFeature("tareas", { isTester: c.isTester })) throw new Error("esa función todavía no está disponible");
       if (!a.title) throw new Error("falta la tarea");
-      const due = a.dueDate ? new Date(a.dueDate) : null;
-      const validDue = due && !isNaN(due.getTime()) ? due : null;
+      // "Cuándo lo hago" y "cuándo vence" son campos distintos. Un día suelto
+      // ("el jueves") es cuándo lo hace, no un vencimiento: mezclarlos hacía que
+      // todo lo que tuviera fecha apareciera siempre en Hoy.
+      const deadline = a.deadline ? new Date(a.deadline) : null;
+      const validDeadline = deadline && !isNaN(deadline.getTime()) ? deadline : null;
       const start = a.eventStart ? fromZonedTime(a.eventStart, ARG_TZ) : null;
+      const timedStart = start && !isNaN(start.getTime()) ? start : null;
+      // Sin hora, la tarea queda reservada para ese día: scheduledEnd null es la
+      // marca de "sin hora" y evita crear un evento en Google que nadie pidió.
+      const dayOnly = !timedStart && a.dueDate ? fromZonedTime(`${a.dueDate}T00:00`, ARG_TZ) : null;
+      const validDayOnly = dayOnly && !isNaN(dayOnly.getTime()) ? dayOnly : null;
       const list = a.listName ? await prisma.organizationList.findFirst({
         where: { userId, name: { equals: a.listName, mode: "insensitive" } },
       }) : null;
       const task = await createOrganizationTask(userId, {
         title: a.title,
-        dueDate: validDue,
-        scheduledStart: start && !isNaN(start.getTime()) ? start : null,
-        scheduledEnd: start && !isNaN(start.getTime()) ? new Date(start.getTime() + (a.durationMin ?? 60) * 60_000) : null,
+        dueDate: validDeadline,
+        scheduledStart: timedStart ?? validDayOnly,
+        scheduledEnd: timedStart ? new Date(timedStart.getTime() + (a.durationMin ?? 60) * 60_000) : null,
         listId: list?.id ?? null,
         priority: a.priority,
         urgent: a.urgent,
         important: a.important,
       });
       let enGoogle = false;
-      if (task.scheduledStart && c.googleConnected) {
+      if (task.scheduledEnd && c.googleConnected) {
         enGoogle = await syncTaskToGoogle(userId, task.id).then(() => true).catch(() => false);
       }
-      return `✅ Anotado: ${a.title}${task.scheduledStart ? ` · ${formatDateFn(toZonedTime(new Date(task.scheduledStart), ARG_TZ), "dd/MM 'a las' HH:mm")}` : validDue ? ` (para el ${validDue.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })})` : ""}${enGoogle ? " · sincronizado con Google Calendar" : ""}`;
+      // Siempre se confirma lo que se entendió: sin eso, la captura rápida se
+      // vuelve una fuente de errores silenciosos que nadie detecta.
+      const cuando = timedStart
+        ? ` · ${formatDateFn(toZonedTime(timedStart, ARG_TZ), "EEEE dd/MM 'a las' HH:mm", { locale: es })}`
+        : validDayOnly
+          ? ` · ${formatDateFn(toZonedTime(validDayOnly, ARG_TZ), "EEEE dd/MM", { locale: es })}`
+          : "";
+      const vence = validDeadline
+        ? ` · vence ${formatDateFn(toZonedTime(validDeadline, ARG_TZ), "dd/MM", { locale: es })}`
+        : "";
+      return `✅ Anotado: ${a.title}${cuando}${vence}${enGoogle ? " · en Google Calendar" : ""}`;
     }
 
     case "update_task": {
@@ -1458,7 +1484,7 @@ export async function handleUserMessage(userId: string, message: string, imageUr
 
   // Tabla de fechas exactas (ARG) para que el modelo no calcule a mano y no se
   // equivoque de día. en-CA da el formato YYYY-MM-DD.
-  const dateRef = Array.from({ length: 8 }, (_, i) => {
+  const dateRef = Array.from({ length: 15 }, (_, i) => {
     const d = new Date(now.getTime() + i * 86_400_000);
     const wd = d.toLocaleDateString("es-AR", { weekday: "long", timeZone: ARG_TZ });
     const iso = d.toLocaleDateString("en-CA", { timeZone: ARG_TZ });

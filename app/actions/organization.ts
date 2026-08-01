@@ -57,6 +57,7 @@ const taskSchema = z.object({
   urgent: z.boolean().optional(),
   important: z.boolean().optional(),
   listId: z.string().nullable().optional(),
+  someday: z.boolean().optional(),
   recurrenceRule: z.string().max(500).nullable().optional(),
   reminderMinutes: z.number().int().min(0).max(10080).nullable().optional(),
 });

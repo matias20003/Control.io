@@ -10,7 +10,7 @@
  */
 import { useState, useTransition } from "react";
 import * as RadixDialog from "@radix-ui/react-dialog";
-import { AlertTriangle, RefreshCw, Star, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, RefreshCw, Star, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { OrganizationTask } from "@/lib/db/organization";
@@ -77,8 +77,11 @@ function TaskForm({
 }) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
-  const [day, setDay] = useState(task.scheduledStart ? dayKey(task.scheduledStart) : task.dueDate ? dayKey(task.dueDate) : "");
+  // "Cuándo lo hago" y "cuándo vence" son campos separados a propósito.
+  const [day, setDay] = useState(task.scheduledStart ? dayKey(task.scheduledStart) : "");
   const [time, setTime] = useState(task.scheduledStart ? timeKey(task.scheduledStart) : "");
+  const [due, setDue] = useState(task.dueDate ? dayKey(task.dueDate) : "");
+  const [someday, setSomeday] = useState(task.someday);
   const [listId, setListId] = useState(task.listId ?? "");
   const [priority, setPriority] = useState(task.priority);
   const [urgent, setUrgent] = useState(task.urgent);
@@ -89,16 +92,21 @@ function TaskForm({
 
   const save = () => {
     if (!title.trim()) return;
-    // Sin día no hay nada que agendar; con día y hora se agenda (y va a Google),
-    // con día solo queda como vencimiento.
-    const scheduledStart = day && time ? new Date(`${day}T${time}:00${ARG_OFFSET}`).toISOString() : null;
+    // Con día y hora hay bloque real (start + end) y se espeja en Google. Con
+    // día solo, queda reservada para ese día: scheduledEnd null es la marca de
+    // "sin hora", y evita inventarle un horario que no elegiste.
+    const timed = !!day && !!time;
+    const scheduledStart = day
+      ? new Date(`${day}T${timed ? time : "00:00"}:00${ARG_OFFSET}`).toISOString()
+      : null;
     onSave({
       title: title.trim(),
       description: description.trim() || null,
-      dueDate: day ? new Date(`${day}T12:00:00${ARG_OFFSET}`).toISOString() : null,
+      dueDate: due ? new Date(`${due}T12:00:00${ARG_OFFSET}`).toISOString() : null,
       scheduledStart,
-      scheduledEnd: scheduledStart ? new Date(Date.parse(scheduledStart) + 3_600_000).toISOString() : null,
+      scheduledEnd: timed && scheduledStart ? new Date(Date.parse(scheduledStart) + 3_600_000).toISOString() : null,
       listId: listId || null,
+      someday,
       priority,
       urgent,
       important,
@@ -128,27 +136,58 @@ function TaskForm({
           />
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Día">
-            <input type="date" value={day} onChange={(event) => setDay(event.target.value)} className={inputClass} />
-          </Field>
-          <Field label="Hora">
+        <Field label="Cuándo lo hago">
+          <div className="grid grid-cols-2 gap-3">
             <input
-              type="time"
-              value={time}
-              onChange={(event) => setTime(event.target.value)}
-              disabled={!day}
+              type="date" value={day} onChange={(event) => setDay(event.target.value)}
+              disabled={someday} aria-label="Día en que la hago"
               className={`${inputClass} disabled:opacity-40`}
             />
-          </Field>
-        </div>
-        <p className="-mt-3 text-[11px] text-muted">
-          {day && time
-            ? "Con hora se agenda y se sincroniza con Google Calendar."
-            : day
-              ? "Sin hora queda como vencimiento del día, sin ir al calendario."
-              : "Sin día queda en el Inbox."}
-        </p>
+            <input
+              type="time" value={time} onChange={(event) => setTime(event.target.value)}
+              disabled={!day || someday} aria-label="Hora"
+              className={`${inputClass} disabled:opacity-40`}
+            />
+          </div>
+          <p className="text-[11px] text-muted">
+            {someday
+              ? "En Algún día no se agenda nada."
+              : day && time
+                ? "Con hora se agenda como bloque y se espeja en Google Calendar."
+                : day
+                  ? "Reservada para ese día, sin hora fija."
+                  : "Sin día queda en el Inbox, para acomodarla al planificar la semana."}
+          </p>
+        </Field>
+
+        <Field label="Cuándo vence">
+          <input
+            type="date" value={due} onChange={(event) => setDue(event.target.value)}
+            disabled={someday} aria-label="Fecha de vencimiento"
+            className={`${inputClass} disabled:opacity-40`}
+          />
+          <p className="text-[11px] text-muted">
+            Opcional, y distinto de arriba: es la fecha que te impone algo de afuera.
+            Aparece en Hoy el día que vence, la hayas agendado o no.
+          </p>
+        </Field>
+
+        <button
+          type="button"
+          onClick={() => setSomeday(!someday)}
+          aria-pressed={someday}
+          className={`flex w-full items-center justify-between rounded-xl border px-3 py-3 text-sm transition-colors ${
+            someday ? "border-primary bg-primary/10 text-primary" : "border-border text-muted hover:bg-surface-2"
+          }`}
+        >
+          <span className="text-left">
+            <span className="block font-medium">Algún día</span>
+            <span className="block text-[11px] opacity-80">No lo descarto, pero tampoco lo agendo todavía</span>
+          </span>
+          <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${someday ? "border-primary bg-primary text-white" : "border-border"}`}>
+            {someday && <Check size={12} />}
+          </span>
+        </button>
 
         <Field label="Lista">
           <select value={listId} onChange={(event) => setListId(event.target.value)} className={inputClass}>
