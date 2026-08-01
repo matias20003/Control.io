@@ -35,10 +35,7 @@ import {
   reopenBriefEditionAction,
   saveNewsletterConfigAction,
 } from "@/app/actions/newsletter";
-import type {
-  SerializedConfig,
-  SerializedEdition,
-} from "@/lib/db/newsletter";
+import type { SerializedConfig, SerializedEdition } from "@/lib/db/newsletter";
 import type {
   SerializedBriefItem,
   SerializedBriefSource,
@@ -94,7 +91,7 @@ type Props = {
 
 function metadataText(
   metadata: Record<string, unknown> | null,
-  key: string
+  key: string,
 ): string | null {
   const value = metadata?.[key];
   return typeof value === "string" && value.trim() ? value : null;
@@ -114,7 +111,7 @@ function timeAgo(iso: string | null): string {
 
 function formatWindow(hour: number): string {
   return `${String(hour).padStart(2, "0")}:00 a ${String(
-    (hour + 1) % 24
+    (hour + 1) % 24,
   ).padStart(2, "0")}:00`;
 }
 
@@ -124,7 +121,11 @@ function windowState(hours: number[]) {
   const sorted = [...hours].sort((a, b) => a - b);
   const active = sorted.find((hour) => current === hour);
   if (active !== undefined) {
-    return { active: true, hour: active, label: `Ahora, ${formatWindow(active)}` };
+    return {
+      active: true,
+      hour: active,
+      label: `Ahora, ${formatWindow(active)}`,
+    };
   }
   const next = sorted.find((hour) => hour > current);
   const hour = next ?? sorted[0] ?? 8;
@@ -153,8 +154,8 @@ function openFocusedInstagram(handle: string): Promise<void> {
       window.removeEventListener("message", receive);
       reject(
         new Error(
-          "Control.io Focus no respondió. Instalá o actualizá la extensión."
-        )
+          "Control.io Focus no respondió. Instalá o actualizá la extensión.",
+        ),
       );
     }, 5000);
 
@@ -174,8 +175,8 @@ function openFocusedInstagram(handle: string): Promise<void> {
       else
         reject(
           new Error(
-            event.data.error || "No pudimos abrir la ventana enfocada."
-          )
+            event.data.error || "No pudimos abrir la ventana enfocada.",
+          ),
         );
     }
 
@@ -188,7 +189,7 @@ function openFocusedInstagram(handle: string): Promise<void> {
         durationSeconds: 180,
         handle,
       },
-      window.location.origin
+      window.location.origin,
     );
   });
 }
@@ -231,12 +232,13 @@ export function MyCircleClient({
   const newsItems = items.filter((item) => item.kind === "NEWS");
   const channelItems = items.filter((item) => item.kind === "CHANNEL");
   const instagramSources = sources.filter(
-    (source) => source.account?.platform === "INSTAGRAM"
+    (source) => source.account?.platform === "INSTAGRAM",
   );
   const delivery = windowState(config.sendHours);
   const checklist = cutChecklist({
     peopleTotal: contacts.length,
-    peopleWithPhone: contacts.filter((contact) => Boolean(contact.phone)).length,
+    peopleWithPhone: contacts.filter((contact) => Boolean(contact.phone))
+      .length,
     referencesTotal: sources.filter(
       (source) => source.isActive && source.category !== "CLOSE",
     ).length,
@@ -246,7 +248,8 @@ export function MyCircleClient({
         source.category !== "CLOSE" &&
         (channels[source.id] ?? []).length > 0,
     ).length,
-    pendingInventory: inventory.filter((item) => item.decision === "PENDING").length,
+    pendingInventory: inventory.filter((item) => item.decision === "PENDING")
+      .length,
   });
 
   useEffect(() => {
@@ -389,10 +392,7 @@ export function MyCircleClient({
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="secondary"
-            onClick={() => setSection("settings")}
-          >
+          <Button variant="secondary" onClick={() => setSection("settings")}>
             <Settings2 size={16} />
             Ajustes
           </Button>
@@ -424,6 +424,7 @@ export function MyCircleClient({
         <CircleHome
           delivery={delivery}
           edition={edition}
+          items={items}
           sources={sources}
           radar={initialRadar}
           contacts={contacts}
@@ -433,6 +434,9 @@ export function MyCircleClient({
           showCercanos={showCercanos}
           showSystem={showSystem}
           onSection={setSection}
+          onOpenItem={openItem}
+          onHarvest={harvestItem}
+          harvested={harvested}
         />
       )}
       {section === "cercanos" && showCercanos && (
@@ -457,11 +461,17 @@ export function MyCircleClient({
         <CosechaView
           report={harvest}
           onSourcePruned={(sourceId) => {
-            setSources((current) => current.filter((item) => item.id !== sourceId));
+            setSources((current) =>
+              current.filter((item) => item.id !== sourceId),
+            );
             setHarvest((current) => ({
               ...current,
-              sources: current.sources.filter((item) => item.sourceId !== sourceId),
-              toPrune: current.toPrune.filter((item) => item.sourceId !== sourceId),
+              sources: current.sources.filter(
+                (item) => item.sourceId !== sourceId,
+              ),
+              toPrune: current.toPrune.filter(
+                (item) => item.sourceId !== sourceId,
+              ),
             }));
           }}
         />
@@ -496,7 +506,7 @@ export function MyCircleClient({
           onSourcesChange={(nextInstagramSources) =>
             setSources((current) => [
               ...current.filter(
-                (source) => source.account?.platform !== "INSTAGRAM"
+                (source) => source.account?.platform !== "INSTAGRAM",
               ),
               ...nextInstagramSources,
             ])
@@ -518,9 +528,7 @@ export function MyCircleClient({
           onReopen={reopenEdition}
         />
       )}
-      {section === "radar" && (
-        <RadarView radar={initialRadar} />
-      )}
+      {section === "radar" && <RadarView radar={initialRadar} />}
       {section === "settings" && (
         <CircleSettings
           config={config}
@@ -538,6 +546,7 @@ export function MyCircleClient({
 function CircleHome({
   delivery,
   edition,
+  items,
   sources,
   radar,
   contacts,
@@ -547,9 +556,13 @@ function CircleHome({
   showCercanos,
   showSystem,
   onSection,
+  onOpenItem,
+  onHarvest,
+  harvested,
 }: {
   delivery: ReturnType<typeof windowState>;
   edition: SerializedEdition | null;
+  items: SerializedBriefItem[];
   sources: SerializedBriefSource[];
   radar: SerializedDiscoveryCandidate[];
   contacts: CircleContact[];
@@ -559,6 +572,12 @@ function CircleHome({
   showCercanos: boolean;
   showSystem: boolean;
   onSection: (section: CircleSection) => void;
+  onOpenItem: (item: SerializedBriefItem) => void;
+  onHarvest: (
+    item: SerializedBriefItem,
+    outcome: "TASK" | "HABIT" | "NOTE",
+  ) => Promise<void>;
+  harvested: Set<string>;
 }) {
   // El gancho diario de la sección. Va arriba de todo a propósito: durante la
   // transición desde Instagram, el contenido no alcanza para traer a alguien
@@ -581,72 +600,161 @@ function CircleHome({
     fronts.length > 0 &&
     referencesReady &&
     (!showCercanos || contacts.length > 0);
+  const dashboardItems = items.slice(0, 4);
+  const reviewedCount = edition?.reviewedCount ?? 0;
+  const progress =
+    rationCount > 0
+      ? Math.min(100, Math.round((reviewedCount / rationCount) * 100))
+      : 0;
 
   return (
-    <div className="mt-8 max-w-5xl space-y-10">
-      <section aria-labelledby="circle-today-title">
-        <p className="text-xs font-semibold uppercase tracking-[0.1em] text-primary">
-          Empezá acá
-        </p>
-        <h2 id="circle-today-title" className="mt-2 text-2xl font-semibold text-foreground">
-          Para hoy
-        </h2>
-        <p className="mt-2 max-w-[62ch] text-sm leading-relaxed text-muted">
-          Primero cuidá tus vínculos. Después leé una selección corta que se termina.
-        </p>
+    <div className="mt-7 space-y-9">
+      <section
+        aria-labelledby="circle-dashboard-title"
+        className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(19rem,0.7fr)]"
+      >
+        <div className="min-w-0 overflow-hidden rounded-2xl border border-border bg-surface/40">
+          <header className="flex flex-col gap-3 border-b border-border px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
+                Edición de hoy
+              </p>
+              <h2
+                id="circle-dashboard-title"
+                className="mt-1 text-xl font-semibold text-foreground"
+              >
+                Lo importante, en un solo lugar
+              </h2>
+            </div>
+            <div className="flex items-center gap-3 text-sm text-muted">
+              <span>
+                {rationCount} {rationCount === 1 ? "lectura" : "lecturas"}
+              </span>
+              <span
+                aria-hidden="true"
+                className="h-1 w-1 rounded-full bg-muted-2"
+              />
+              <span>{rationMinutes} min</span>
+            </div>
+          </header>
 
-        <div className="mt-5 overflow-hidden rounded-xl border border-border bg-surface/50">
-          {showCercanos && (
-            <DailyActionRow
-              step="1"
-              icon={UsersRound}
+          {dashboardItems.length > 0 ? (
+            <div className="divide-y divide-border px-5 sm:px-7">
+              {dashboardItems.map((item, index) => (
+                <DashboardStory
+                  key={item.id}
+                  item={item}
+                  lead={index === 0}
+                  onOpenItem={onOpenItem}
+                  onHarvest={onHarvest}
+                  harvested={harvested.has(item.url)}
+                  showHarvest={showSystem}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="px-5 py-10 sm:px-7">
+              <QuietEmpty text="Tu edición todavía no está lista. Actualizala para ver las noticias de hoy." />
+            </div>
+          )}
+
+          <footer className="flex flex-col gap-3 border-t border-border bg-surface-2/35 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+            <p className="text-xs text-muted">
+              {edition?.isRead
+                ? "Edición terminada por hoy."
+                : `${reviewedCount} de ${rationCount} revisadas`}
+            </p>
+            <Button variant="secondary" onClick={() => onSection("news")}>
+              {edition?.isRead ? "Volver a la edición" : "Ver edición completa"}
+              <ArrowRight size={16} />
+            </Button>
+          </footer>
+        </div>
+
+        <aside
+          className="rounded-2xl border border-border bg-surface/25 p-5 sm:p-6"
+          aria-label="Resumen de hoy"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+                Tu día
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-foreground">
+                Dos cosas, nada más
+              </h2>
+            </div>
+            <span className="grid h-10 w-10 place-items-center rounded-full bg-primary/10 text-primary">
+              <CheckCircle2 size={19} />
+            </span>
+          </div>
+
+          <div className="mt-6 space-y-6">
+            {showCercanos && (
+              <DashboardTask
+                icon={UsersRound}
+                label="Vínculos"
+                title={
+                  dueToday.length === 0
+                    ? "Estás al día"
+                    : dueToday.length === 1
+                      ? `Escribile a ${dueToday[0].name}`
+                      : `${dueToday.length} personas esperan noticias tuyas`
+                }
+                detail={
+                  dueToday.length === 1
+                    ? `Hablaron ${sinceLabel(dueToday[0].daysSince, dueToday[0].neverContacted)}.`
+                    : dueToday.length === 0
+                      ? "No tenés conversaciones pendientes."
+                      : "Elegí a una persona para empezar."
+                }
+                complete={dueToday.length === 0}
+                onClick={() => onSection("cercanos")}
+              />
+            )}
+            <DashboardTask
+              icon={Newspaper}
+              label="Lecturas"
               title={
-                dueToday.length === 0
-                  ? "Tus vínculos están al día"
-                  : dueToday.length === 1
-                    ? `Escribile a ${dueToday[0].name}`
-                    : `Tenés ${dueToday.length} personas para contactar`
+                !edition
+                  ? "Edición pendiente"
+                  : edition.isRead
+                    ? "Terminaste por hoy"
+                    : `${Math.max(0, rationCount - reviewedCount)} por revisar`
               }
               detail={
-                dueToday.length === 0
-                  ? "No hay ninguna conversación pendiente hoy."
-                  : dueToday.length === 1
-                    ? `La última conversación fue ${sinceLabel(dueToday[0].daysSince, dueToday[0].neverContacted)}.`
-                    : dueToday.map((contact) => contact.name).join(" y ")
+                !edition
+                  ? `Próxima actualización: ${delivery.label.toLowerCase()}.`
+                  : edition.isRead
+                    ? "No hay más contenido para cargar."
+                    : `Una selección de aproximadamente ${rationMinutes} minutos.`
               }
-              action={dueToday.length === 0 ? "Ver personas" : "Ir a Cercanos"}
-              complete={dueToday.length === 0}
-              onClick={() => onSection("cercanos")}
+              complete={Boolean(edition?.isRead)}
+              onClick={() => onSection("news")}
             />
-          )}
-          <DailyActionRow
-            step={showCercanos ? "2" : "1"}
-            icon={Newspaper}
-            title={
-              !edition
-                ? "Tu ración todavía no está lista"
-                : edition.isRead
-                  ? "Terminaste la ración de hoy"
-                  : "Leé tu ración de hoy"
-            }
-            detail={
-              !edition
-                ? `Próxima actualización: ${delivery.label.toLowerCase()}.`
-                : edition.isRead
-                  ? `Vuelve a actualizarse ${delivery.label.toLowerCase()}.`
-                  : `${rationCount} piezas, cerca de ${rationMinutes} min. No hay contenido infinito.`
-            }
-            action={!edition ? "Ver estado" : edition.isRead ? "Volver a verla" : "Empezar a leer"}
-            complete={Boolean(edition?.isRead)}
-            onClick={() => onSection("news")}
-            last
-          />
-        </div>
+          </div>
+
+          <div className="mt-7 border-t border-border pt-5">
+            <div className="flex items-center justify-between text-xs text-muted">
+              <span>Progreso de lectura</span>
+              <span>{progress}%</span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-3">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-200"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        </aside>
       </section>
 
       {showSystem && !setupComplete && (
         <section aria-labelledby="circle-setup-title">
-          <h2 id="circle-setup-title" className="text-lg font-semibold text-foreground">
+          <h2
+            id="circle-setup-title"
+            className="text-lg font-semibold text-foreground"
+          >
             Prepará Mi Círculo
           </h2>
           <p className="mt-1 text-sm text-muted">
@@ -685,7 +793,10 @@ function CircleHome({
       )}
 
       <section aria-labelledby="circle-tools-title">
-        <h2 id="circle-tools-title" className="text-lg font-semibold text-foreground">
+        <h2
+          id="circle-tools-title"
+          className="text-lg font-semibold text-foreground"
+        >
           Para cuando lo necesites
         </h2>
         <p className="mt-1 text-sm text-muted">
@@ -746,42 +857,121 @@ function CircleHome({
   );
 }
 
-function DailyActionRow({
-  step,
+function DashboardStory({
+  item,
+  lead,
+  onOpenItem,
+  onHarvest,
+  harvested,
+  showHarvest,
+}: {
+  item: SerializedBriefItem;
+  lead: boolean;
+  onOpenItem: (item: SerializedBriefItem) => void;
+  onHarvest: (
+    item: SerializedBriefItem,
+    outcome: "TASK" | "HABIT" | "NOTE",
+  ) => Promise<void>;
+  harvested: boolean;
+  showHarvest: boolean;
+}) {
+  const [isHarvesting, startHarvesting] = useTransition();
+
+  return (
+    <article className={lead ? "py-6" : "py-5"}>
+      <button
+        type="button"
+        onClick={() => onOpenItem(item)}
+        className="group block w-full text-left"
+      >
+        <span className="flex flex-wrap items-center gap-2 text-xs text-muted">
+          <span className="font-semibold uppercase tracking-[0.1em] text-primary">
+            {item.topic || "Actualidad"}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span>
+            {metadataText(item.metadata, "source") || "Fuente verificada"}
+          </span>
+        </span>
+        <span
+          className={`mt-2 block font-semibold leading-tight text-foreground transition-colors group-hover:text-primary ${lead ? "text-xl sm:text-2xl" : "text-base sm:text-lg"}`}
+        >
+          {item.title}
+        </span>
+        {item.summary && (
+          <span
+            className={`mt-2 block max-w-[70ch] text-sm leading-relaxed text-muted ${lead ? "line-clamp-3" : "line-clamp-2"}`}
+          >
+            {item.summary}
+          </span>
+        )}
+      </button>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => onOpenItem(item)}
+          className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80"
+        >
+          Leer noticia <ExternalLink size={14} />
+        </button>
+        {showHarvest && (
+          <HarvestButtons
+            busy={isHarvesting}
+            done={harvested}
+            onHarvest={(outcome) =>
+              startHarvesting(async () => {
+                await onHarvest(item, outcome);
+              })
+            }
+          />
+        )}
+      </div>
+    </article>
+  );
+}
+
+function DashboardTask({
   icon: Icon,
+  label,
   title,
   detail,
-  action,
   complete,
   onClick,
-  last = false,
 }: {
-  step: string;
   icon: typeof Instagram;
+  label: string;
   title: string;
   detail: string;
-  action: string;
   complete: boolean;
   onClick: () => void;
-  last?: boolean;
 }) {
   return (
-    <div className={`grid grid-cols-[2.5rem_1fr] items-center gap-4 p-5 sm:grid-cols-[2.5rem_2.5rem_1fr_auto] ${last ? "" : "border-b border-border"}`}>
-      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-semibold ${complete ? "bg-success/10 text-success" : "bg-primary/10 text-primary"}`}>
-        {complete ? <CheckCircle2 size={19} /> : step}
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex min-h-16 w-full gap-3 text-left"
+    >
+      <span
+        className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${complete ? "bg-success/10 text-success" : "bg-primary/10 text-primary"}`}
+      >
+        {complete ? <CheckCircle2 size={17} /> : <Icon size={17} />}
       </span>
-      <span className={`hidden h-10 w-10 shrink-0 place-items-center rounded-lg sm:grid ${complete ? "bg-surface-2 text-muted" : "bg-primary/10 text-primary"}`}>
-        <Icon size={19} />
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-muted">
+          {label}
+        </span>
+        <span className="mt-1 flex items-center justify-between gap-2 text-sm font-semibold text-foreground">
+          {title}
+          <ArrowRight
+            size={15}
+            className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+          />
+        </span>
+        <span className="mt-1 block text-xs leading-relaxed text-muted">
+          {detail}
+        </span>
       </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-base font-semibold text-foreground">{title}</p>
-        <p className="mt-1 text-sm leading-relaxed text-muted">{detail}</p>
-      </div>
-      <Button variant={complete ? "secondary" : "default"} onClick={onClick} className="col-span-2 w-full sm:col-span-1 sm:w-auto">
-        {action}
-        <ArrowRight size={16} />
-      </Button>
-    </div>
+    </button>
   );
 }
 
@@ -800,15 +990,29 @@ function SetupStep({
 }) {
   return (
     <div className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center">
-      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${complete ? "bg-success/10 text-success" : "border border-border text-muted"}`}>
-        {complete ? <CheckCircle2 size={16} /> : <span className="h-2 w-2 rounded-full bg-muted" />}
+      <span
+        className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${complete ? "bg-success/10 text-success" : "border border-border text-muted"}`}
+      >
+        {complete ? (
+          <CheckCircle2 size={16} />
+        ) : (
+          <span className="h-2 w-2 rounded-full bg-muted" />
+        )}
       </span>
       <div className="min-w-0 flex-1">
-        <p className={`text-sm font-semibold ${complete ? "text-muted" : "text-foreground"}`}>{title}</p>
+        <p
+          className={`text-sm font-semibold ${complete ? "text-muted" : "text-foreground"}`}
+        >
+          {title}
+        </p>
         <p className="mt-0.5 text-sm leading-relaxed text-muted">{detail}</p>
       </div>
       {!complete && (
-        <Button variant="secondary" onClick={onClick} className="w-full sm:w-auto">
+        <Button
+          variant="secondary"
+          onClick={onClick}
+          className="w-full sm:w-auto"
+        >
           {action}
         </Button>
       )}
@@ -839,11 +1043,20 @@ function ToolRow({
         <Icon size={19} />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-foreground">{title}</span>
-        <span className="mt-0.5 block text-sm leading-relaxed text-muted">{description}</span>
+        <span className="block text-sm font-semibold text-foreground">
+          {title}
+        </span>
+        <span className="mt-0.5 block text-sm leading-relaxed text-muted">
+          {description}
+        </span>
       </span>
-      <span className="hidden shrink-0 text-xs text-muted sm:block">{status}</span>
-      <ArrowRight size={17} className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+      <span className="hidden shrink-0 text-xs text-muted sm:block">
+        {status}
+      </span>
+      <ArrowRight
+        size={17}
+        className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+      />
     </button>
   );
 }
@@ -890,7 +1103,7 @@ function InstagramView({
     }
     onSourcesChange(sources.filter((item) => item.id !== source.id));
     toast.success(
-      `@${source.account?.handle ?? source.name} se quitó de tus referentes.`
+      `@${source.account?.handle ?? source.name} se quitó de tus referentes.`,
     );
   };
 
@@ -910,7 +1123,7 @@ function InstagramView({
       toast.error(
         error instanceof Error
           ? error.message
-          : "No pudimos abrir Instagram de forma segura."
+          : "No pudimos abrir Instagram de forma segura.",
       );
       return;
     }
@@ -1016,7 +1229,8 @@ function InstagramView({
               Referentes seleccionados
             </h2>
             <p className="mt-1 text-xs text-muted">
-              {sources.length} {sources.length === 1 ? "referente" : "referentes"}
+              {sources.length}{" "}
+              {sources.length === 1 ? "referente" : "referentes"}
             </p>
           </div>
           {sources.map((source) => (
@@ -1080,7 +1294,10 @@ function BriefItemRow({
   item: SerializedBriefItem;
   index: number;
   onOpenItem: (item: SerializedBriefItem) => void;
-  onHarvest: (item: SerializedBriefItem, outcome: "TASK" | "HABIT" | "NOTE") => Promise<void>;
+  onHarvest: (
+    item: SerializedBriefItem,
+    outcome: "TASK" | "HABIT" | "NOTE",
+  ) => Promise<void>;
   harvested: boolean;
   showHarvest: boolean;
 }) {
@@ -1151,7 +1368,10 @@ function NewsView({
   items: SerializedBriefItem[];
   channelItems: SerializedBriefItem[];
   onOpenItem: (item: SerializedBriefItem) => void;
-  onHarvest: (item: SerializedBriefItem, outcome: "TASK" | "HABIT" | "NOTE") => Promise<void>;
+  onHarvest: (
+    item: SerializedBriefItem,
+    outcome: "TASK" | "HABIT" | "NOTE",
+  ) => Promise<void>;
   harvested: Set<string>;
   showHarvest: boolean;
   edition: SerializedEdition | null;
@@ -1176,10 +1396,13 @@ function NewsView({
         <p className="mt-4 text-xs font-semibold uppercase tracking-[0.15em] text-success">
           Edición terminada
         </p>
-        <h2 className="mt-2 font-news text-3xl text-foreground">Ya estás al día</h2>
+        <h2 className="mt-2 font-news text-3xl text-foreground">
+          Ya estás al día
+        </h2>
         <p className="mx-auto mt-3 max-w-[44ch] text-sm leading-relaxed text-muted">
-          Revisaste {edition.reviewedCount} {edition.reviewedCount === 1 ? "pieza" : "piezas"}.
-          No hay nada más para cargar hasta la próxima actualización.
+          Revisaste {edition.reviewedCount}{" "}
+          {edition.reviewedCount === 1 ? "pieza" : "piezas"}. No hay nada más
+          para cargar hasta la próxima actualización.
         </p>
         <Button
           variant="secondary"
@@ -1206,22 +1429,28 @@ function NewsView({
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface/55 px-5 py-4">
           <div>
             <p className="text-sm font-semibold text-foreground">
-              {visibleCount} {visibleCount === 1 ? "pieza" : "piezas"} · {readingMinutes} min
+              {visibleCount} {visibleCount === 1 ? "pieza" : "piezas"} ·{" "}
+              {readingMinutes} min
             </p>
             <p className="mt-1 text-xs text-muted">
               Esta es toda la ración. No se carga contenido infinito al final.
             </p>
           </div>
-          <span className="text-xs text-muted">{edition.reviewedCount} revisadas</span>
+          <span className="text-xs text-muted">
+            {edition.reviewedCount} revisadas
+          </span>
         </div>
       )}
 
       {channelItems.length > 0 && (
         <section className="mt-7">
           <div className="flex items-center gap-3 border-b border-border pb-3">
-            <h2 className="font-news text-2xl text-foreground">De tus referentes</h2>
+            <h2 className="font-news text-2xl text-foreground">
+              De tus referentes
+            </h2>
             <span className="text-xs text-muted">
-              {channelItems.length} {channelItems.length === 1 ? "pieza" : "piezas"}
+              {channelItems.length}{" "}
+              {channelItems.length === 1 ? "pieza" : "piezas"}
             </span>
           </div>
           <div className="divide-y divide-border">
@@ -1279,11 +1508,18 @@ function NewsView({
           <span className="mx-auto grid h-10 w-10 place-items-center rounded-full bg-success/12 text-success">
             <CheckCircle2 size={20} />
           </span>
-          <h2 className="mt-3 font-news text-2xl text-foreground">Llegaste al final</h2>
+          <h2 className="mt-3 font-news text-2xl text-foreground">
+            Llegaste al final
+          </h2>
           <p className="mx-auto mt-2 max-w-[42ch] text-sm leading-relaxed text-muted">
-            Lo que servía podía convertirse en tarea, hábito o nota. Lo demás termina acá.
+            Lo que servía podía convertirse en tarea, hábito o nota. Lo demás
+            termina acá.
           </p>
-          <Button onClick={onComplete} disabled={isCompleting} className="mt-5 w-full sm:w-auto">
+          <Button
+            onClick={onComplete}
+            disabled={isCompleting}
+            className="mt-5 w-full sm:w-auto"
+          >
             {isCompleting ? (
               <Loader2 size={16} className="animate-spin" />
             ) : (
@@ -1291,7 +1527,9 @@ function NewsView({
             )}
             {isCompleting ? "Cerrando…" : "Terminé por hoy"}
           </Button>
-          <p className="mt-3 text-xs text-muted">No vamos a cargar más contenido después de esto.</p>
+          <p className="mt-3 text-xs text-muted">
+            No vamos a cargar más contenido después de esto.
+          </p>
         </div>
       )}
     </section>
@@ -1331,10 +1569,7 @@ function TrendTable({
   return (
     <div className="divide-y divide-border">
       {trends.map((trend, index) => {
-        const publishedAt = metadataText(
-          trend.signals,
-          "latestPublishedAt"
-        );
+        const publishedAt = metadataText(trend.signals, "latestPublishedAt");
         const reputable = trend.signals?.reputable === true;
         return (
           <article
@@ -1415,14 +1650,15 @@ function CircleSettings({
   const [topics, setTopics] = useState(config.topics);
   const [topic, setTopic] = useState("");
   const [hours, setHours] = useState(config.sendHours);
-  const [notifyWhatsapp, setNotifyWhatsapp] = useState(
-    config.notifyWhatsapp
-  );
+  const [notifyWhatsapp, setNotifyWhatsapp] = useState(config.notifyWhatsapp);
   const [isSaving, startSaving] = useTransition();
 
   const addTopic = () => {
     const clean = topic.trim();
-    if (!clean || topics.some((item) => item.toLowerCase() === clean.toLowerCase()))
+    if (
+      !clean ||
+      topics.some((item) => item.toLowerCase() === clean.toLowerCase())
+    )
       return;
     if (topics.length >= 12) {
       toast.error("Podés configurar hasta 12 temas.");
@@ -1442,7 +1678,7 @@ function CircleSettings({
         ...config,
         topics,
         priorityTopics: config.priorityTopics.filter((item) =>
-          topics.includes(item)
+          topics.includes(item),
         ),
         sendHour: hours[0],
         sendHours: hours,
@@ -1478,18 +1714,28 @@ function CircleSettings({
       <div className="mt-7 space-y-8 rounded-xl border border-border bg-surface/55 p-5 sm:p-7">
         {showSystem ? (
           <div className="rounded-xl border border-primary/20 bg-primary/[0.06] p-4">
-            <p className="text-sm font-semibold text-foreground">Los temas salen de El Norte</p>
+            <p className="text-sm font-semibold text-foreground">
+              Los temas salen de El Norte
+            </p>
             <p className="mt-1 text-xs leading-relaxed text-muted">
-              Ya no hace falta mantener dos listas. Tus frentes deciden qué entra en la edición.
+              Ya no hace falta mantener dos listas. Tus frentes deciden qué
+              entra en la edición.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {[...new Set(fronts.flatMap((front) => front.topics))].slice(0, 12).map((item) => (
-                <span key={item} className="rounded-full bg-surface-2 px-3 py-1.5 text-xs text-foreground">
-                  {item}
-                </span>
-              ))}
+              {[...new Set(fronts.flatMap((front) => front.topics))]
+                .slice(0, 12)
+                .map((item) => (
+                  <span
+                    key={item}
+                    className="rounded-full bg-surface-2 px-3 py-1.5 text-xs text-foreground"
+                  >
+                    {item}
+                  </span>
+                ))}
               {fronts.length === 0 && (
-                <span className="text-xs text-warning">Todavía no definiste ningún frente.</span>
+                <span className="text-xs text-warning">
+                  Todavía no definiste ningún frente.
+                </span>
               )}
             </div>
             <Button variant="secondary" onClick={onOpenNorth} className="mt-4">
@@ -1498,50 +1744,56 @@ function CircleSettings({
             </Button>
           </div>
         ) : (
-        <div>
-          <label htmlFor="circle-topic" className="text-sm font-semibold text-foreground">
-            Temas de interés
-          </label>
-          <p className="mt-1 text-xs text-muted">
-            Escribilos libremente. Las noticias mostrarán hasta tres resultados por tema.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <Input
-              id="circle-topic"
-              value={topic}
-              onChange={(event) => setTopic(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  addTopic();
-                }
-              }}
-              placeholder="Ejemplo: inteligencia artificial"
-            />
-            <Button variant="secondary" onClick={addTopic}>
-              <Plus size={16} />
-              Agregar
-            </Button>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {topics.map((item) => (
-              <span
-                key={item}
-                className="inline-flex min-h-10 items-center gap-2 rounded-full bg-surface-2 px-3 text-sm text-foreground"
-              >
-                {item}
-                <button
-                  type="button"
-                  onClick={() => setTopics(topics.filter((value) => value !== item))}
-                  aria-label={`Quitar ${item}`}
-                  className="grid h-7 w-7 place-items-center rounded-full text-muted hover:bg-surface-3 hover:text-foreground"
+          <div>
+            <label
+              htmlFor="circle-topic"
+              className="text-sm font-semibold text-foreground"
+            >
+              Temas de interés
+            </label>
+            <p className="mt-1 text-xs text-muted">
+              Escribilos libremente. Las noticias mostrarán hasta tres
+              resultados por tema.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <Input
+                id="circle-topic"
+                value={topic}
+                onChange={(event) => setTopic(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    addTopic();
+                  }
+                }}
+                placeholder="Ejemplo: inteligencia artificial"
+              />
+              <Button variant="secondary" onClick={addTopic}>
+                <Plus size={16} />
+                Agregar
+              </Button>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {topics.map((item) => (
+                <span
+                  key={item}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-full bg-surface-2 px-3 text-sm text-foreground"
                 >
-                  <X size={14} />
-                </button>
-              </span>
-            ))}
+                  {item}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTopics(topics.filter((value) => value !== item))
+                    }
+                    aria-label={`Quitar ${item}`}
+                    className="grid h-7 w-7 place-items-center rounded-full text-muted hover:bg-surface-3 hover:text-foreground"
+                  >
+                    <X size={14} />
+                  </button>
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
         )}
 
         <div>
@@ -1549,7 +1801,8 @@ function CircleSettings({
             Ventanas diarias
           </p>
           <p className="mt-1 text-xs text-muted">
-            Al comenzar cada ventana se actualiza la edición y se envía el reporte por WhatsApp.
+            Al comenzar cada ventana se actualiza la edición y se envía el
+            reporte por WhatsApp.
           </p>
           <div className="mt-3 flex gap-2">
             {[1, 2, 3].map((count) => (
@@ -1597,7 +1850,8 @@ function CircleSettings({
               Reporte por WhatsApp
             </span>
             <span className="mt-0.5 block text-xs text-muted">
-              Incluye el enlace directo y los referentes pendientes de consultar.
+              Incluye el enlace directo y los referentes pendientes de
+              consultar.
             </span>
           </span>
           <input
@@ -1621,4 +1875,3 @@ function CircleSettings({
     </section>
   );
 }
-
