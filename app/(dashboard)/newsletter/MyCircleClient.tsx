@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import {
+  ArrowLeft,
   ArrowRight,
   CheckCircle2,
   Clock3,
@@ -405,6 +406,19 @@ export function MyCircleClient({
           </Button>
         </div>
       </header>
+
+      {section !== "home" && (
+        <nav aria-label="Volver al inicio de Mi Círculo" className="mt-5">
+          <button
+            type="button"
+            onClick={() => setSection("home")}
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg px-1 text-sm font-semibold text-muted transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          >
+            <ArrowLeft size={17} />
+            Volver a Mi Círculo
+          </button>
+        </nav>
+      )}
 
       {section === "home" && (
         <CircleHome
