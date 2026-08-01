@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Columns3,
-  Flame, LayoutList, Pencil, Plus, RefreshCw, Sparkles, Target, Trash2,
+  Flame, Pencil, Plus, RefreshCw, Sparkles, Target, Trash2, Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -24,19 +24,281 @@ type Habit = {
   id: string; name: string; icon: string | null; color: string; frequency: string;
   daysOfWeek: number[]; completions: { id: string; date: string }[];
 };
-type View = "today" | "week" | "lists" | "kanban" | "eisenhower" | "calendar" | "habits";
+/**
+ * Tres vistas, una por trabajo real: arrancar el día, planificar la semana y
+ * clasificar lo que entra. Antes eran siete pestañas, que dividían la atención
+ * sin que ninguna terminara siendo buena. Listas dejó de ser vista y pasó a ser
+ * un filtro que aplica a las tres; los hábitos viven adentro de Hoy.
+ */
+type View = "today" | "week" | "organize";
+type WeekZoom = "week" | "month";
+type OrganizeAxis = "kanban" | "eisenhower" | "lists" | "habits";
+
+const PRIORITY_ORDER: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2, NONE: 3 };
+
+/** Sin hora que mande, el orden lo define la prioridad y después la matriz. */
+function byPriority(a: OrganizationTask, b: OrganizationTask): number {
+  const priority = (PRIORITY_ORDER[a.priority] ?? 3) - (PRIORITY_ORDER[b.priority] ?? 3);
+  if (priority !== 0) return priority;
+  const weight = (task: OrganizationTask) => (task.urgent ? 2 : 0) + (task.important ? 1 : 0);
+  const importance = weight(b) - weight(a);
+  if (importance !== 0) return importance;
+  return a.order - b.order;
+}
 const TZ = "America/Argentina/Buenos_Aires";
 const dayKey = (date: Date) => date.toLocaleDateString("en-CA", { timeZone: TZ });
 const today = () => dayKey(new Date());
-const VIEW_ITEMS: { key: View; label: string; icon: typeof CalendarDays }[] = [
-  { key: "today", label: "Hoy", icon: Sparkles },
-  { key: "week", label: "Semana", icon: CalendarDays },
-  { key: "lists", label: "Listas", icon: LayoutList },
-  { key: "kanban", label: "Kanban", icon: Columns3 },
-  { key: "eisenhower", label: "Prioridades", icon: Target },
-  { key: "calendar", label: "Calendario", icon: CalendarDays },
-  { key: "habits", label: "Hábitos", icon: Flame },
+const VIEW_ITEMS: { key: View; label: string; hint: string; icon: typeof CalendarDays }[] = [
+  { key: "today", label: "Hoy", hint: "Arrancar el día", icon: Sparkles },
+  { key: "week", label: "Semana", hint: "Planificar", icon: CalendarDays },
+  { key: "organize", label: "Organizar", hint: "Clasificar", icon: Columns3 },
 ];
+
+/** Toggle segmentado para los sub-modos de Semana y Organizar. */
+function Toggle<T extends string>({ value, onChange, options }: {
+  value: T;
+  onChange: (value: T) => void;
+  options: { value: T; label: string }[];
+}) {
+  return (
+    <div className="inline-flex overflow-hidden rounded-xl border border-border">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          onClick={() => onChange(option.value)}
+          className={`min-h-10 px-4 text-xs font-semibold transition-colors ${
+            value === option.value ? "bg-primary text-white" : "bg-surface text-muted hover:bg-surface-2"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Section({ icon, title, count, children }: {
+  icon: React.ReactNode; title: string; count: number; children: React.ReactNode;
+}) {
+  if (!count) return null;
+  return (
+    <section className="space-y-2">
+      <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
+        {icon} {title} <span className="text-muted/70">{count}</span>
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * Hábitos que tocan hoy, arriba del plan. Antes vivían en una pestaña aparte:
+ * un hábito diario es parte del día, no una sección que hay que ir a buscar.
+ */
+function TodayHabits({ habits, day, onToggle }: {
+  habits: Habit[]; day: string; onToggle: (habitId: string, day: string) => void;
+}) {
+  const due = habits.filter((habit) => isHabitDue(day, { frequency: habit.frequency, daysOfWeek: habit.daysOfWeek ?? [] }));
+  if (!due.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {due.map((habit) => {
+        const done = habit.completions.some((completion) => completion.date === day);
+        const streak = getHabitStreak(
+          { frequency: habit.frequency, daysOfWeek: habit.daysOfWeek ?? [] },
+          habit.completions.map((completion) => completion.date),
+          day,
+        );
+        return (
+          <button
+            key={habit.id}
+            onClick={() => onToggle(habit.id, day)}
+            aria-pressed={done}
+            className={`inline-flex min-h-10 items-center gap-2 rounded-full border px-3 text-sm transition-colors ${
+              done ? "border-primary bg-primary/10 text-primary" : "border-border bg-surface text-muted hover:border-primary/40"
+            }`}
+          >
+            <span className={`grid h-5 w-5 place-items-center rounded-full border ${done ? "border-primary bg-primary text-white" : "border-border"}`}>
+              {done && <Check size={12} />}
+            </span>
+            <span>{habit.icon ?? "●"} {habit.name}</span>
+            {streak.current > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[11px] text-amber-500">
+                <Flame size={11} />{streak.current}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function TodayView({ day, tasks, habits, finance, lists, update, onOpen, onToggleHabit }: {
+  day: string;
+  tasks: OrganizationTask[];
+  habits: Habit[];
+  finance: AgendaEvent[];
+  lists: List[];
+  update: (id: string, patch: TaskPatch) => void;
+  onOpen: (id: string) => void;
+  onToggleHabit: (habitId: string, day: string) => void;
+}) {
+  // Primero lo que tiene hora, que es lo que tiene una restricción real; después
+  // lo que sólo vence hoy, ordenado por prioridad.
+  const timed = tasks
+    .filter((task) => task.scheduledStart && dayKey(new Date(task.scheduledStart)) === day)
+    .sort((a, b) => Date.parse(a.scheduledStart!) - Date.parse(b.scheduledStart!));
+  const untimed = tasks
+    .filter((task) => !task.scheduledStart && task.dueDate && dayKey(new Date(task.dueDate)) === day)
+    .sort(byPriority);
+  const total = timed.length + untimed.length + finance.length;
+
+  return (
+    <div className="space-y-6">
+      <TodayHabits habits={habits} day={day} onToggle={onToggleHabit} />
+
+      {total === 0 ? (
+        <Empty text="No hay nada para este día. Disfrutalo o planificá algo." />
+      ) : (
+        <>
+          <Section icon={<Clock3 size={13} />} title="Con hora" count={timed.length}>
+            {timed.map((task) => (
+              <TaskRow key={task.id} task={task} lists={lists} onChange={update} onOpen={onOpen} />
+            ))}
+          </Section>
+
+          <Section icon={<Wallet size={13} />} title="Vence hoy" count={finance.length}>
+            {finance.map((event) => <FinanceRow key={event.id} event={event} />)}
+          </Section>
+
+          <Section icon={<Target size={13} />} title="Sin hora" count={untimed.length}>
+            {untimed.map((task) => (
+              <TaskRow key={task.id} task={task} lists={lists} onChange={update} onOpen={onOpen} />
+            ))}
+          </Section>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Mueve una tarea a otro día conservando la hora si la tenía. */
+function patchForDay(task: OrganizationTask, day: string): TaskPatch {
+  const dueDate = new Date(`${day}T12:00:00-03:00`).toISOString();
+  if (!task.scheduledStart) return { dueDate, scheduledStart: null, scheduledEnd: null };
+  const time = new Date(task.scheduledStart).toLocaleTimeString("es-AR", {
+    timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+  const scheduledStart = new Date(`${day}T${time}:00-03:00`).toISOString();
+  return {
+    dueDate,
+    scheduledStart,
+    scheduledEnd: new Date(Date.parse(scheduledStart) + 3_600_000).toISOString(),
+  };
+}
+
+function WeekView({ week, tasks, undated, financeOn, lists, update, onOpen }: {
+  week: Date[];
+  tasks: OrganizationTask[];
+  undated: OrganizationTask[];
+  financeOn: (day: string) => AgendaEvent[];
+  lists: List[];
+  update: (id: string, patch: TaskPatch) => void;
+  onOpen: (id: string) => void;
+}) {
+  const [over, setOver] = useState<string | null>(null);
+  const byId = new Map(tasks.concat(undated).map((task) => [task.id, task]));
+  const drop = (day: string) => (event: React.DragEvent) => {
+    event.preventDefault();
+    setOver(null);
+    const task = byId.get(event.dataTransfer.getData("task"));
+    if (task) update(task.id, patchForDay(task, day));
+  };
+  const tasksOn = (day: string) => tasks
+    .filter((task) => {
+      const source = task.scheduledStart ?? task.dueDate;
+      return source ? dayKey(new Date(source)) === day : false;
+    })
+    .sort((a, b) => {
+      if (a.scheduledStart && b.scheduledStart) return Date.parse(a.scheduledStart) - Date.parse(b.scheduledStart);
+      if (a.scheduledStart) return -1;
+      if (b.scheduledStart) return 1;
+      return byPriority(a, b);
+    });
+
+  const loads = week.map((date) => tasksOn(dayKey(date)).length);
+  const busiest = Math.max(1, ...loads);
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <div className="grid gap-3 overflow-x-auto sm:grid-cols-2 lg:grid-cols-7 lg:min-w-[860px]">
+        {week.map((date, index) => {
+          const key = dayKey(date);
+          const dayTasks = tasksOn(key);
+          const money = financeOn(key);
+          const scheduledHours = dayTasks.filter((task) => task.scheduledStart).length;
+          const isToday = key === today();
+          return (
+            <section
+              key={key}
+              onDragOver={(event) => { event.preventDefault(); setOver(key); }}
+              onDragLeave={() => setOver((current) => (current === key ? null : current))}
+              onDrop={drop(key)}
+              className={`min-h-56 rounded-2xl border p-3 transition-colors ${
+                over === key ? "border-primary bg-primary/5" : "border-border bg-surface"
+              }`}
+            >
+              <p className="text-xs uppercase text-muted">{date.toLocaleDateString("es-AR", { weekday: "short" })}</p>
+              <p className={`mt-1 text-xl font-bold ${isToday ? "text-primary" : ""}`}>{date.getDate()}</p>
+
+              {/* Carga del día: para ver de un vistazo cuál está cargado. */}
+              <div className="mt-2 h-1 rounded-full bg-surface-2">
+                <div
+                  className={`h-full rounded-full ${loads[index] >= busiest && busiest > 1 ? "bg-danger" : "bg-primary"}`}
+                  style={{ width: `${Math.round((loads[index] / busiest) * 100)}%` }}
+                />
+              </div>
+              <p className="mt-1 text-[10px] text-muted">
+                {dayTasks.length} tarea{dayTasks.length === 1 ? "" : "s"}
+                {scheduledHours > 0 && ` · ${scheduledHours} con hora`}
+                {money.length > 0 && ` · ${money.length} vence`}
+              </p>
+
+              <div className="mt-3 space-y-2">
+                {dayTasks.map((task) => (
+                  <div key={task.id} draggable onDragStart={(event) => event.dataTransfer.setData("task", task.id)}>
+                    <TaskRow task={task} lists={lists} onChange={update} onOpen={onOpen} />
+                  </div>
+                ))}
+                {money.map((event) => <FinanceRow key={event.id} event={event} />)}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+
+      {/* Bandeja de lo que todavía no tiene día: se arrastra a cualquier columna. */}
+      <aside className="rounded-2xl border border-border bg-surface p-3">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Sin día</h2>
+          <span className="text-xs text-muted">{undated.length}</span>
+        </div>
+        <div className="space-y-2">
+          {undated.map((task) => (
+            <div key={task.id} draggable onDragStart={(event) => event.dataTransfer.setData("task", task.id)}>
+              <TaskRow task={task} lists={lists} onChange={update} onOpen={onOpen} />
+            </div>
+          ))}
+          {!undated.length && <p className="py-6 text-center text-xs text-muted">Todo tiene día asignado.</p>}
+        </div>
+        <p className="mt-3 text-[11px] text-muted">
+          Arrastrá una tarea a un día para agendarla. Desde el celular, abrila y elegí el día.
+        </p>
+      </aside>
+    </div>
+  );
+}
 
 const PRIORITY_TONE: Record<string, string> = {
   LOW: "text-primary", MEDIUM: "text-amber-500", HIGH: "text-danger",
@@ -133,6 +395,9 @@ export function OrganizationClient({ initial, financeEvents, googleConnected }: 
   const [anchor, setAnchor] = useState(new Date());
   const [tasks, setTasks] = useState(initial.tasks);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [zoom, setZoom] = useState<WeekZoom>("week");
+  const [axis, setAxis] = useState<OrganizeAxis>("kanban");
+  const [listFilter, setListFilter] = useState<string | null | "all">("all");
   const [pending, start] = useTransition();
   const currentDay = dayKey(anchor);
   const update = (id: string, patch: TaskPatch) => {
@@ -169,18 +434,25 @@ export function OrganizationClient({ initial, financeEvents, googleConnected }: 
   });
   const selected = tasks.find((task) => task.id === selectedId) ?? null;
   const open = (id: string) => setSelectedId(id);
-  const active = tasks.filter((task) => !task.done);
-  const tasksOn = (key: string) => active.filter((task) => {
-    const source = task.scheduledStart ?? task.dueDate;
-    return source ? dayKey(new Date(source)) === key : false;
+  const toggleHabit = (habitId: string, day: string) => start(async () => {
+    const result = await toggleHabitAction(habitId, day);
+    if (result.error) toast.error(result.error);
+    else router.refresh();
   });
-  const undated = active.filter((task) => !task.dueDate && !task.scheduledStart);
+
+  // El filtro por lista aplica a las tres vistas: reemplaza a la pestaña Listas.
+  const matchesFilter = (task: OrganizationTask) =>
+    listFilter === "all" ? true : task.listId === listFilter;
+  const visible = tasks.filter(matchesFilter);
+  const visibleActive = visible.filter((task) => !task.done);
+  const undated = visibleActive.filter((task) => !task.dueDate && !task.scheduledStart);
   const week = useMemo(() => {
     const d = new Date(anchor); const wd = (d.getDay() + 6) % 7;
     d.setDate(d.getDate() - wd);
     return Array.from({ length: 7 }, (_, index) => { const x = new Date(d); x.setDate(d.getDate() + index); return x; });
   }, [anchor]);
   const financeOn = (key: string) => financeEvents.filter((event) => dayKey(new Date(event.date)) === key);
+  const step = view === "today" ? 1 : zoom === "week" ? 7 : 30;
 
   return (
     <main className="mx-auto w-full max-w-[1500px] space-y-5 pb-24">
@@ -207,46 +479,121 @@ export function OrganizationClient({ initial, financeEvents, googleConnected }: 
         </div>
       </header>
 
-      <nav className="flex gap-1 overflow-x-auto rounded-2xl border border-border bg-surface p-1.5 scrollbar-none">
-        {VIEW_ITEMS.map((item) => <button key={item.key} onClick={() => setView(item.key)} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-sm font-medium ${view === item.key ? "bg-primary text-white" : "text-muted hover:bg-surface-2"}`}><item.icon size={15} />{item.label}</button>)}
+      <nav className="flex gap-1 rounded-2xl border border-border bg-surface p-1.5">
+        {VIEW_ITEMS.map((item) => (
+          <button
+            key={item.key} onClick={() => setView(item.key)}
+            className={`inline-flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 text-sm font-medium transition-colors sm:flex-row sm:gap-2 ${
+              view === item.key ? "bg-primary text-white" : "text-muted hover:bg-surface-2"
+            }`}
+          >
+            <item.icon size={15} />
+            {item.label}
+            <span className={`hidden text-[11px] font-normal lg:inline ${view === item.key ? "text-white/70" : "text-muted/70"}`}>
+              · {item.hint}
+            </span>
+          </button>
+        ))}
       </nav>
 
-      {(view === "today" || view === "week" || view === "calendar") && (
+      {/* Filtro por lista: reemplaza a la pestaña Listas y aplica a las 3 vistas. */}
+      {initial.lists.length > 0 && (
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+          <button
+            onClick={() => setListFilter("all")}
+            className={`min-h-9 shrink-0 rounded-full border px-3 text-xs font-medium ${listFilter === "all" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted hover:bg-surface-2"}`}
+          >
+            Todas
+          </button>
+          <button
+            onClick={() => setListFilter(null)}
+            className={`min-h-9 shrink-0 rounded-full border px-3 text-xs font-medium ${listFilter === null ? "border-primary bg-primary/10 text-primary" : "border-border text-muted hover:bg-surface-2"}`}
+          >
+            Inbox
+          </button>
+          {initial.lists.map((list) => (
+            <button
+              key={list.id} onClick={() => setListFilter(list.id)}
+              className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium ${listFilter === list.id ? "border-primary bg-primary/10 text-primary" : "border-border text-muted hover:bg-surface-2"}`}
+            >
+              <span className="h-2 w-2 rounded-full" style={{ background: list.color }} />
+              {list.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {view !== "organize" && (
         <div className="flex items-center justify-between">
-          <button onClick={() => setAnchor(new Date(anchor.getTime() - (view === "week" ? 7 : view === "calendar" ? 30 : 1) * 86_400_000))} className="grid h-11 w-11 place-items-center rounded-xl border border-border"><ChevronLeft size={18} /></button>
-          <button onClick={() => setAnchor(new Date())} className="text-sm font-semibold capitalize">{anchor.toLocaleDateString("es-AR", { month: "long", year: "numeric", day: view === "today" ? "numeric" : undefined })}</button>
-          <button onClick={() => setAnchor(new Date(anchor.getTime() + (view === "week" ? 7 : view === "calendar" ? 30 : 1) * 86_400_000))} className="grid h-11 w-11 place-items-center rounded-xl border border-border"><ChevronRight size={18} /></button>
+          <button aria-label="Anterior" onClick={() => setAnchor(new Date(anchor.getTime() - step * 86_400_000))} className="grid h-11 w-11 place-items-center rounded-xl border border-border"><ChevronLeft size={18} /></button>
+          <button onClick={() => setAnchor(new Date())} className="text-sm font-semibold capitalize">
+            {view === "today"
+              ? anchor.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })
+              : anchor.toLocaleDateString("es-AR", { month: "long", year: "numeric" })}
+          </button>
+          <button aria-label="Siguiente" onClick={() => setAnchor(new Date(anchor.getTime() + step * 86_400_000))} className="grid h-11 w-11 place-items-center rounded-xl border border-border"><ChevronRight size={18} /></button>
         </div>
       )}
 
       {view === "today" && (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_330px]">
-          <section className="space-y-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Plan de hoy · {tasksOn(currentDay).length} tareas</h2>
-            {tasksOn(currentDay).map((task) => <TaskRow key={task.id} task={task} lists={initial.lists} onChange={update} onOpen={open} />)}
-            {!tasksOn(currentDay).length && <Empty text="No hay tareas para este día." />}
-          </section>
-          <aside className="space-y-4">
-            <Panel title="Inbox" count={undated.length}>
-              {undated.slice(0, 6).map((task) => <TaskRow key={task.id} task={task} lists={initial.lists} onChange={update} onOpen={open} />)}
-              {undated.length > 6 && (
-                <button onClick={() => setView("lists")} className="w-full rounded-xl border border-dashed border-border py-2 text-xs text-muted hover:border-primary hover:text-primary">
-                  Ver las {undated.length - 6} restantes
-                </button>
-              )}
-            </Panel>
-            <Panel title="Finanzas próximas" count={financeOn(currentDay).length}>{financeOn(currentDay).map((event) => <FinanceRow key={event.id} event={event} />)}</Panel>
-          </aside>
+        <TodayView
+          day={currentDay}
+          tasks={visibleActive}
+          habits={initial.habits}
+          finance={financeOn(currentDay)}
+          lists={initial.lists}
+          update={update}
+          onOpen={open}
+          onToggleHabit={toggleHabit}
+        />
+      )}
+
+      {view === "week" && (
+        <div className="space-y-4">
+          <Toggle
+            value={zoom}
+            onChange={setZoom}
+            options={[{ value: "week", label: "Semana" }, { value: "month", label: "Mes" }]}
+          />
+          {zoom === "week" ? (
+            <WeekView
+              week={week}
+              tasks={visibleActive}
+              undated={undated}
+              financeOn={financeOn}
+              lists={initial.lists}
+              update={update}
+              onOpen={open}
+            />
+          ) : (
+            <MonthCalendar
+              anchor={anchor}
+              tasks={visibleActive}
+              finance={financeEvents}
+              onSelect={(date) => { setAnchor(date); setView("today"); }}
+            />
+          )}
         </div>
       )}
 
-      {view === "week" && <div className="grid min-w-[760px] grid-cols-7 gap-3 overflow-x-auto">{week.map((date) => <section key={dayKey(date)} className="min-h-80 rounded-2xl border border-border bg-surface p-3"><p className="text-xs uppercase text-muted">{date.toLocaleDateString("es-AR", { weekday: "short" })}</p><p className={`mb-3 mt-1 text-xl font-bold ${dayKey(date) === today() ? "text-primary" : ""}`}>{date.getDate()}</p><div className="space-y-2">{tasksOn(dayKey(date)).map((task) => <TaskRow key={task.id} task={task} lists={initial.lists} onChange={update} onOpen={open} />)}{financeOn(dayKey(date)).map((event) => <FinanceRow key={event.id} event={event} />)}</div></section>)}</div>}
-
-      {view === "lists" && <ListsView lists={initial.lists} tasks={active} update={update} onOpen={open} />}
-      {view === "kanban" && <Kanban tasks={tasks} lists={initial.lists} update={update} onOpen={open} />}
-      {view === "eisenhower" && <Eisenhower tasks={active} lists={initial.lists} update={update} onOpen={open} />}
-      {view === "calendar" && <MonthCalendar anchor={anchor} tasks={active} finance={financeEvents} onSelect={(date) => { setAnchor(date); setView("today"); }} />}
-      {view === "habits" && <Habits habits={initial.habits} />}
+      {view === "organize" && (
+        <div className="space-y-4">
+          <Toggle
+            value={axis}
+            onChange={setAxis}
+            options={[
+              { value: "kanban", label: "Por estado" },
+              { value: "eisenhower", label: "Por prioridad" },
+              { value: "lists", label: "Listas" },
+              { value: "habits", label: "Hábitos" },
+            ]}
+          />
+          {axis === "kanban" && <Kanban tasks={visible} lists={initial.lists} update={update} onOpen={open} />}
+          {axis === "eisenhower" && <Eisenhower tasks={visibleActive} lists={initial.lists} update={update} onOpen={open} />}
+          {axis === "lists" && <ListsView lists={initial.lists} tasks={tasks.filter((task) => !task.done)} update={update} onOpen={open} />}
+          {axis === "habits" && <Habits habits={initial.habits} />}
+        </div>
+      )}
       {pending && <div className="fixed bottom-24 right-5 rounded-full bg-foreground px-3 py-2 text-xs text-background shadow-lg"><RefreshCw size={12} className="mr-1 inline animate-spin" />Guardando</div>}
 
       <TaskDetailPanel
