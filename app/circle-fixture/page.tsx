@@ -164,6 +164,8 @@ export default function CircleFixturePage() {
       initialEditions={editions}
       initialSources={sources}
       initialRadar={radar}
+      initialContacts={[]}
+      showCercanos={false}
     />
   );
 }

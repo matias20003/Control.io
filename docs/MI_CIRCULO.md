@@ -29,7 +29,10 @@ scroll infinito, la respuesta es no.
 Instagram resuelve dos necesidades distintas con la misma pantalla. Mi Círculo
 las separa, porque tienen soluciones opuestas.
 
-### Círculo Cercano — la gente que querés
+La sección se llama **Mi Círculo**. Sus dos mitades son **Cercanos** (la gente) y
+**Referentes** (la obra).
+
+### Cercanos — la gente que querés
 
 La necesidad real no es *ver* a esa persona: es no perder el vínculo. Instagram
 es pésimo para eso — ves una fracción de lo que postean tus afectos, enterrada
@@ -209,6 +212,24 @@ tender a bajar. Cuando uno de esos abre un canal propio, la app avisa y se migra
    clasificar.
 4. **El puente.** Último y a propósito: si existe desde el arranque, nadie migra
    sus fuentes.
+
+## Estado
+
+**Fase 1 (Cercanos) implementada**, detrás del flag `circuloCercanos` en
+`testers`. Piezas:
+
+| Archivo | Qué hace |
+| --- | --- |
+| `lib/circle-cadence.ts` | Aritmética de cadencia: quién toca hoy, presupuesto de la lista, etiquetas. Puro y testeado. |
+| `tests/circle-cadence.test.ts` | 14 casos, incluido el que fija la decisión de producto (50 personas a 8 semanas < 1 charla/día). |
+| `lib/db/circle.ts` | CRUD sobre `CircleContact` / `CircleTouch`, con cifrado de nombre, teléfono y nota. |
+| `app/actions/circle.ts` | Server actions con validación zod (el teléfono se normaliza a dígitos para `wa.me`). |
+| `app/(dashboard)/newsletter/CercanosView.tsx` | La sección: "Hoy", alta, lista agrupada por frecuencia, edición y archivado. |
+| `app/(dashboard)/newsletter/CircleUI.tsx` | `SectionHeading` y `QuietEmpty`, compartidos entre las vistas. |
+| `prisma/migrations-manual/2026-08-01-mi-circulo-cercanos.sql` | Migración aditiva. **Todavía sin aplicar.** |
+
+Pendiente de fase 1: aplicar la migración, probar contra la base, y el registro
+de conversaciones por WhatsApp (hoy sólo se declara desde la app).
 
 ## Restricciones que atraviesan todo
 

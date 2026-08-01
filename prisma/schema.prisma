@@ -136,6 +136,7 @@ model Profile {
   discoveryCandidates   DiscoveryCandidate[]
   briefFeedback         BriefFeedback[]
   reportDeliveries      ReportDelivery[]
+  circleContacts        CircleContact[]
 
   @@map("profiles")
 }
@@ -1241,4 +1242,60 @@ model BriefFeedback {
   @@unique([userId, targetType, targetId, action])
   @@index([userId, createdAt])
   @@map("brief_feedback")
+}
+
+// ─── Mi Círculo · Cercanos ───────────────────────────────────────────────────
+// La mitad "gente" de Mi Círculo. No guarda contenido: guarda a quién querés
+// mantener cerca y cada cuánto. Ver docs/MI_CIRCULO.md.
+//
+// El límite del producto NO es cuántas personas entran (podés tener 50), sino
+// cuántas aparecen por día. Eso lo gobierna `cadenceDays` de cada una, no un
+// tope en la lista. La aritmética vive en lib/circle-cadence.ts.
+//
+// name/phone/note son datos personales de terceros: se guardan cifrados con
+// lib/crypto.ts, igual que los nombres de hábitos.
+model CircleContact {
+  id     String  @id @default(cuid())
+  userId String
+  user   Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name  String // cifrado
+  phone String? // cifrado — E.164 sin "+", para armar el link wa.me
+  note  String? // cifrado — de qué hablar la próxima vez, sobre la persona
+
+  // INTIMATE (1–2 semanas) | CLOSE (4–8) | ORBIT (3–6 meses). Es una etiqueta
+  // de agrupación: la frecuencia real siempre la manda cadenceDays.
+  tier        String @default("CLOSE")
+  cadenceDays Int    @default(28)
+
+  // Última conversación real. La declara el usuario: Control.io no ve sus
+  // chats con terceros y nunca va a verlos.
+  lastContactAt DateTime?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  touches CircleTouch[]
+
+  @@index([userId, isActive])
+  @@map("circle_contacts")
+}
+
+// Cada vez que el usuario declara que habló con alguien. Es el historial que
+// alimenta "conversaciones reales que ocurrieron" — la métrica que reemplaza al
+// tiempo de pantalla.
+model CircleTouch {
+  id        String        @id @default(cuid())
+  contactId String
+  contact   CircleContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  userId    String
+
+  happenedAt DateTime
+  source     String   @default("APP") // APP | WHATSAPP
+  createdAt  DateTime @default(now())
+
+  @@index([contactId, happenedAt])
+  @@index([userId, happenedAt])
+  @@map("circle_touches")
 }

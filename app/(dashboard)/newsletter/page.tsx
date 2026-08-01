@@ -8,6 +8,9 @@ import {
   getDailyTrendCandidates,
 } from "@/lib/db/brief";
 import { ensureDailyTrendsForUser } from "@/lib/services/brief/radar";
+import { getCircleContacts } from "@/lib/db/circle";
+import { hasFeature } from "@/lib/feature-flags";
+import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = { title: "Mi Círculo" };
 
@@ -29,11 +32,17 @@ export default async function NewsletterPage() {
   }).catch(() => {
     // Radar es secundario: una fuente externa nunca bloquea la lectura del Brief.
   });
-  const [editions, sources, radar] = await Promise.all([
+  const [editions, sources, radar, profile, contacts] = await Promise.all([
     getEditions(user.id, 30),
     getBriefSources(user.id),
     getDailyTrendCandidates(user.id),
+    prisma.profile.findUnique({ where: { id: user.id }, select: { isTester: true } }),
+    getCircleContacts(user.id),
   ]);
+
+  const showCercanos = hasFeature("circuloCercanos", {
+    isTester: profile?.isTester ?? false,
+  });
 
   return (
     <MyCircleClient
@@ -41,6 +50,8 @@ export default async function NewsletterPage() {
       initialEditions={editions}
       initialSources={sources}
       initialRadar={radar}
+      initialContacts={showCercanos ? contacts : []}
+      showCercanos={showCercanos}
     />
   );
 }

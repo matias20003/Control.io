@@ -38,17 +38,35 @@ import type {
   SerializedBriefSource,
   SerializedDiscoveryCandidate,
 } from "@/lib/brief/types";
+import type { CircleContact } from "@/lib/db/circle";
+import { rankDueContacts, sinceLabel } from "@/lib/circle-cadence";
+import { CercanosView } from "./CercanosView";
+import { SectionHeading, QuietEmpty } from "./CircleUI";
 
-type CircleSection = "home" | "instagram" | "news" | "radar" | "settings";
+type CircleSection =
+  | "home"
+  | "cercanos"
+  | "instagram"
+  | "news"
+  | "radar"
+  | "settings";
 
 type Props = {
   initialConfig: SerializedConfig;
   initialEditions: SerializedEdition[];
   initialSources: SerializedBriefSource[];
   initialRadar: SerializedDiscoveryCandidate[];
+  initialContacts: CircleContact[];
+  showCercanos: boolean;
 };
 
 const SECTION_LINKS = [
+  {
+    id: "cercanos" as const,
+    label: "Cercanos",
+    description: "La gente que no querés perder de vista",
+    icon: UsersRound,
+  },
   {
     id: "instagram" as const,
     label: "Referentes",
@@ -175,11 +193,14 @@ export function MyCircleClient({
   initialEditions,
   initialSources,
   initialRadar,
+  initialContacts,
+  showCercanos,
 }: Props) {
   const [section, setSection] = useState<CircleSection>("home");
   const [config, setConfig] = useState(initialConfig);
   const [editions, setEditions] = useState(initialEditions);
   const [sources, setSources] = useState(initialSources);
+  const [contacts, setContacts] = useState(initialContacts);
   const [isGenerating, startGenerating] = useTransition();
 
   const edition = editions[0] ?? null;
@@ -263,9 +284,14 @@ export function MyCircleClient({
           sources={instagramSources}
           newsItems={newsItems}
           radar={initialRadar}
+          contacts={contacts}
+          showCercanos={showCercanos}
           onSection={setSection}
           onOpenItem={openItem}
         />
+      )}
+      {section === "cercanos" && showCercanos && (
+        <CercanosView contacts={contacts} onContactsChange={setContacts} />
       )}
       {section === "instagram" && (
         <InstagramView
@@ -305,6 +331,8 @@ function CircleHome({
   sources,
   newsItems,
   radar,
+  contacts,
+  showCercanos,
   onSection,
   onOpenItem,
 }: {
@@ -314,11 +342,48 @@ function CircleHome({
   sources: SerializedBriefSource[];
   newsItems: SerializedBriefItem[];
   radar: SerializedDiscoveryCandidate[];
+  contacts: CircleContact[];
+  showCercanos: boolean;
   onSection: (section: CircleSection) => void;
   onOpenItem: (item: SerializedBriefItem) => void;
 }) {
+  // El gancho diario de la sección. Va arriba de todo a propósito: durante la
+  // transición desde Instagram, el contenido no alcanza para traer a alguien
+  // todos los días — una persona esperando sí.
+  const dueToday = showCercanos ? rankDueContacts(contacts) : [];
+
   return (
     <div className="mt-7 space-y-6">
+      {dueToday.length > 0 && (
+        <section
+          aria-label="Personas para hoy"
+          className="overflow-hidden rounded-xl border border-primary/25 bg-primary/[0.06]"
+        >
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary">
+                Hoy
+              </p>
+              <p className="mt-1 font-news text-2xl text-foreground">
+                {dueToday.map((contact) => contact.name).join(" · ")}
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                {dueToday.length === 1
+                  ? `Última conversación ${sinceLabel(
+                      dueToday[0].daysSince,
+                      dueToday[0].neverContacted,
+                    )}.`
+                  : "Hace rato que no hablás con estas personas."}
+              </p>
+            </div>
+            <Button variant="secondary" onClick={() => onSection("cercanos")}>
+              <UsersRound size={16} />
+              Ver
+            </Button>
+          </div>
+        </section>
+      )}
+
       <section
         aria-label="Estado de hoy"
         className="grid overflow-hidden rounded-xl border border-border bg-surface/70 lg:grid-cols-3"
@@ -356,15 +421,19 @@ function CircleHome({
 
       <nav
         aria-label="Secciones de Mi Círculo"
-        className="grid overflow-hidden rounded-xl border border-border md:grid-cols-3"
+        className={`grid overflow-hidden rounded-xl border border-border ${
+          showCercanos ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"
+        }`}
       >
-        {SECTION_LINKS.map((item, index) => (
+        {SECTION_LINKS.filter(
+          (item) => item.id !== "cercanos" || showCercanos,
+        ).map((item, index, visible) => (
           <button
             key={item.id}
             type="button"
             onClick={() => onSection(item.id)}
             className={`flex min-h-24 items-center gap-4 bg-surface/55 px-5 py-4 text-left transition-colors hover:bg-surface-2 focus-visible:z-10 ${
-              index < SECTION_LINKS.length - 1
+              index < visible.length - 1
                 ? "border-b border-border md:border-b-0 md:border-r"
                 : ""
             }`}
@@ -1118,39 +1187,3 @@ function CircleSettings({
   );
 }
 
-function SectionHeading({
-  eyebrow,
-  title,
-  description,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <header className="max-w-3xl">
-      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
-        {eyebrow}
-      </p>
-      <h2 className="mt-2 font-news text-3xl font-medium text-foreground sm:text-4xl">
-        {title}
-      </h2>
-      <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-muted">
-        {description}
-      </p>
-    </header>
-  );
-}
-
-function QuietEmpty({ text }: { text: string }) {
-  return (
-    <div className="grid min-h-28 place-items-center px-4 py-6 text-center">
-      <div>
-        <UsersRound size={21} className="mx-auto text-muted-2" />
-        <p className="mx-auto mt-2 max-w-[34ch] text-sm leading-relaxed text-muted">
-          {text}
-        </p>
-      </div>
-    </div>
-  );
-}
