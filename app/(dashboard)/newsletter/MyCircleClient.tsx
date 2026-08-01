@@ -91,42 +91,6 @@ type Props = {
   showSystem: boolean;
 };
 
-/** Lo de todos los días. */
-const SECTION_LINKS = [
-  {
-    id: "cercanos" as const,
-    label: "Cercanos",
-    description: "La gente que no querés perder de vista",
-    icon: UsersRound,
-  },
-  {
-    id: "referentes" as const,
-    label: "Referentes",
-    description: "Su obra, traída a Control.io",
-    icon: Rss,
-  },
-  {
-    id: "news" as const,
-    label: "Noticias",
-    description: "Hasta 3 noticias verificadas por tema",
-    icon: Newspaper,
-  },
-  {
-    id: "radar" as const,
-    label: "Radar",
-    description: "Los temas que están en auge hoy",
-    icon: Radar,
-  },
-];
-
-/** Lo que se mira cada tanto, no todos los días. */
-const SECONDARY_LINKS = [
-  { id: "norte" as const, label: "El Norte", icon: Compass },
-  { id: "cosecha" as const, label: "La Cosecha", icon: Sprout },
-  { id: "mudanza" as const, label: "La Mudanza", icon: PackageOpen },
-  { id: "instagram" as const, label: "Legado · Ventana Instagram", icon: Clock3 },
-];
-
 function metadataText(
   metadata: Record<string, unknown> | null,
   key: string
@@ -420,7 +384,7 @@ export function MyCircleClient({
             </h1>
           </button>
           <p className="mt-1 text-sm text-muted">
-            Información elegida, en su momento y con un final.
+            Cuidá tus vínculos y leé sólo lo que elegiste.
           </p>
         </div>
         <div className="flex gap-2">
@@ -437,7 +401,7 @@ export function MyCircleClient({
             ) : (
               <RefreshCw size={16} />
             )}
-            {isGenerating ? "Actualizando…" : "Actualizar"}
+            {isGenerating ? "Actualizando…" : "Actualizar mi ración"}
           </Button>
         </div>
       </header>
@@ -447,16 +411,14 @@ export function MyCircleClient({
           delivery={delivery}
           edition={edition}
           sources={sources}
-          newsItems={newsItems}
-          channelItems={channelItems}
           radar={initialRadar}
           contacts={contacts}
           channels={channels}
+          fronts={fronts}
           harvest={harvest}
           showCercanos={showCercanos}
           showSystem={showSystem}
           onSection={setSection}
-          onOpenItem={openItem}
         />
       )}
       {section === "cercanos" && showCercanos && (
@@ -563,30 +525,26 @@ function CircleHome({
   delivery,
   edition,
   sources,
-  newsItems,
-  channelItems,
   radar,
   contacts,
   channels,
+  fronts,
   harvest,
   showCercanos,
   showSystem,
   onSection,
-  onOpenItem,
 }: {
   delivery: ReturnType<typeof windowState>;
   edition: SerializedEdition | null;
   sources: SerializedBriefSource[];
-  newsItems: SerializedBriefItem[];
-  channelItems: SerializedBriefItem[];
   radar: SerializedDiscoveryCandidate[];
   contacts: CircleContact[];
   channels: Record<string, SerializedChannel[]>;
+  fronts: SerializedFront[];
   harvest: HarvestReport;
   showCercanos: boolean;
   showSystem: boolean;
   onSection: (section: CircleSection) => void;
-  onOpenItem: (item: SerializedBriefItem) => void;
 }) {
   // El gancho diario de la sección. Va arriba de todo a propósito: durante la
   // transición desde Instagram, el contenido no alcanza para traer a alguien
@@ -603,261 +561,275 @@ function CircleHome({
     rationCount === 0
       ? 0
       : Math.max(2, Math.min(6, Math.ceil(rationCount * 0.45)));
+  const pendingReferences = references.length - referencesWithChannel;
+  const referencesReady = references.length > 0 && pendingReferences === 0;
+  const setupComplete =
+    fronts.length > 0 &&
+    referencesReady &&
+    (!showCercanos || contacts.length > 0);
 
   return (
-    <div className="mt-7 space-y-6">
-      {dueToday.length > 0 && (
-        <section
-          aria-label="Personas para hoy"
-          className="overflow-hidden rounded-xl border border-primary/25 bg-primary/[0.06]"
-        >
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary">
-                Hoy
-              </p>
-              <p className="mt-1 font-news text-2xl text-foreground">
-                {dueToday.map((contact) => contact.name).join(" · ")}
-              </p>
-              <p className="mt-1 text-xs text-muted">
-                {dueToday.length === 1
-                  ? `Última conversación ${sinceLabel(
-                      dueToday[0].daysSince,
-                      dueToday[0].neverContacted,
-                    )}.`
-                  : "Hace rato que no hablás con estas personas."}
-              </p>
-            </div>
-            <Button variant="secondary" onClick={() => onSection("cercanos")}>
-              <UsersRound size={16} />
-              Ver
-            </Button>
+    <div className="mt-8 max-w-5xl space-y-10">
+      <section aria-labelledby="circle-today-title">
+        <p className="text-xs font-semibold uppercase tracking-[0.1em] text-primary">
+          Empezá acá
+        </p>
+        <h2 id="circle-today-title" className="mt-2 text-2xl font-semibold text-foreground">
+          Para hoy
+        </h2>
+        <p className="mt-2 max-w-[62ch] text-sm leading-relaxed text-muted">
+          Primero cuidá tus vínculos. Después leé una selección corta que se termina.
+        </p>
+
+        <div className="mt-5 overflow-hidden rounded-xl border border-border bg-surface/50">
+          {showCercanos && (
+            <DailyActionRow
+              step="1"
+              icon={UsersRound}
+              title={
+                dueToday.length === 0
+                  ? "Tus vínculos están al día"
+                  : dueToday.length === 1
+                    ? `Escribile a ${dueToday[0].name}`
+                    : `Tenés ${dueToday.length} personas para contactar`
+              }
+              detail={
+                dueToday.length === 0
+                  ? "No hay ninguna conversación pendiente hoy."
+                  : dueToday.length === 1
+                    ? `La última conversación fue ${sinceLabel(dueToday[0].daysSince, dueToday[0].neverContacted)}.`
+                    : dueToday.map((contact) => contact.name).join(" y ")
+              }
+              action={dueToday.length === 0 ? "Ver personas" : "Ir a Cercanos"}
+              complete={dueToday.length === 0}
+              onClick={() => onSection("cercanos")}
+            />
+          )}
+          <DailyActionRow
+            step={showCercanos ? "2" : "1"}
+            icon={Newspaper}
+            title={
+              !edition
+                ? "Tu ración todavía no está lista"
+                : edition.isRead
+                  ? "Terminaste la ración de hoy"
+                  : "Leé tu ración de hoy"
+            }
+            detail={
+              !edition
+                ? `Próxima actualización: ${delivery.label.toLowerCase()}.`
+                : edition.isRead
+                  ? `Vuelve a actualizarse ${delivery.label.toLowerCase()}.`
+                  : `${rationCount} piezas, cerca de ${rationMinutes} min. No hay contenido infinito.`
+            }
+            action={!edition ? "Ver estado" : edition.isRead ? "Volver a verla" : "Empezar a leer"}
+            complete={Boolean(edition?.isRead)}
+            onClick={() => onSection("news")}
+            last
+          />
+        </div>
+      </section>
+
+      {showSystem && !setupComplete && (
+        <section aria-labelledby="circle-setup-title">
+          <h2 id="circle-setup-title" className="text-lg font-semibold text-foreground">
+            Prepará Mi Círculo
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Estos pasos se hacen una vez. Después esta guía desaparece.
+          </p>
+          <div className="mt-4 divide-y divide-border border-y border-border">
+            <SetupStep
+              complete={fronts.length > 0}
+              title="Definí qué querés aprender"
+              detail="El Norte decide qué información entra y cuál queda afuera."
+              action="Definir mi Norte"
+              onClick={() => onSection("norte")}
+            />
+            <SetupStep
+              complete={referencesReady}
+              title={
+                pendingReferences > 0
+                  ? `Conectá ${pendingReferences} ${pendingReferences === 1 ? "referente" : "referentes"}`
+                  : "Sumá un referente"
+              }
+              detail="Pegá su blog, canal o newsletter para leer su obra sin entrar a una red."
+              action="Ir a Referentes"
+              onClick={() => onSection("referentes")}
+            />
+            {showCercanos && (
+              <SetupStep
+                complete={contacts.length > 0}
+                title="Sumá a las personas que querés cuidar"
+                detail="Sólo aparecen cuando llega el momento de volver a hablar."
+                action="Agregar personas"
+                onClick={() => onSection("cercanos")}
+              />
+            )}
           </div>
         </section>
       )}
 
-      <section
-        aria-label="Estado de hoy"
-        className="grid overflow-hidden rounded-xl border border-border bg-surface/70 lg:grid-cols-3"
-      >
-        <StatusCell
-          icon={Clock3}
-          label="La ración de hoy"
-          value={edition ? `${rationCount} piezas · ${rationMinutes} min` : "Pendiente"}
-          detail={
-            edition?.isRead
-              ? `Terminada. Próxima actualización: ${delivery.label.toLowerCase()}.`
-              : edition
-                ? "Es finita. Cuando llegás al final, se cierra."
-                : `Próxima actualización: ${delivery.label.toLowerCase()}.`
-          }
-        />
-        <StatusCell
-          icon={Rss}
-          label="Fuentes elegidas"
-          value={`${references.length}`}
-          detail={`${referencesWithChannel} ya viven en Control.io · ${references.length - referencesWithChannel} pendientes`}
-        />
-        <StatusCell
-          icon={Sprout}
-          label="La Cosecha · 30 días"
-          value={`${harvest.conversionRate}% convertido`}
-          detail={`${harvest.converted} de ${harvest.opened} piezas dejaron algo`}
-          last
-        />
-      </section>
-
-      <nav
-        aria-label="Secciones de Mi Círculo"
-        className={`grid overflow-hidden rounded-xl border border-border ${
-          showCercanos ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"
-        }`}
-      >
-        {SECTION_LINKS.filter(
-          (item) => item.id !== "cercanos" || showCercanos,
-        ).map((item, index, visible) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onSection(item.id)}
-            className={`flex min-h-24 items-center gap-4 bg-surface/55 px-5 py-4 text-left transition-colors hover:bg-surface-2 focus-visible:z-10 ${
-              index < visible.length - 1
-                ? "border-b border-border md:border-b-0 md:border-r"
-                : ""
-            }`}
-          >
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-              <item.icon size={20} />
-            </span>
-            <span className="min-w-0">
-              <span className="block font-news text-xl text-foreground">
-                {item.label}
-              </span>
-              <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                {item.description}
-              </span>
-            </span>
-            <ArrowRight size={17} className="ml-auto shrink-0 text-muted" />
-          </button>
-        ))}
-      </nav>
-
-      {showSystem && (
-        <nav
-          aria-label="Lo que se mira cada tanto"
-          className="flex flex-wrap gap-2"
-        >
-          {SECONDARY_LINKS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onSection(item.id)}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
-            >
-              <item.icon size={15} />
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      )}
-
-      <section className="grid gap-0 overflow-hidden rounded-xl border border-border bg-surface/45 xl:grid-cols-[0.85fr_1.05fr_1.3fr]">
-        <DashboardColumn
-          title="De tus referentes"
-          subtitle="Su obra, sin entrar a la red"
-          action="Administrar referentes"
-          onAction={() => onSection("referentes")}
-        >
-          {channelItems.slice(0, 3).map((item) => (
-            <CompactNews key={item.id} item={item} onOpen={onOpenItem} />
-          ))}
-          {channelItems.length === 0 && (
-            <QuietEmpty text="Agregá el blog, canal o newsletter de un referente y su obra va a aparecer acá." />
-          )}
-        </DashboardColumn>
-
-        <DashboardColumn
-          title="Noticias"
-          subtitle="Titulares verificados"
-          action="Leer noticias"
-          onAction={() => onSection("news")}
-        >
-          {newsItems.slice(0, 3).map((item) => (
-            <CompactNews key={item.id} item={item} onOpen={onOpenItem} />
-          ))}
-          {newsItems.length === 0 && (
-            <QuietEmpty text="Tu próxima edición aparecerá en esta columna." />
-          )}
-        </DashboardColumn>
-
-        <DashboardColumn
-          title="Radar"
-          subtitle="La agenda general del día"
-          action="Abrir Radar"
-          onAction={() => onSection("radar")}
-          last
-        >
-          <TrendTable radar={radar} compact />
-        </DashboardColumn>
-      </section>
-    </div>
-  );
-}
-
-function StatusCell({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  last = false,
-}: {
-  icon: typeof Instagram;
-  label: string;
-  value: string;
-  detail: string;
-  last?: boolean;
-}) {
-  return (
-    <div
-      className={`flex min-h-32 items-center gap-4 px-5 py-5 ${
-        last ? "" : "border-b border-border lg:border-b-0 lg:border-r"
-      }`}
-    >
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-primary/30 bg-primary/8 text-primary">
-        <Icon size={21} />
-      </span>
-      <div className="min-w-0">
-        <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted">
-          {label}
+      <section aria-labelledby="circle-tools-title">
+        <h2 id="circle-tools-title" className="text-lg font-semibold text-foreground">
+          Para cuando lo necesites
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          No hace falta entrar a estas secciones todos los días.
         </p>
-        <p className="mt-1 text-base font-semibold text-foreground">{value}</p>
-        <p className="mt-1 text-xs leading-relaxed text-muted">{detail}</p>
-      </div>
+        <div className="mt-4 divide-y divide-border border-y border-border">
+          <ToolRow
+            icon={Rss}
+            title="Referentes"
+            description="Elegí de quién aprender y traé su obra a Control.io."
+            status={`${referencesWithChannel} de ${references.length} conectados`}
+            onClick={() => onSection("referentes")}
+          />
+          <ToolRow
+            icon={Radar}
+            title="Radar"
+            description="Mirá qué temas están en la agenda general, fuera de tu selección."
+            status={`${Math.min(3, radar.length)} señales hoy`}
+            onClick={() => onSection("radar")}
+          />
+          {showSystem && (
+            <>
+              <ToolRow
+                icon={Sprout}
+                title="La Cosecha"
+                description="Revisá qué lecturas se volvieron tareas, hábitos o notas."
+                status={`${harvest.conversionRate}% convertido este mes`}
+                onClick={() => onSection("cosecha")}
+              />
+              <ToolRow
+                icon={PackageOpen}
+                title="La Mudanza"
+                description="Pasá a Control.io lo importante que hoy seguís en Instagram."
+                status="Proceso opcional"
+                onClick={() => onSection("mudanza")}
+              />
+            </>
+          )}
+        </div>
+
+        {showSystem && (
+          <details className="mt-5 text-sm text-muted">
+            <summary className="min-h-11 cursor-pointer py-3 hover:text-foreground">
+              Opciones anteriores
+            </summary>
+            <button
+              type="button"
+              onClick={() => onSection("instagram")}
+              className="inline-flex min-h-11 items-center gap-2 text-muted hover:text-foreground"
+            >
+              <Clock3 size={15} />
+              Abrir la antigua ventana de Instagram
+            </button>
+          </details>
+        )}
+      </section>
     </div>
   );
 }
 
-function DashboardColumn({
+function DailyActionRow({
+  step,
+  icon: Icon,
   title,
-  subtitle,
+  detail,
   action,
-  onAction,
-  children,
+  complete,
+  onClick,
   last = false,
 }: {
+  step: string;
+  icon: typeof Instagram;
   title: string;
-  subtitle: string;
+  detail: string;
   action: string;
-  onAction: () => void;
-  children: React.ReactNode;
+  complete: boolean;
+  onClick: () => void;
   last?: boolean;
 }) {
   return (
-    <div
-      className={`flex min-h-[430px] flex-col px-5 py-5 ${
-        last ? "" : "border-b border-border xl:border-b-0 xl:border-r"
-      }`}
-    >
-      <div>
-        <h2 className="font-news text-2xl font-medium text-foreground">{title}</h2>
-        <p className="mt-1 text-xs text-muted">{subtitle}</p>
+    <div className={`grid grid-cols-[2.5rem_1fr] items-center gap-4 p-5 sm:grid-cols-[2.5rem_2.5rem_1fr_auto] ${last ? "" : "border-b border-border"}`}>
+      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-semibold ${complete ? "bg-success/10 text-success" : "bg-primary/10 text-primary"}`}>
+        {complete ? <CheckCircle2 size={19} /> : step}
+      </span>
+      <span className={`hidden h-10 w-10 shrink-0 place-items-center rounded-lg sm:grid ${complete ? "bg-surface-2 text-muted" : "bg-primary/10 text-primary"}`}>
+        <Icon size={19} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-base font-semibold text-foreground">{title}</p>
+        <p className="mt-1 text-sm leading-relaxed text-muted">{detail}</p>
       </div>
-      <div className="mt-4 flex-1">{children}</div>
-      <button
-        type="button"
-        onClick={onAction}
-        className="mt-4 inline-flex min-h-11 items-center justify-between border-t border-border pt-4 text-sm font-semibold text-primary"
-      >
+      <Button variant={complete ? "secondary" : "default"} onClick={onClick} className="col-span-2 w-full sm:col-span-1 sm:w-auto">
         {action}
         <ArrowRight size={16} />
-      </button>
+      </Button>
     </div>
   );
 }
 
-function CompactNews({
-  item,
-  onOpen,
+function SetupStep({
+  complete,
+  title,
+  detail,
+  action,
+  onClick,
 }: {
-  item: SerializedBriefItem;
-  onOpen: (item: SerializedBriefItem) => void;
+  complete: boolean;
+  title: string;
+  detail: string;
+  action: string;
+  onClick: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center">
+      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${complete ? "bg-success/10 text-success" : "border border-border text-muted"}`}>
+        {complete ? <CheckCircle2 size={16} /> : <span className="h-2 w-2 rounded-full bg-muted" />}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className={`text-sm font-semibold ${complete ? "text-muted" : "text-foreground"}`}>{title}</p>
+        <p className="mt-0.5 text-sm leading-relaxed text-muted">{detail}</p>
+      </div>
+      {!complete && (
+        <Button variant="secondary" onClick={onClick} className="w-full sm:w-auto">
+          {action}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function ToolRow({
+  icon: Icon,
+  title,
+  description,
+  status,
+  onClick,
+}: {
+  icon: typeof Instagram;
+  title: string;
+  description: string;
+  status: string;
+  onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      onClick={() => onOpen(item)}
-      className="block w-full border-b border-border py-4 text-left last:border-b-0"
+      onClick={onClick}
+      className="group flex min-h-20 w-full items-center gap-4 py-4 text-left"
     >
-      <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-primary">
-        {item.topic || "Actualidad"}
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-surface-2 text-muted transition-colors group-hover:text-primary">
+        <Icon size={19} />
       </span>
-      <span className="mt-1 block font-news text-lg leading-snug text-foreground">
-        {item.title}
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-foreground">{title}</span>
+        <span className="mt-0.5 block text-sm leading-relaxed text-muted">{description}</span>
       </span>
-      <span className="mt-2 block text-xs text-muted">
-        {metadataText(item.metadata, "source") || "Fuente verificada"} ·{" "}
-        {timeAgo(item.publishedAt)}
-      </span>
+      <span className="hidden shrink-0 text-xs text-muted sm:block">{status}</span>
+      <ArrowRight size={17} className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
     </button>
   );
 }
