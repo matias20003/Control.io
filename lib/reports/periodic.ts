@@ -39,6 +39,11 @@ function number(value: unknown) {
   return typeof value === "number" ? value : Number(value ?? 0);
 }
 
+function amountInArs(tx: { amount: unknown; amountARS?: unknown; currency?: string }) {
+  if (tx.amountARS != null) return number(tx.amountARS);
+  return tx.currency === "ARS" || !tx.currency ? number(tx.amount) : 0;
+}
+
 function change(current: number, previous: number) {
   return previous ? Math.round(((current - previous) / previous) * 100) : null;
 }
@@ -61,7 +66,7 @@ export async function buildPeriodicSnapshot(
     }),
     prisma.transaction.findMany({
       where: { userId, type: { in: ["INCOME", "EXPENSE"] }, date: { gte: prevStart, lte: prevEnd } },
-      select: { type: true, amount: true },
+      select: { type: true, amount: true, amountARS: true, currency: true },
     }),
   ]);
 
@@ -71,7 +76,7 @@ export async function buildPeriodicSnapshot(
   const dayMap = new Map<string, { income: number; expense: number }>();
 
   for (const tx of transactions) {
-    const amount = number(tx.amount);
+    const amount = amountInArs(tx);
     const key = tx.date.toISOString().slice(0, 10);
     const day = dayMap.get(key) ?? { income: 0, expense: 0 };
     if (tx.type === "INCOME") {
@@ -96,8 +101,8 @@ export async function buildPeriodicSnapshot(
   let previousIncome = 0;
   let previousExpense = 0;
   for (const tx of previous) {
-    if (tx.type === "INCOME") previousIncome += number(tx.amount);
-    else previousExpense += number(tx.amount);
+    if (tx.type === "INCOME") previousIncome += amountInArs(tx);
+    else previousExpense += amountInArs(tx);
   }
 
   const categoryRows = [...categories.entries()]
@@ -145,12 +150,12 @@ export async function buildPeriodicSnapshot(
     days: [...dayMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, value]) => ({ date, ...value })),
     topExpenses: transactions
       .filter((tx) => tx.type === "EXPENSE")
-      .sort((a, b) => number(b.amount) - number(a.amount))
+      .sort((a, b) => amountInArs(b) - amountInArs(a))
       .slice(0, 8)
       .map((tx) => ({
         description: decrypt(tx.description) || "Gasto",
         category: tx.category?.name ?? "Sin categoría",
-        amount: number(tx.amount),
+        amount: amountInArs(tx),
         date: tx.date.toISOString(),
       })),
     insights,
@@ -184,4 +189,3 @@ export async function createReportDelivery(
     },
   });
 }
-

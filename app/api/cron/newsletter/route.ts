@@ -3,6 +3,7 @@ import { bearerMatches } from "@/lib/cron-auth";
 import { generateEditionsForHour } from "@/lib/services/newsletter";
 import { watchUtnEmails } from "@/lib/email/utn-watch";
 import { nowArgParts } from "@/lib/timezone";
+import { deliverDuePeriodicReports } from "@/lib/reports/delivery";
 
 // Generación horaria del newsletter. NO está en vercel.json (Vercel Hobby
 // permite solo 2 crons y ya están usados): se dispara con un pinger externo
@@ -36,9 +37,15 @@ export async function GET(req: NextRequest) {
 
   const result = await generateEditionsForHour(hour);
 
+  // El mismo pinger horario entrega los reportes a la hora elegida por cada
+  // usuario. La entrega es idempotente por usuario, frecuencia y periodo.
+  const reports = await deliverDuePeriodicReports({ hour }).catch(() => ({
+    delivered: 0, whatsapp: 0, skipped: 0, errors: 1, candidates: 0, hour,
+  }));
+
   // Colgado acá (best-effort): vigilante de correos de la UTN. Corre cada vez que
   // se pinga el newsletter (horario), sin necesitar un cron aparte.
   const utnWatch = await watchUtnEmails().catch(() => ({ notified: 0, skipped: 0 }));
 
-  return Response.json({ ok: true, hour, ...result, utnWatch });
+  return Response.json({ ok: true, hour, ...result, reports, utnWatch });
 }
