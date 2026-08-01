@@ -34,8 +34,13 @@ export async function getDueReminders(): Promise<
   }));
 }
 
-export async function markReminderSent(id: string): Promise<void> {
-  await prisma.reminder.update({ where: { id }, data: { sent: true } });
+/** Reserva el envío una sola vez aunque QStash y el cron lleguen juntos. */
+export async function claimReminderSent(id: string): Promise<boolean> {
+  const result = await prisma.reminder.updateMany({
+    where: { id, sent: false },
+    data: { sent: true },
+  });
+  return result.count === 1;
 }
 
 /** Próximos recordatorios pendientes de un usuario (para el contexto del bot). */

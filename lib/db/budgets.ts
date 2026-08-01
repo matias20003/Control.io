@@ -41,11 +41,10 @@ export async function getBudgets(
   if (budgets.length === 0) return [];
 
   const txRows = await prisma.transaction.groupBy({
-    by: ["categoryId"],
+    by: ["categoryId", "currency"],
     where: {
       userId,
       type: "EXPENSE",
-      currency: "ARS",
       date: { gte: dateFrom, lte: dateTo },
       categoryId: { in: budgets.map((b) => b.categoryId) },
     },
@@ -54,12 +53,12 @@ export async function getBudgets(
 
   const spentMap: Record<string, number> = {};
   for (const row of txRows) {
-    if (row.categoryId) spentMap[row.categoryId] = toNum(row._sum.amount);
+    if (row.categoryId) spentMap[`${row.categoryId}|${row.currency}`] = toNum(row._sum.amount);
   }
 
   return budgets.map((b) => {
     const amount = toNum(b.amount);
-    const spent = spentMap[b.categoryId] ?? 0;
+    const spent = spentMap[`${b.categoryId}|${b.currency}`] ?? 0;
     const remaining = amount - spent;
     // Sin tope en 100: el detalle y el aside necesitan el % real (ej: 130%)
     // para mostrar cuánto se excedió. La barra ya lo clampa visualmente.

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { addMonths } from "date-fns";
 import { encrypt } from "@/lib/crypto";
 import { splitInstallments } from "@/lib/db/credit-utils";
+import { snapshotConversion } from "@/lib/exchange";
 
 export { splitInstallments };
 
@@ -162,44 +163,48 @@ export async function payInstallment(
   if (!installment || installment.creditPurchase.userId !== userId) {
     throw new Error("No encontrado");
   }
-  if (installment.isPaid) return; // idempotente: si ya estaba pagada, no duplicamos
+  if (installment.isPaid) return;
 
   const purchase = installment.creditPurchase;
   const now = new Date();
   const amount = installment.amount; // Decimal, prisma lo acepta tal cual
   const description =
     `Cuota ${installment.installmentNumber}/${purchase.totalInstallments} · ${purchase.description}`;
+  const snapshot = await snapshotConversion(toNum(amount), purchase.currency);
 
-  await prisma.$transaction([
-    prisma.creditInstallment.update({
-      where: { id: installmentId },
+  await prisma.$transaction(async (tx) => {
+    // Claim atómico. Si dos requests intentan pagar la misma cuota, sólo uno
+    // cambia isPaid de false a true y sólo ese continúa con saldo y movimiento.
+    const claim = await tx.creditInstallment.updateMany({
+      where: { id: installmentId, isPaid: false },
       data: { isPaid: true, paidAt: now },
-    }),
-    prisma.creditPurchase.update({
+    });
+    if (claim.count === 0) return;
+
+    await tx.creditPurchase.update({
       where: { id: purchase.id, userId },
       data: { paidInstallments: { increment: 1 } },
-    }),
-    // Movimiento equivalente, queda visible en /movimientos.
-    // Se asocia a la compra vía creditPurchaseId para poder limpiarlo si se elimina.
-    prisma.transaction.create({
+    });
+    await tx.transaction.create({
       data: {
         userId,
         type: "EXPENSE",
         amount,
         currency: purchase.currency,
+        amountARS: snapshot.amountARS,
+        exchangeRate: snapshot.exchangeRate,
         description: encrypt(description),
         date: now,
         categoryId: purchase.categoryId,
         accountId: purchase.accountId,
         creditPurchaseId: purchase.id,
       },
-    }),
-    // Descontamos el saldo de la cuenta de pago.
-    prisma.account.update({
+    });
+    await tx.account.update({
       where: { id: purchase.accountId, userId },
       data: { balance: { decrement: amount } },
-    }),
-  ]);
+    });
+  });
 }
 
 export async function updateCreditPurchase(

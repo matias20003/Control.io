@@ -73,9 +73,21 @@ export async function GET(req: NextRequest) {
       // (evita el doble-encriptado que dejaba "enc:..." visible en la lista).
       const plainDescription = decrypt(r.description) ?? r.description;
 
-      // Tx + actualización de saldo + lastExecuted, todo atómico.
-      const ops: any[] = [
-        prisma.transaction.create({
+      // Claim + movimiento + saldo, todo atómico. El claim condicional evita
+      // duplicados si Vercel reintenta o dos invocaciones se superponen.
+      const didExecute = await prisma.$transaction(async (tx) => {
+        const claim = await tx.recurringTransaction.updateMany({
+          where: {
+            id: r.id,
+            isActive: true,
+            lastExecuted: r.lastExecuted,
+            updatedAt: r.updatedAt,
+          },
+          data: { lastExecuted: today },
+        });
+        if (claim.count === 0) return false;
+
+        await tx.transaction.create({
           data: {
             userId: r.userId,
             type: r.type,
@@ -89,22 +101,21 @@ export async function GET(req: NextRequest) {
             accountId: safeAccountId,
             notes: encrypt("✅ Ejecutado automáticamente"),
           },
-        }),
-        prisma.recurringTransaction.update({
-          where: { id: r.id },
-          data: { lastExecuted: today },
-        }),
-      ];
-      if (safeAccountId) {
-        const delta = r.type === "INCOME" ? amountNum : -amountNum;
-        ops.push(
-          prisma.account.update({
+        });
+        if (safeAccountId) {
+          const delta = r.type === "INCOME" ? amountNum : -amountNum;
+          await tx.account.update({
             where: { id: safeAccountId, userId: r.userId },
             data: { balance: { increment: delta } },
-          }),
-        );
+          });
+        }
+        return true;
+      });
+
+      if (!didExecute) {
+        skipped++;
+        continue;
       }
-      await prisma.$transaction(ops);
 
       // Enviar push notification
       await sendPushToUser(r.userId, {

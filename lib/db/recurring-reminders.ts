@@ -123,9 +123,14 @@ export async function fireDueRecurringReminders(): Promise<{ fired: number }> {
 
     // Marcamos disparado ANTES de entregar para no arriesgar duplicados si el
     // cron se solapa. Si la entrega falla, se reintenta recién al día siguiente.
-    await prisma.recurringReminder
-      .update({ where: { id: r.id }, data: { lastFiredOn: today } })
-      .catch(() => {});
+    const claim = await prisma.recurringReminder.updateMany({
+      where: {
+        id: r.id,
+        OR: [{ lastFiredOn: null }, { lastFiredOn: { lt: today } }],
+      },
+      data: { lastFiredOn: today },
+    });
+    if (claim.count === 0) continue;
 
     let delivered = false;
     if (r.user.whatsappNumber) {

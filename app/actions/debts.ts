@@ -49,8 +49,11 @@ export async function payDebtAction(debtId: string, amount: number) {
   } = await supabase.auth.getUser();
   if (!user) return { error: "No autorizado" };
 
+  const parsedAmount = z.number().finite().positive().safeParse(amount);
+  if (!parsedAmount.success) return { error: "El pago debe ser mayor a 0" };
+
   try {
-    const debt = await payDebt(user.id, debtId, amount);
+    const debt = await payDebt(user.id, debtId, parsedAmount.data);
     revalidatePath("/deudas");
     return { success: true, debt };
   } catch {

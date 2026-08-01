@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { encrypt, decrypt } from "@/lib/crypto";
+import type { Debt } from "@/app/generated/prisma/client";
 
 export type SerializedDebt = {
   id: string;
@@ -78,19 +79,23 @@ export async function payDebt(
   debtId: string,
   paymentAmount: number
 ): Promise<SerializedDebt> {
-  const debt = await prisma.debt.findFirst({ where: { id: debtId, userId } });
-  if (!debt) throw new Error("Deuda no encontrada");
+  if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+    throw new Error("El pago debe ser mayor a 0");
+  }
 
-  const currentPaid = toNum(debt.paidAmount);
-  const total = toNum(debt.totalAmount);
-  const newPaid = Math.min(currentPaid + paymentAmount, total);
-  const isCompleted = newPaid >= total;
-
-  const row = await prisma.debt.update({
-    where: { id: debtId, userId },
-    data: { paidAmount: newPaid, isCompleted },
-  });
-  return serialize(row);
+  // Una sola sentencia evita el clásico read-modify-write: dos pagos que
+  // llegan juntos se acumulan, en vez de pisarse entre sí.
+  const rows = await prisma.$queryRaw<Debt[]>`
+    UPDATE debts
+    SET
+      "paidAmount" = LEAST("totalAmount", "paidAmount" + ${paymentAmount}::numeric),
+      "isCompleted" = ("paidAmount" + ${paymentAmount}::numeric >= "totalAmount"),
+      "updatedAt" = NOW()
+    WHERE id = ${debtId} AND "userId" = ${userId}
+    RETURNING *
+  `;
+  if (!rows[0]) throw new Error("Deuda no encontrada");
+  return serialize(rows[0]);
 }
 
 export async function deleteDebt(

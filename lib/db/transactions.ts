@@ -127,7 +127,7 @@ export async function getTransactions(
     }),
     prisma.transaction.count({ where }),
     filters.withTotals
-      ? prisma.transaction.groupBy({ by: ["type"], where: totalsWhere, _sum: { amount: true } })
+      ? prisma.transaction.groupBy({ by: ["type"], where: totalsWhere, _sum: { amountARS: true } })
       : Promise.resolve(null),
   ]);
 
@@ -135,8 +135,8 @@ export async function getTransactions(
   if (grouped) {
     totals = { income: 0, expense: 0 };
     for (const g of grouped) {
-      if (g.type === "INCOME") totals.income = toNum(g._sum.amount);
-      else if (g.type === "EXPENSE") totals.expense = toNum(g._sum.amount);
+      if (g.type === "INCOME") totals.income = toNum(g._sum.amountARS);
+      else if (g.type === "EXPENSE") totals.expense = toNum(g._sum.amountARS);
     }
   }
 
@@ -441,9 +441,9 @@ export async function getMonthSummary(userId: string, month?: number, year?: num
   const dateTo = endOfMonth(new Date(y, m - 1));
 
   const rows = await prisma.transaction.findMany({
-    where: { userId, type: { in: ["INCOME", "EXPENSE"] }, date: { gte: dateFrom, lte: dateTo }, currency: "ARS" },
+    where: { userId, type: { in: ["INCOME", "EXPENSE"] }, date: { gte: dateFrom, lte: dateTo } },
     // Solo lo que se agrega (evita traer/desencriptar descripción y notas).
-    select: { type: true, amount: true, category: { select: { id: true, name: true, color: true, icon: true } } },
+    select: { type: true, amount: true, amountARS: true, currency: true, category: { select: { id: true, name: true, color: true, icon: true } } },
   });
 
   let totalIncome = 0;
@@ -451,7 +451,11 @@ export async function getMonthSummary(userId: string, month?: number, year?: num
   const catMap: Record<string, { categoryId: string; name: string; color: string; icon: string; total: number }> = {};
 
   for (const r of rows) {
-    const amount = toNum(r.amount);
+    // amountARS es el snapshot histórico correcto. Para filas ARS antiguas sin
+    // backfill, el monto original sigue siendo equivalente.
+    const amount = r.amountARS == null
+      ? (r.currency === "ARS" ? toNum(r.amount) : 0)
+      : toNum(r.amountARS);
     if (r.type === "INCOME") {
       totalIncome += amount;
     } else {

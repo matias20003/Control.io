@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { bearerMatches } from "@/lib/cron-auth";
-import { getDueReminders, markReminderSent } from "@/lib/db/reminders";
+import { claimReminderSent, getDueReminders } from "@/lib/db/reminders";
 import { fireDueRecurringReminders } from "@/lib/db/recurring-reminders";
 import { fireStudyReviews } from "@/lib/study/ingest";
 import { fireDailyStudyPlan } from "@/lib/study/notify";
@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
   let sent = 0;
 
   for (const r of due) {
+    if (!(await claimReminderSent(r.id))) continue;
     let delivered = false;
 
     // WhatsApp es el mejor canal para un recordatorio. Como recién lo creó por
@@ -52,9 +53,6 @@ export async function GET(req: NextRequest) {
       delivered = (n ?? 0) > 0;
     }
 
-    // Lo marcamos enviado siempre (aunque no haya canal) para no reintentar al
-    // infinito un recordatorio de un usuario sin WhatsApp ni push.
-    await markReminderSent(r.id).catch(() => {});
     if (delivered) sent++;
   }
 

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { sendPushToUser } from "@/lib/push/send";
 import { sendText } from "@/lib/whatsapp/kapso";
-import { markReminderSent } from "@/lib/db/reminders";
+import { claimReminderSent } from "@/lib/db/reminders";
 
 // QStash pega acá a la hora exacta del recordatorio (con el reminderId en el body).
 export const runtime = "nodejs";
@@ -26,6 +26,12 @@ export async function POST(req: NextRequest) {
   });
   // Idempotente: si ya se mandó (o no existe), no duplicamos.
   if (!r || r.sent) return Response.json({ ok: true, skipped: "done" });
+  if (r.remindAt.getTime() > Date.now() + 5_000) {
+    return Response.json({ ok: true, skipped: "not-due" });
+  }
+  if (!(await claimReminderSent(r.id))) {
+    return Response.json({ ok: true, skipped: "claimed" });
+  }
 
   const text = decrypt(r.text) ?? r.text;
   let delivered = false;
@@ -43,6 +49,5 @@ export async function POST(req: NextRequest) {
     delivered = (n ?? 0) > 0;
   }
 
-  await markReminderSent(r.id).catch(() => {});
   return Response.json({ ok: true, delivered });
 }
