@@ -2,8 +2,31 @@ import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { startOfMonth, subMonths } from "date-fns";
 
-export type Suscripcion = { nombre: string; montoMensual: number; veces: number; ultima: string };
-export type GastoRepetido = { nombre: string; total: number; veces: number; promedio: number };
+export type MovimientoDetectado = {
+  id: string;
+  monto: number;
+  fecha: string;
+  descripcion: string;
+  categoria: string | null;
+  categoriaIcono: string | null;
+  cuenta: string | null;
+};
+
+export type Suscripcion = {
+  nombre: string;
+  montoMensual: number;
+  veces: number;
+  ultima: string;
+  movimientos: MovimientoDetectado[];
+};
+
+export type GastoRepetido = {
+  nombre: string;
+  total: number;
+  veces: number;
+  promedio: number;
+  movimientos: MovimientoDetectado[];
+};
 
 export type GastosHormiga = {
   suscripciones: Suscripcion[];
@@ -48,10 +71,24 @@ export async function getGastosHormiga(userId: string): Promise<GastosHormiga> {
 
   const rows = await prisma.transaction.findMany({
     where: { userId, type: "EXPENSE", currency: "ARS", date: { gte: since } },
-    select: { amount: true, description: true, date: true, category: { select: { name: true } } },
+    select: {
+      id: true,
+      amount: true,
+      description: true,
+      date: true,
+      category: { select: { name: true, icon: true } },
+      account: { select: { name: true } },
+    },
   });
 
-  type Group = { amounts: number[]; months: Set<string>; count: number; last: Date; label: string };
+  type Group = {
+    amounts: number[];
+    months: Set<string>;
+    count: number;
+    last: Date;
+    label: string;
+    movimientos: MovimientoDetectado[];
+  };
   const groups = new Map<string, Group>();
 
   for (const r of rows) {
@@ -61,11 +98,26 @@ export async function getGastosHormiga(userId: string): Promise<GastosHormiga> {
 
     const amt = toNum(r.amount);
     const label = raw || r.category?.name || key;
-    const g =
-      groups.get(key) ?? { amounts: [], months: new Set<string>(), count: 0, last: r.date, label };
+    const g = groups.get(key) ?? {
+      amounts: [],
+      months: new Set<string>(),
+      count: 0,
+      last: r.date,
+      label,
+      movimientos: [],
+    };
     g.amounts.push(amt);
     g.months.add(`${r.date.getFullYear()}-${r.date.getMonth()}`);
     g.count++;
+    g.movimientos.push({
+      id: r.id,
+      monto: amt,
+      fecha: r.date.toISOString(),
+      descripcion: raw || r.category?.name || "Movimiento sin descripción",
+      categoria: r.category?.name ?? null,
+      categoriaIcono: r.category?.icon ?? null,
+      cuenta: decrypt(r.account?.name) ?? null,
+    });
     if (r.date > g.last) g.last = r.date;
     if (raw && raw.length > g.label.length) g.label = raw; // mejor etiqueta vista
     groups.set(key, g);
@@ -75,6 +127,9 @@ export async function getGastosHormiga(userId: string): Promise<GastosHormiga> {
   const repetidos: GastoRepetido[] = [];
 
   for (const g of groups.values()) {
+    const movimientos = [...g.movimientos].sort(
+      (a, b) => Date.parse(b.fecha) - Date.parse(a.fecha)
+    );
     const min = Math.min(...g.amounts);
     const max = Math.max(...g.amounts);
     const estable = min > 0 && max / min <= 1.4;
@@ -86,6 +141,7 @@ export async function getGastosHormiga(userId: string): Promise<GastosHormiga> {
         montoMensual: Math.round(median(g.amounts)),
         veces: g.count,
         ultima: g.last.toISOString(),
+        movimientos,
       });
     } else if (g.count >= 4) {
       // Mismo gasto muchas veces → hormiga.
@@ -95,6 +151,7 @@ export async function getGastosHormiga(userId: string): Promise<GastosHormiga> {
         total: Math.round(total),
         veces: g.count,
         promedio: Math.round(total / g.count),
+        movimientos,
       });
     }
   }
