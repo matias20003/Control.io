@@ -117,21 +117,9 @@ export function NorteView({
                       {front.detail}
                     </p>
                   )}
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {front.topics.map((topic) => (
-                      <span
-                        key={topic}
-                        className="rounded-full bg-surface-3 px-2 py-0.5 text-[11px] text-muted"
-                      >
-                        {topic}
-                      </span>
-                    ))}
-                    {front.topics.length === 0 && (
-                      <span className="text-[11px] text-muted-2">
-                        Sin términos: este frente todavía no filtra nada.
-                      </span>
-                    )}
-                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-muted">
+                    Las noticias se buscan usando toda esta idea, no palabras sueltas.
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -182,8 +170,8 @@ function AddFrontForm({ onAdded }: { onAdded: (front: SerializedFront) => void }
   const [detail, setDetail] = useState("");
   const [isSaving, startSaving] = useTransition();
 
-  // Los términos se muestran antes de guardar: el usuario tiene que ver con qué
-  // va a filtrar su edición, no descubrirlo después.
+  // La intención se muestra antes de guardar para que la persona pueda revisar
+  // cómo se interpretará todo lo que escribió.
   const preview = suggestTopics(label, detail);
 
   const submit = () => {
@@ -243,20 +231,13 @@ function AddFrontForm({ onAdded }: { onAdded: (front: SerializedFront) => void }
         {preview.length > 0 && (
           <div className="rounded-lg bg-surface-2/60 px-3 py-2.5">
             <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted">
-              Va a filtrar con
+              Así entendemos tu tema
             </p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {preview.map((topic) => (
-                <span
-                  key={topic}
-                  className="rounded-full bg-surface-3 px-2 py-0.5 text-[11px] text-foreground"
-                >
-                  {topic}
-                </span>
-              ))}
-            </div>
+            <p className="mt-1.5 text-sm leading-relaxed text-foreground">
+              {preview[0]}
+            </p>
             <p className="mt-2 text-[11px] leading-relaxed text-muted">
-              Los podés editar después.
+              Buscaremos noticias que respondan a esta idea completa.
             </p>
           </div>
         )}
@@ -279,7 +260,6 @@ function EditFrontRow({
 }) {
   const [label, setLabel] = useState(front.label);
   const [detail, setDetail] = useState(front.detail ?? "");
-  const [topics, setTopics] = useState(front.topics.join(", "));
   const [isSaving, startSaving] = useTransition();
 
   const save = () => {
@@ -289,11 +269,7 @@ function EditFrontRow({
       const result = await updateFrontAction(front.id, {
         label: clean,
         detail: detail.trim() || null,
-        topics: topics
-          .split(",")
-          .map((topic) => topic.trim())
-          .filter(Boolean)
-          .slice(0, 8),
+        topics: suggestTopics(clean, detail.trim() || null),
       });
       if (result.error || !result.front) {
         toast.error(result.error ?? "No pudimos guardar los cambios.");
@@ -312,16 +288,16 @@ function EditFrontRow({
         onChange={(e) => setDetail(e.target.value)}
         placeholder="Por qué te importa"
       />
-      <div>
-        <Input
-          value={topics}
-          onChange={(e) => setTopics(e.target.value)}
-          placeholder="arquitectura, obra, presupuesto"
-        />
-        <p className="mt-1 text-[11px] text-muted">
-          Términos separados por coma. Con esto se busca tu edición.
-        </p>
-      </div>
+      {suggestTopics(label, detail)[0] && (
+        <div className="rounded-lg bg-surface-2/60 px-3 py-2.5">
+          <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted">
+            Búsqueda por intención
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-foreground">
+            {suggestTopics(label, detail)[0]}
+          </p>
+        </div>
+      )}
       <div className="flex gap-2">
         <Button onClick={save} disabled={isSaving || !label.trim()}>
           {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}

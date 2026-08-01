@@ -20,15 +20,6 @@ export type NorthFront = {
 /** Cuántos frentes tiene sentido sostener a la vez. Más es no tener ninguno. */
 export const MAX_FRONTS = 3;
 
-// Palabras que no distinguen nada como término de búsqueda.
-const VACIAS = new Set([
-  "el", "la", "los", "las", "un", "una", "unos", "unas", "de", "del", "al",
-  "a", "ante", "con", "contra", "en", "entre", "hacia", "hasta", "para", "por",
-  "sin", "sobre", "tras", "y", "e", "o", "u", "que", "qué", "mi", "mis", "tu",
-  "tus", "su", "sus", "me", "te", "se", "lo", "es", "ser", "estar", "tener",
-  "quiero", "querer", "poder", "más", "mas", "muy", "como", "propio", "propia",
-]);
-
 function normalize(value: string): string {
   return value
     .normalize("NFD")
@@ -38,28 +29,20 @@ function normalize(value: string): string {
 }
 
 /**
- * Términos de búsqueda sugeridos a partir de cómo la persona describió su
- * frente. Es un punto de partida editable, no una verdad: el usuario manda.
+ * Intención de búsqueda construida con todo lo que escribió la persona.
+ * Conservamos la frase completa porque sus relaciones importan: "IA para
+ * arquitectura" no significa lo mismo que buscar "IA" y "arquitectura" por
+ * separado.
  */
 export function suggestTopics(label: string, detail?: string | null): string[] {
-  const texto = `${label} ${detail ?? ""}`;
-  const palabras = texto
-    .split(/[\s,.;:!?()"'—–-]+/)
-    .map((palabra) => palabra.trim())
-    .filter(Boolean)
-    .filter((palabra) => palabra.length >= 4)
-    .filter((palabra) => !VACIAS.has(normalize(palabra)));
+  const cleanLabel = label.replace(/\s+/g, " ").trim();
+  const cleanDetail = (detail ?? "").replace(/\s+/g, " ").trim();
+  if (!cleanLabel) return [];
 
-  const vistas = new Set<string>();
-  const terminos: string[] = [];
-  for (const palabra of palabras) {
-    const clave = normalize(palabra);
-    if (vistas.has(clave)) continue;
-    vistas.add(clave);
-    terminos.push(palabra.toLowerCase());
-    if (terminos.length === 4) break;
-  }
-  return terminos;
+  const intention = cleanDetail
+    ? `${cleanLabel}. ${cleanDetail}`
+    : cleanLabel;
+  return [intention.slice(0, 160)];
 }
 
 export type DerivedTopics = {
@@ -80,7 +63,8 @@ export function deriveTopics(fronts: NorthFront[]): DerivedTopics {
   const topics: string[] = [];
 
   for (const front of ordenados) {
-    for (const topic of front.topics) {
+    const semanticTopics = suggestTopics(front.label, front.detail);
+    for (const topic of semanticTopics) {
       const clave = normalize(topic);
       if (!clave || vistos.has(clave)) continue;
       vistos.add(clave);
@@ -89,9 +73,7 @@ export function deriveTopics(fronts: NorthFront[]): DerivedTopics {
   }
 
   const principal = ordenados[0];
-  const priorityTopics = principal
-    ? principal.topics.filter((topic) => topic.trim().length > 0)
-    : [];
+  const priorityTopics = principal ? suggestTopics(principal.label, principal.detail) : [];
 
   return { topics, priorityTopics };
 }

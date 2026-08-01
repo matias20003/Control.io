@@ -249,8 +249,9 @@ FILTRO DE CREDIBILIDAD (lo más importante — hoy circula mucha desinformación
 
 Tu tarea:
 1. Escribí un "summary" general del día en español rioplatense neutro: 2 a 4 frases con lo más importante y verificado, empezando por lo prioritario. Claro, sin sensacionalismo.
-2. Para CADA tema, elegí hasta 3 noticias creíbles y relevantes, rankeadas: "rank" 1 = la más relevante. Si de un tema hay menos de 3 confiables, devolvé menos (NO rellenes con dudosas). Descartá el resto, los duplicados y lo que no trate realmente del tema.
-3. Para cada noticia elegida devolvé su id, un "summary" de UNA sola línea (qué pasó, por qué importa) y su "rank".
+2. Interpretá cada tema como una intención completa, no como una bolsa de palabras clave. Una noticia sólo es relevante si trata la relación o el objetivo expresado en la frase. Que coincida con una o dos palabras aisladas no alcanza.
+3. Para CADA tema, elegí hasta 3 noticias creíbles y relevantes, rankeadas: "rank" 1 = la más relevante. Si de un tema hay menos de 3 confiables, devolvé menos (NO rellenes con dudosas). Descartá el resto, los duplicados y lo que no responda realmente a la intención completa.
+4. Para cada noticia elegida devolvé su id, un "summary" de UNA sola línea (qué pasó, por qué importa para la intención del usuario) y su "rank".
 Respondé SOLO con JSON válido, sin texto extra, con esta forma exacta:
 {"summary":"...","items":[{"id":0,"summary":"...","rank":1}]}`;
 

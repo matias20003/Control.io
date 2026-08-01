@@ -166,7 +166,7 @@ export async function deleteChannelAction(id: string): Promise<CircleSystemResul
 const frontSchema = z.object({
   label: z.string().trim().min(1, "Falta el frente").max(80),
   detail: z.string().trim().max(300).nullable().optional(),
-  topics: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
+  topics: z.array(z.string().trim().min(1).max(160)).max(8).optional(),
 });
 
 export async function createFrontAction(

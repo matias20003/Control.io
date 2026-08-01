@@ -20,26 +20,22 @@ function front(over: Partial<NorthFront> = {}): NorthFront {
 }
 
 describe("suggestTopics", () => {
-  it("saca terminos utiles de como lo escribio la persona", () => {
+  it("conserva la intencion completa de la persona", () => {
     expect(suggestTopics("Quiero tener mi propia obra de arquitectura")).toEqual([
-      "obra",
-      "arquitectura",
+      "Quiero tener mi propia obra de arquitectura",
     ]);
   });
 
-  it("descarta palabras que no distinguen nada", () => {
-    expect(suggestTopics("ser mas o menos como los demas")).not.toContain("como");
+  it("combina el frente y su explicacion", () => {
+    expect(suggestTopics("Aplicar IA en arquitectura", "Quiero mejorar la gestión de obra")).toEqual([
+      "Aplicar IA en arquitectura. Quiero mejorar la gestión de obra",
+    ]);
   });
 
-  it("no repite el mismo termino con distinto acento o mayuscula", () => {
-    expect(suggestTopics("Nutrición nutricion NUTRICIÓN")).toEqual(["nutrición"]);
-  });
-
-  it("nunca devuelve mas de cuatro terminos", () => {
-    const muchos = suggestTopics(
-      "arquitectura construccion presupuesto materiales obras clientes",
-    );
-    expect(muchos).toHaveLength(4);
+  it("normaliza espacios sin romper la frase", () => {
+    expect(suggestTopics("  IA   para arquitectos  ", "  aplicada a presupuestos ")).toEqual([
+      "IA para arquitectos. aplicada a presupuestos",
+    ]);
   });
 
   it("una etiqueta vacia no inventa nada", () => {
@@ -48,20 +44,20 @@ describe("suggestTopics", () => {
 });
 
 describe("deriveTopics", () => {
-  it("junta los temas de todos los frentes sin repetir", () => {
+  it("deriva una intencion completa por frente", () => {
     const topics = deriveTopics([
-      front({ id: "a", position: 0, topics: ["salud", "correr"] }),
-      front({ id: "b", position: 1, topics: ["correr", "nutricion"] }),
+      front({ id: "a", label: "Mejorar mi salud", detail: "Volver a correr", position: 0 }),
+      front({ id: "b", label: "Comer mejor", detail: null, position: 1 }),
     ]);
-    expect(topics.topics).toEqual(["salud", "correr", "nutricion"]);
+    expect(topics.topics).toEqual(["Mejorar mi salud. Volver a correr", "Comer mejor"]);
   });
 
   it("los temas del frente principal son los prioritarios", () => {
     const topics = deriveTopics([
-      front({ id: "b", position: 1, topics: ["finanzas"] }),
-      front({ id: "a", position: 0, topics: ["salud"] }),
+      front({ id: "b", label: "Ordenar mis finanzas", position: 1 }),
+      front({ id: "a", label: "Mejorar mi salud", position: 0 }),
     ]);
-    expect(topics.priorityTopics).toEqual(["salud"]);
+    expect(topics.priorityTopics).toEqual(["Mejorar mi salud"]);
   });
 
   it("sin frentes no inventa temas", () => {
