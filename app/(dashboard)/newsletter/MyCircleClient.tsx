@@ -667,7 +667,7 @@ function CircleHome({
                   ? `Conectá ${pendingReferences} ${pendingReferences === 1 ? "referente" : "referentes"}`
                   : "Sumá un referente"
               }
-              detail="Pegá su blog, canal o newsletter para leer su obra sin entrar a una red."
+              detail="Pegá su blog, canal o newsletter para leer su contenido sin entrar a una red."
               action="Ir a Referentes"
               onClick={() => onSection("referentes")}
             />
@@ -695,7 +695,7 @@ function CircleHome({
           <ToolRow
             icon={Rss}
             title="Referentes"
-            description="Elegí de quién aprender y traé su obra a Control.io."
+            description="Elegí de quién aprender y traé su contenido a Control.io."
             status={`${referencesWithChannel} de ${references.length} conectados`}
             onClick={() => onSection("referentes")}
           />

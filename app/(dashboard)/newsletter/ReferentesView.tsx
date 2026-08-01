@@ -22,6 +22,7 @@ import {
   openBridgeVisitAction,
   resolveChannelAction,
 } from "@/app/actions/circle-system";
+import { deleteBriefSourceAction } from "@/app/actions/newsletter";
 import type { SerializedChannel } from "@/lib/db/channels";
 import type { SerializedBriefSource } from "@/lib/brief/types";
 import { SectionHeading, QuietEmpty } from "./CircleUI";
@@ -64,9 +65,9 @@ export function ReferentesView({
   return (
     <section className="mt-7">
       <SectionHeading
-        eyebrow="La obra, no el perfil"
+        eyebrow="Contenido elegido por vos"
         title="Referentes"
-        description="De un referente no importa la persona: importa lo que produce. Y eso casi nunca vive en Instagram — vive en su blog, su canal o su newsletter. Acá se trae eso adentro."
+        description="Agregá personas o medios de los que querés aprender. Control.io trae sus publicaciones desde el blog, canal o newsletter que elijas."
       />
 
       {referentes.length > 0 && (
@@ -122,6 +123,12 @@ export function ReferentesView({
             onChannelsChange={(next) =>
               onChannelsChange({ ...channels, [source.id]: next })
             }
+            onDeleted={() => {
+              onSourcesChange(sources.filter((item) => item.id !== source.id));
+              const nextChannels = { ...channels };
+              delete nextChannels[source.id];
+              onChannelsChange(nextChannels);
+            }}
           />
         ))}
         {referentes.length === 0 && (
@@ -156,7 +163,7 @@ function AddReferenceForm({
       setUrl("");
       if (result.orphan) {
         toast.warning(
-          `${result.source.name} quedó como huérfano: ${result.error ?? "no tiene un canal abierto"}`,
+          `${result.source.name} se agregó sin canal: ${result.error ?? "no encontramos un canal abierto"}`,
         );
       } else {
         toast.success(`${result.source.name} ya vive en Control.io.`);
@@ -168,7 +175,7 @@ function AddReferenceForm({
     <div className="mt-6 rounded-xl border border-border bg-surface/60 p-5">
       <p className="text-sm font-semibold text-foreground">Sumar un referente</p>
       <p className="mt-1 text-xs leading-relaxed text-muted">
-        No necesitamos su @. Pegá el lugar donde publica la obra que te sirve:
+        No necesitamos su @. Pegá dónde publica el contenido que te sirve:
         YouTube, podcast, newsletter o blog.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-[0.7fr_1.3fr_auto]">
@@ -203,14 +210,18 @@ function SourceCard({
   source,
   channels,
   onChannelsChange,
+  onDeleted,
 }: {
   source: SerializedBriefSource;
   channels: SerializedChannel[];
   onChannelsChange: (next: SerializedChannel[]) => void;
+  onDeleted: () => void;
 }) {
   const [url, setUrl] = useState("");
   const [isResolving, startResolving] = useTransition();
+  const [isDeleting, startDeleting] = useTransition();
   const [orphanReason, setOrphanReason] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const esHuerfano = channels.length === 0;
 
   const add = () => {
@@ -244,6 +255,18 @@ function SourceCard({
     });
   };
 
+  const deleteSource = () => {
+    startDeleting(async () => {
+      const result = await deleteBriefSourceAction(source.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      onDeleted();
+      toast.success(`${source.name} se eliminó de Referentes.`);
+    });
+  };
+
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-surface/45">
       <div className="flex flex-wrap items-center gap-3 border-b border-border px-5 py-4">
@@ -257,18 +280,54 @@ function SourceCard({
               : `${channels.length} ${channels.length === 1 ? "canal" : "canales"}`}
           </p>
         </div>
-        {esHuerfano ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-warning-dim px-2.5 py-1 text-xs font-semibold text-warning">
-            <AlertTriangle size={13} />
-            Huérfano
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-success-dim px-2.5 py-1 text-xs font-semibold text-success">
-            <Check size={13} />
-            En Control.io
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {esHuerfano ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-warning-dim px-2.5 py-1 text-xs font-semibold text-warning">
+              <AlertTriangle size={13} />
+              Sin canal
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-success-dim px-2.5 py-1 text-xs font-semibold text-success">
+              <Check size={13} />
+              Conectado
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setConfirmingDelete(true)}
+            aria-label={`Eliminar a ${source.name} de Referentes`}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-muted transition-colors hover:bg-danger/10 hover:text-danger"
+          >
+            <Trash2 size={15} />
+            Eliminar
+          </button>
+        </div>
       </div>
+
+      {confirmingDelete && (
+        <div className="flex flex-col gap-3 border-b border-border bg-danger/[0.06] px-5 py-4 sm:flex-row sm:items-center">
+          <p className="min-w-0 flex-1 text-sm text-foreground">
+            ¿Eliminar a <strong>{source.name}</strong> de tus Referentes?
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmingDelete(false)}
+              disabled={isDeleting}
+            >
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={deleteSource} disabled={isDeleting}>
+              {isDeleting ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Trash2 size={16} />
+              )}
+              Sí, eliminar
+            </Button>
+          </div>
+        </div>
+      )}
 
       {channels.map((channel) => {
         const Icon = KIND_ICONS[channel.kind] ?? Rss;
