@@ -9,12 +9,12 @@ import {
   ExternalLink,
   Camera as Instagram,
   Loader2,
-  MessageCircle,
   Newspaper,
   PackageOpen,
   Plus,
   Radar,
   RefreshCw,
+  Rss,
   Settings2,
   ShieldCheck,
   Sprout,
@@ -29,7 +29,9 @@ import {
   createBriefSourceAction,
   deleteBriefSourceAction,
   generateNewsletterNowAction,
+  markNewsletterReadAction,
   recordBriefItemOpenedAction,
+  reopenBriefEditionAction,
   saveNewsletterConfigAction,
 } from "@/app/actions/newsletter";
 import type {
@@ -49,12 +51,13 @@ import type {
   SerializedInventoryItem,
   SerializedMigration,
 } from "@/lib/db/circle-migration";
-import type { CutChecklist } from "@/lib/circle-inventory";
+import { cutChecklist } from "@/lib/circle-inventory";
 import { rankDueContacts, sinceLabel } from "@/lib/circle-cadence";
+import { frontForTopic } from "@/lib/circle-north";
 import { harvestItemAction } from "@/app/actions/circle-system";
 import { CercanosView } from "./CercanosView";
 import { CosechaView, HarvestButtons } from "./CosechaView";
-import { ReferentesView, type OrphanSource } from "./ReferentesView";
+import { ReferentesView } from "./ReferentesView";
 import { NorteView } from "./NorteView";
 import { MudanzaView } from "./MudanzaView";
 import { SectionHeading, QuietEmpty } from "./CircleUI";
@@ -78,12 +81,11 @@ type Props = {
   initialRadar: SerializedDiscoveryCandidate[];
   initialContacts: CircleContact[];
   initialChannels: Record<string, SerializedChannel[]>;
-  initialOrphans: OrphanSource[];
   initialFronts: SerializedFront[];
   initialMigration: SerializedMigration;
   initialInventory: SerializedInventoryItem[];
-  initialChecklist: CutChecklist;
   initialHarvest: HarvestReport;
+  initialHarvestedUrls: string[];
   northNeedsReview: boolean;
   showCercanos: boolean;
   showSystem: boolean;
@@ -101,7 +103,7 @@ const SECTION_LINKS = [
     id: "referentes" as const,
     label: "Referentes",
     description: "Su obra, traída a Control.io",
-    icon: Instagram,
+    icon: Rss,
   },
   {
     id: "news" as const,
@@ -122,7 +124,7 @@ const SECONDARY_LINKS = [
   { id: "norte" as const, label: "El Norte", icon: Compass },
   { id: "cosecha" as const, label: "La Cosecha", icon: Sprout },
   { id: "mudanza" as const, label: "La Mudanza", icon: PackageOpen },
-  { id: "instagram" as const, label: "Ventana enfocada", icon: Clock3 },
+  { id: "instagram" as const, label: "Legado · Ventana Instagram", icon: Clock3 },
 ];
 
 function metadataText(
@@ -233,12 +235,11 @@ export function MyCircleClient({
   initialRadar,
   initialContacts,
   initialChannels,
-  initialOrphans,
   initialFronts,
   initialMigration,
   initialInventory,
-  initialChecklist,
   initialHarvest,
+  initialHarvestedUrls,
   northNeedsReview,
   showCercanos,
   showSystem,
@@ -253,8 +254,12 @@ export function MyCircleClient({
   const [migration, setMigration] = useState(initialMigration);
   const [inventory, setInventory] = useState(initialInventory);
   const [harvest, setHarvest] = useState(initialHarvest);
-  const [harvested, setHarvested] = useState<Set<string>>(() => new Set());
+  const [harvested, setHarvested] = useState<Set<string>>(
+    () => new Set(initialHarvestedUrls),
+  );
   const [isGenerating, startGenerating] = useTransition();
+  const [isCompleting, startCompleting] = useTransition();
+  const [isReopening, startReopening] = useTransition();
 
   const edition = editions[0] ?? null;
   const items = edition?.items ?? [];
@@ -264,6 +269,20 @@ export function MyCircleClient({
     (source) => source.account?.platform === "INSTAGRAM"
   );
   const delivery = windowState(config.sendHours);
+  const checklist = cutChecklist({
+    peopleTotal: contacts.length,
+    peopleWithPhone: contacts.filter((contact) => Boolean(contact.phone)).length,
+    referencesTotal: sources.filter(
+      (source) => source.isActive && source.category !== "CLOSE",
+    ).length,
+    referencesWithChannel: sources.filter(
+      (source) =>
+        source.isActive &&
+        source.category !== "CLOSE" &&
+        (channels[source.id] ?? []).length > 0,
+    ).length,
+    pendingInventory: inventory.filter((item) => item.decision === "PENDING").length,
+  });
 
   useEffect(() => {
     document.documentElement.dataset.controlioFocusAuthorized = "true";
@@ -288,10 +307,57 @@ export function MyCircleClient({
   };
 
   const openItem = (item: SerializedBriefItem) => {
-    if (edition) {
-      recordBriefItemOpenedAction(edition.id, item.url).catch(() => {});
-    }
     window.open(item.url, "_blank", "noopener,noreferrer");
+    if (edition) {
+      recordBriefItemOpenedAction(edition.id, item.url)
+        .then((result) => {
+          if (!result.success || result.reviewedCount === undefined) return;
+          setEditions((current) =>
+            current.map((entry) =>
+              entry.id === edition.id
+                ? { ...entry, reviewedCount: result.reviewedCount! }
+                : entry,
+            ),
+          );
+        })
+        .catch(() => {});
+    }
+  };
+
+  const completeEdition = () => {
+    if (!edition) return;
+    startCompleting(async () => {
+      const result = await markNewsletterReadAction(edition.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setEditions((current) =>
+        current.map((entry) =>
+          entry.id === edition.id
+            ? { ...entry, isRead: true, completedAt: new Date().toISOString() }
+            : entry,
+        ),
+      );
+    });
+  };
+
+  const reopenEdition = () => {
+    if (!edition) return;
+    startReopening(async () => {
+      const result = await reopenBriefEditionAction(edition.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setEditions((current) =>
+        current.map((entry) =>
+          entry.id === edition.id
+            ? { ...entry, isRead: false, completedAt: null }
+            : entry,
+        ),
+      );
+    });
   };
 
   /**
@@ -307,7 +373,7 @@ export function MyCircleClient({
       itemTitle: item.title,
       itemUrl: item.url,
       sourceId: item.sourceId,
-      frontId: null,
+      frontId: frontForTopic(item.topic, fronts)?.id ?? null,
       outcome,
     });
     if (result.error) {
@@ -315,6 +381,22 @@ export function MyCircleClient({
       return;
     }
     setHarvested((current) => new Set(current).add(item.url));
+    setHarvest((current) => {
+      const converted = current.converted + 1;
+      return {
+        ...current,
+        converted,
+        conversionRate:
+          current.opened === 0
+            ? current.conversionRate
+            : Math.min(100, Math.round((converted / current.opened) * 100)),
+        byOutcome: {
+          task: current.byOutcome.task + (outcome === "TASK" ? 1 : 0),
+          habit: current.byOutcome.habit + (outcome === "HABIT" ? 1 : 0),
+          note: current.byOutcome.note + (outcome === "NOTE" ? 1 : 0),
+        },
+      };
+    });
     toast.success(
       outcome === "TASK"
         ? "Quedó como tarea."
@@ -362,13 +444,15 @@ export function MyCircleClient({
 
       {section === "home" && (
         <CircleHome
-          config={config}
           delivery={delivery}
           edition={edition}
-          sources={instagramSources}
+          sources={sources}
           newsItems={newsItems}
+          channelItems={channelItems}
           radar={initialRadar}
           contacts={contacts}
+          channels={channels}
+          harvest={harvest}
           showCercanos={showCercanos}
           showSystem={showSystem}
           onSection={setSection}
@@ -382,7 +466,7 @@ export function MyCircleClient({
         <ReferentesView
           sources={sources}
           channels={channels}
-          orphans={initialOrphans}
+          onSourcesChange={setSources}
           onChannelsChange={setChannels}
         />
       )}
@@ -410,9 +494,23 @@ export function MyCircleClient({
         <MudanzaView
           migration={migration}
           inventory={inventory}
-          checklist={initialChecklist}
+          checklist={checklist}
           onMigrationChange={setMigration}
           onInventoryChange={setInventory}
+          onContactAdded={(contact) =>
+            setContacts((current) =>
+              current.some((item) => item.id === contact.id)
+                ? current
+                : [...current, contact],
+            )
+          }
+          onSourceAdded={(source) =>
+            setSources((current) =>
+              current.some((item) => item.id === source.id)
+                ? current
+                : [...current, source],
+            )
+          }
         />
       )}
       {section === "instagram" && (
@@ -437,6 +535,11 @@ export function MyCircleClient({
           onHarvest={harvestItem}
           harvested={harvested}
           showHarvest={showSystem}
+          edition={edition}
+          isCompleting={isCompleting}
+          isReopening={isReopening}
+          onComplete={completeEdition}
+          onReopen={reopenEdition}
         />
       )}
       {section === "radar" && (
@@ -447,6 +550,9 @@ export function MyCircleClient({
           config={config}
           onSaved={setConfig}
           onBack={() => setSection("home")}
+          fronts={fronts}
+          showSystem={showSystem}
+          onOpenNorth={() => setSection("norte")}
         />
       )}
     </div>
@@ -454,25 +560,29 @@ export function MyCircleClient({
 }
 
 function CircleHome({
-  config,
   delivery,
   edition,
   sources,
   newsItems,
+  channelItems,
   radar,
   contacts,
+  channels,
+  harvest,
   showCercanos,
   showSystem,
   onSection,
   onOpenItem,
 }: {
-  config: SerializedConfig;
   delivery: ReturnType<typeof windowState>;
   edition: SerializedEdition | null;
   sources: SerializedBriefSource[];
   newsItems: SerializedBriefItem[];
+  channelItems: SerializedBriefItem[];
   radar: SerializedDiscoveryCandidate[];
   contacts: CircleContact[];
+  channels: Record<string, SerializedChannel[]>;
+  harvest: HarvestReport;
   showCercanos: boolean;
   showSystem: boolean;
   onSection: (section: CircleSection) => void;
@@ -482,6 +592,17 @@ function CircleHome({
   // transición desde Instagram, el contenido no alcanza para traer a alguien
   // todos los días — una persona esperando sí.
   const dueToday = showCercanos ? rankDueContacts(contacts) : [];
+  const references = sources.filter(
+    (source) => source.isActive && source.category !== "CLOSE",
+  );
+  const referencesWithChannel = references.filter(
+    (source) => (channels[source.id] ?? []).length > 0,
+  ).length;
+  const rationCount = edition?.items.length ?? 0;
+  const rationMinutes =
+    rationCount === 0
+      ? 0
+      : Math.max(2, Math.min(6, Math.ceil(rationCount * 0.45)));
 
   return (
     <div className="mt-7 space-y-6">
@@ -520,32 +641,28 @@ function CircleHome({
         className="grid overflow-hidden rounded-xl border border-border bg-surface/70 lg:grid-cols-3"
       >
         <StatusCell
-          icon={Instagram}
-          label="Próxima ventana de Instagram"
-          value={delivery.label}
-          detail={`${config.sendHours.length} ${
-            config.sendHours.length === 1 ? "ventana configurada" : "ventanas configuradas"
-          }`}
-        />
-        <StatusCell
-          icon={MessageCircle}
-          label="Reporte de WhatsApp"
-          value={config.notifyWhatsapp ? "Activo" : "Desactivado"}
+          icon={Clock3}
+          label="La ración de hoy"
+          value={edition ? `${rationCount} piezas · ${rationMinutes} min` : "Pendiente"}
           detail={
-            edition
-              ? `Última edición ${timeAgo(edition.updatedAt)}`
-              : "Se enviará al comenzar la próxima ventana"
+            edition?.isRead
+              ? `Terminada. Próxima actualización: ${delivery.label.toLowerCase()}.`
+              : edition
+                ? "Es finita. Cuando llegás al final, se cierra."
+                : `Próxima actualización: ${delivery.label.toLowerCase()}.`
           }
         />
         <StatusCell
-          icon={CheckCircle2}
-          label="Edición de hoy"
-          value={edition ? `${edition.reviewedCount} revisados` : "Pendiente"}
-          detail={
-            edition
-              ? `${edition.items.length} contenidos seleccionados`
-              : "Todavía no hay una edición"
-          }
+          icon={Rss}
+          label="Fuentes elegidas"
+          value={`${references.length}`}
+          detail={`${referencesWithChannel} ya viven en Control.io · ${references.length - referencesWithChannel} pendientes`}
+        />
+        <StatusCell
+          icon={Sprout}
+          label="La Cosecha · 30 días"
+          value={`${harvest.conversionRate}% convertido`}
+          detail={`${harvest.converted} de ${harvest.opened} piezas dejaron algo`}
           last
         />
       </section>
@@ -606,31 +723,16 @@ function CircleHome({
 
       <section className="grid gap-0 overflow-hidden rounded-xl border border-border bg-surface/45 xl:grid-cols-[0.85fr_1.05fr_1.3fr]">
         <DashboardColumn
-          title="Referentes para consultar"
-          subtitle="Lista finita de perfiles elegidos"
-          action="Consultar referentes"
-          onAction={() => onSection("instagram")}
+          title="De tus referentes"
+          subtitle="Su obra, sin entrar a la red"
+          action="Administrar referentes"
+          onAction={() => onSection("referentes")}
         >
-          {sources.slice(0, 5).map((source) => (
-            <div
-              key={source.id}
-              className="flex min-h-16 items-center gap-3 border-b border-border py-3 last:border-b-0"
-            >
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-3 text-primary">
-                <Instagram size={17} />
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-foreground">
-                  @{source.account?.handle ?? source.name}
-                </p>
-                <p className="mt-0.5 text-xs text-muted">
-                  Disponible durante tus ventanas
-                </p>
-              </div>
-            </div>
+          {channelItems.slice(0, 3).map((item) => (
+            <CompactNews key={item.id} item={item} onOpen={onOpenItem} />
           ))}
-          {sources.length === 0 && (
-            <QuietEmpty text="Agregá los referentes que necesitás consultar." />
+          {channelItems.length === 0 && (
+            <QuietEmpty text="Agregá el blog, canal o newsletter de un referente y su obra va a aparecer acá." />
           )}
         </DashboardColumn>
 
@@ -992,7 +1094,7 @@ function BriefItemRow({
   item: SerializedBriefItem;
   index: number;
   onOpenItem: (item: SerializedBriefItem) => void;
-  onHarvest: (item: SerializedBriefItem, outcome: "TASK" | "HABIT" | "NOTE") => void;
+  onHarvest: (item: SerializedBriefItem, outcome: "TASK" | "HABIT" | "NOTE") => Promise<void>;
   harvested: boolean;
   showHarvest: boolean;
 }) {
@@ -1036,7 +1138,7 @@ function BriefItemRow({
               done={harvested}
               onHarvest={(outcome) =>
                 startHarvesting(async () => {
-                  onHarvest(item, outcome);
+                  await onHarvest(item, outcome);
                 })
               }
             />
@@ -1054,15 +1156,58 @@ function NewsView({
   onHarvest,
   harvested,
   showHarvest,
+  edition,
+  isCompleting,
+  isReopening,
+  onComplete,
+  onReopen,
 }: {
   items: SerializedBriefItem[];
   channelItems: SerializedBriefItem[];
   onOpenItem: (item: SerializedBriefItem) => void;
-  onHarvest: (item: SerializedBriefItem, outcome: "TASK" | "HABIT" | "NOTE") => void;
+  onHarvest: (item: SerializedBriefItem, outcome: "TASK" | "HABIT" | "NOTE") => Promise<void>;
   harvested: Set<string>;
   showHarvest: boolean;
+  edition: SerializedEdition | null;
+  isCompleting: boolean;
+  isReopening: boolean;
+  onComplete: () => void;
+  onReopen: () => void;
 }) {
   const groups = topicGroups(items);
+  const visibleCount = items.length + channelItems.length;
+  const readingMinutes =
+    visibleCount === 0
+      ? 0
+      : Math.max(2, Math.min(6, Math.ceil(visibleCount * 0.45)));
+
+  if (edition?.isRead) {
+    return (
+      <section className="py-14 text-center" aria-live="polite">
+        <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-success/12 text-success">
+          <CheckCircle2 size={24} />
+        </span>
+        <p className="mt-4 text-xs font-semibold uppercase tracking-[0.15em] text-success">
+          Edición terminada
+        </p>
+        <h2 className="mt-2 font-news text-3xl text-foreground">Ya estás al día</h2>
+        <p className="mx-auto mt-3 max-w-[44ch] text-sm leading-relaxed text-muted">
+          Revisaste {edition.reviewedCount} {edition.reviewedCount === 1 ? "pieza" : "piezas"}.
+          No hay nada más para cargar hasta la próxima actualización.
+        </p>
+        <Button
+          variant="secondary"
+          onClick={onReopen}
+          disabled={isReopening}
+          className="mt-6"
+        >
+          {isReopening && <Loader2 size={16} className="animate-spin" />}
+          Volver al contenido de hoy
+        </Button>
+      </section>
+    );
+  }
+
   return (
     <section className="mt-7">
       <SectionHeading
@@ -1070,6 +1215,20 @@ function NewsView({
         title="Noticias"
         description="Hasta tres noticias por tema, con su fuente y el motivo por el que fueron seleccionadas."
       />
+
+      {edition && (
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface/55 px-5 py-4">
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              {visibleCount} {visibleCount === 1 ? "pieza" : "piezas"} · {readingMinutes} min
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              Esta es toda la ración. No se carga contenido infinito al final.
+            </p>
+          </div>
+          <span className="text-xs text-muted">{edition.reviewedCount} revisadas</span>
+        </div>
+      )}
 
       {channelItems.length > 0 && (
         <section className="mt-7">
@@ -1119,9 +1278,36 @@ function NewsView({
           </section>
         ))}
         {groups.length === 0 && (
-          <QuietEmpty text="Todavía no hay noticias. Agregá temas en Ajustes y actualizá tu edición." />
+          <QuietEmpty
+            text={
+              showHarvest
+                ? "Todavía no hay noticias. Definí tu Norte y actualizá la edición."
+                : "Todavía no hay noticias. Agregá temas en Ajustes y actualizá tu edición."
+            }
+          />
         )}
       </div>
+
+      {edition && visibleCount > 0 && (
+        <div className="mt-10 border-t border-border pb-3 pt-8 text-center">
+          <span className="mx-auto grid h-10 w-10 place-items-center rounded-full bg-success/12 text-success">
+            <CheckCircle2 size={20} />
+          </span>
+          <h2 className="mt-3 font-news text-2xl text-foreground">Llegaste al final</h2>
+          <p className="mx-auto mt-2 max-w-[42ch] text-sm leading-relaxed text-muted">
+            Lo que servía podía convertirse en tarea, hábito o nota. Lo demás termina acá.
+          </p>
+          <Button onClick={onComplete} disabled={isCompleting} className="mt-5 w-full sm:w-auto">
+            {isCompleting ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <CheckCircle2 size={16} />
+            )}
+            {isCompleting ? "Cerrando…" : "Terminé por hoy"}
+          </Button>
+          <p className="mt-3 text-xs text-muted">No vamos a cargar más contenido después de esto.</p>
+        </div>
+      )}
     </section>
   );
 }
@@ -1229,10 +1415,16 @@ function CircleSettings({
   config,
   onSaved,
   onBack,
+  fronts,
+  showSystem,
+  onOpenNorth,
 }: {
   config: SerializedConfig;
   onSaved: (config: SerializedConfig) => void;
   onBack: () => void;
+  fronts: SerializedFront[];
+  showSystem: boolean;
+  onOpenNorth: () => void;
 }) {
   const [topics, setTopics] = useState(config.topics);
   const [topic, setTopic] = useState("");
@@ -1255,8 +1447,8 @@ function CircleSettings({
   };
 
   const save = () => {
-    if (topics.length === 0) {
-      toast.error("Agregá al menos un tema.");
+    if (topics.length === 0 && fronts.length === 0) {
+      toast.error("Definí al menos un frente en El Norte.");
       return;
     }
     startSaving(async () => {
@@ -1298,6 +1490,28 @@ function CircleSettings({
         description="Elegí qué querés saber y en qué momentos querés recibirlo."
       />
       <div className="mt-7 space-y-8 rounded-xl border border-border bg-surface/55 p-5 sm:p-7">
+        {showSystem ? (
+          <div className="rounded-xl border border-primary/20 bg-primary/[0.06] p-4">
+            <p className="text-sm font-semibold text-foreground">Los temas salen de El Norte</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted">
+              Ya no hace falta mantener dos listas. Tus frentes deciden qué entra en la edición.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {[...new Set(fronts.flatMap((front) => front.topics))].slice(0, 12).map((item) => (
+                <span key={item} className="rounded-full bg-surface-2 px-3 py-1.5 text-xs text-foreground">
+                  {item}
+                </span>
+              ))}
+              {fronts.length === 0 && (
+                <span className="text-xs text-warning">Todavía no definiste ningún frente.</span>
+              )}
+            </div>
+            <Button variant="secondary" onClick={onOpenNorth} className="mt-4">
+              <Compass size={16} />
+              {fronts.length === 0 ? "Definir mi Norte" : "Revisar mi Norte"}
+            </Button>
+          </div>
+        ) : (
         <div>
           <label htmlFor="circle-topic" className="text-sm font-semibold text-foreground">
             Temas de interés
@@ -1342,6 +1556,7 @@ function CircleSettings({
             ))}
           </div>
         </div>
+        )}
 
         <div>
           <p className="text-sm font-semibold text-foreground">

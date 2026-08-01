@@ -343,7 +343,7 @@ export type ActiveConfig = {
   whatsappNumber: string | null;
 };
 
-/** Configs activas con al menos un tema — base para los crones. */
+/** Configs activas con temas heredados o al menos un frente del Norte. */
 export async function getActiveConfigs(): Promise<ActiveConfig[]> {
   const rows = await prisma.newsletterConfig.findMany({
     where: { isActive: true },
@@ -361,11 +361,20 @@ export async function getActiveConfigs(): Promise<ActiveConfig[]> {
       notifyWhatsapp: true,
       discoveryLevel: true,
       briefLength: true,
-      user: { select: { whatsappNumber: true } },
+      user: {
+        select: {
+          whatsappNumber: true,
+          circleFronts: {
+            where: { isActive: true },
+            select: { id: true },
+            take: 1,
+          },
+        },
+      },
     },
   });
   return rows
-    .filter((r) => r.topics.length > 0)
+    .filter((r) => r.topics.length > 0 || (r.user?.circleFronts.length ?? 0) > 0)
     .map((r) => ({
       userId: r.userId,
       topics: r.topics,

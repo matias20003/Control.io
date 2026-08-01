@@ -1,8 +1,8 @@
 # Mi Círculo
 
-Documento de diseño. Define qué es la sección, por qué existe y en qué orden se
-construye. No describe código todavía: lo que hay implementado hoy vive en
-`app/(dashboard)/newsletter/` y `docs/MI_BRIEF.md`.
+Documento de diseño y estado. Define qué es la sección, por qué existe y cómo
+se sostiene en el producto. La implementación vive en
+`app/(dashboard)/newsletter/` y se complementa con `docs/MI_BRIEF.md`.
 
 ## Premisa
 
@@ -41,8 +41,9 @@ entre publicidad. Mirar una historia de 15 segundos es una simulación de víncu
 Círculo Cercano no tiene contenido. No hay posteos, ni fotos, ni estados. Hay
 nombres, cuánto hace que no hablás y un tap que abre la conversación.
 
-- Lista **finita**: 15 personas sugeridas, 20 como tope duro. El límite es parte
-  del producto, no una limitación técnica.
+- La lista puede crecer; el límite sano está en la **cadencia**, no en la
+  cantidad de personas. Cincuenta contactos con frecuencia de ocho semanas
+  piden menos de una charla por día.
 - Por persona: nombre, teléfono, cadencia deseada (cada 1, 2, 4, 8 o 12 semanas),
   última vez que hablaron y una nota corta sobre *la persona* — "le prometí el
   contacto del pintor" — nunca sobre la frecuencia.
@@ -53,8 +54,8 @@ nombres, cuánto hace que no hablás y un tap que abre la conversación.
 **Restricción dura:** Control.io no ve las conversaciones del usuario con
 terceros y nunca va a verlas. La integración de WhatsApp es usuario ↔ bot. Por lo
 tanto el contacto **se declara, no se detecta**: con un tap en la app, o
-respondiéndole al agente de WhatsApp cuando pregunta. Que sea un acto voluntario
-es mejor filosóficamente que la telemetría pasiva.
+declarándoselo al agente de WhatsApp (por ejemplo, “ya hablé con Mateo”). Que
+sea un acto voluntario es mejor filosóficamente que la telemetría pasiva.
 
 **Riesgo de diseño a vigilar:** esto puede sentirse como un CRM de amigos, frío e
 instrumental. Se mitiga con volumen bajo, tono humano y notas sobre la persona.
@@ -104,8 +105,9 @@ curaduría es mediocre, la premisa entera ("acá la información vale más") se 
 ### La Cosecha
 
 Consumir sin convertir es entretenimiento. Cada pieza tiene que poder volverse,
-en un tap, algo que ya vive en esta misma app: una tarea, un hábito, una nota en
-una meta, un movimiento. Los modelos `Task`, `Habit` y `Goal` ya existen.
+en un tap, algo que ya vive en esta misma app: una tarea, un hábito o una nota
+guardada contra un frente de El Norte. `Goal` es una meta financiera, por eso no
+se fuerza una pieza editorial dentro de ese modelo.
 
 Mi Círculo es la capa de entrada; hábitos y metas son la de salida. Un lector
 suelto no tiene eso, e Instagram tampoco.
@@ -215,9 +217,10 @@ tender a bajar. Cuando uno de esos abre un canal propio, la app avisa y se migra
 
 ## Estado
 
-Las cuatro fases están implementadas y desplegadas, detrás de dos flags en
-`testers`: `circuloCercanos` (la mitad gente) y `circuloSistema` (Referentes,
-Norte, Cosecha y Mudanza). Las dos migraciones están aplicadas.
+Las cuatro fases están implementadas detrás de dos flags en `testers`:
+`circuloCercanos` (la mitad gente) y `circuloSistema` (Referentes, Norte,
+Cosecha y Mudanza). Las dos migraciones están aplicadas. El perfil real de
+prueba tiene acceso a ambos flags.
 
 ### Motores puros (con tests)
 
@@ -249,11 +252,10 @@ Referentes, Noticias, Radar) de lo periódico (Norte, Cosecha, Mudanza).
 
 ### Lo que falta
 
-- **Nada de esto se ejercitó en el navegador con sesión iniciada.** Está
-  verificado por tests, tipos, lint y build, y el esquema fue comprobado contra
-  la base real — pero el recorrido de la interfaz no.
-- El registro de conversaciones por WhatsApp: hoy Cercanos sólo se declara
-  desde la app.
+- **Falta el recorrido visual con la sesión real del usuario.** El entorno de
+  prueba cubre los estados con datos realistas, pero la validación final de tono
+  y comportamiento —sobre todo si Cercanos se siente humano o como un CRM— sólo
+  ocurre usándolo.
 - La vieja ventana enfocada de Instagram (extensión de escritorio) sigue viva y
   accesible, ahora en la fila secundaria. Convive con el puente; en algún
   momento hay que decidir si se retira.

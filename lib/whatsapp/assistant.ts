@@ -60,6 +60,11 @@ import { createHabit, createOrganizationList, createOrganizationTask, toggleHabi
 import { prisma } from "@/lib/prisma";
 import { syncTaskToGoogle } from "@/lib/google-organization";
 import { decrypt } from "@/lib/crypto";
+import { getCircleContacts, recordCircleTouch } from "@/lib/db/circle";
+import {
+  extractDeclaredCircleContact,
+  matchDeclaredCircleContact,
+} from "@/lib/whatsapp/circle-touch";
 
 type Intent = "action" | "query" | "chat";
 
@@ -1398,6 +1403,36 @@ export async function handleUserMessage(userId: string, message: string, imageUr
     return reply;
   }
   const wantsConfirm = /^(confirmar|confirmo|si confirmar|si hacelo|si hacele|dale confirmar)$/.test(normalizedReply);
+
+  // Mi Circulo no lee chats privados. Solo registra una conversacion cuando
+  // el usuario la declara de forma explicita en su charla con el asistente.
+  const declaredCircleName = !imageUrl ? extractDeclaredCircleContact(clean) : null;
+  if (declaredCircleName) {
+    const isCircleTester = await getIsTester(userId).catch(() => false);
+    if (hasFeature("circuloCercanos", { isTester: isCircleTester })) {
+      const contacts = await getCircleContacts(userId).catch(() => []);
+      const match = matchDeclaredCircleContact(declaredCircleName, contacts);
+      let reply: string;
+
+      if (match.kind === "matched") {
+        await recordCircleTouch(userId, match.contact.id, new Date(), "WHATSAPP");
+        reply = `💬 Listo, registré que hablaste con *${match.contact.name}*. Tu círculo quedó al día.`;
+      } else if (match.kind === "ambiguous") {
+        reply = `Encontré más de una persona con ese nombre: ${match.contacts.map((contact) => `*${contact.name}*`).join(", ")}. Decime el nombre completo.`;
+      } else {
+        reply = `No encontré a *${match.declaredName}* en Cercanos. Agregalo primero desde *Mi Círculo → Cercanos* y después lo puedo registrar por acá.`;
+      }
+
+      await saveChatTurn(userId, clean, reply);
+      await recordAgentEvent({
+        userId,
+        event: "circle_touch_declared",
+        intent: match.kind === "matched" ? "action" : "query",
+        latencyMs: Date.now() - startedAt,
+      }).catch(() => {});
+      return reply;
+    }
+  }
 
   // Las cotizaciones son datos vivos: se contestan desde la misma fuente y caché
   // que usa la web, sin pedirle al LLM que recuerde o estime valores.

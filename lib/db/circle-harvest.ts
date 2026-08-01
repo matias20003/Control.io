@@ -185,7 +185,10 @@ export async function getHarvestReport(
   return {
     opened: openedCount,
     converted,
-    conversionRate: openedCount === 0 ? 0 : Math.round((converted / openedCount) * 100),
+    conversionRate:
+      openedCount === 0
+        ? 0
+        : Math.min(100, Math.round((converted / openedCount) * 100)),
     byOutcome,
     sources: yields.sort((a, b) => b.conversions - a.conversions),
     toPrune: yields.filter((item) => item.suggestPruning),

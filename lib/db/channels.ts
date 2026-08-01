@@ -8,6 +8,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { ResolvedChannel } from "@/lib/services/brief/channels";
+import type { SerializedBriefSource } from "@/lib/brief/types";
 
 export type SerializedChannel = {
   id: string;
@@ -97,6 +98,58 @@ export async function addChannel(
     select: CHANNEL_FIELDS,
   });
   return serializeChannel(row);
+}
+
+/**
+ * Alta completa de un referente por su obra: crea la fuente y su primer canal
+ * en una sola transacción. No necesita inventar un perfil social para poder
+ * existir dentro de Mi Círculo.
+ */
+export async function createReferenceWithChannel(
+  userId: string,
+  name: string,
+  channel: ResolvedChannel,
+): Promise<{ source: SerializedBriefSource; channel: SerializedChannel }> {
+  const normalizedKey = `channel:${channel.feedUrl.trim().toLowerCase().replace(/\/$/, "")}`;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const source = await tx.briefSource.create({
+      data: {
+        userId,
+        name: name.trim(),
+        sourceType: "PERSON",
+        category: "REFERENCE",
+        normalizedKey,
+        priority: false,
+      },
+    });
+    const createdChannel = await tx.sourceChannel.create({
+      data: {
+        sourceId: source.id,
+        kind: channel.kind,
+        siteUrl: channel.siteUrl,
+        feedUrl: channel.feedUrl,
+        title: channel.title,
+      },
+      select: CHANNEL_FIELDS,
+    });
+    return { source, channel: createdChannel };
+  });
+
+  return {
+    source: {
+      id: result.source.id,
+      name: result.source.name,
+      sourceType: result.source.sourceType,
+      category: "REFERENCE",
+      priority: result.source.priority,
+      isActive: result.source.isActive,
+      createdAt: result.source.createdAt.toISOString(),
+      updatedAt: result.source.updatedAt.toISOString(),
+      account: null,
+    },
+    channel: serializeChannel(result.channel),
+  };
 }
 
 export async function deleteChannel(userId: string, id: string): Promise<void> {

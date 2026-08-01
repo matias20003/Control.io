@@ -104,6 +104,24 @@ export default function CircleFixturePage() {
     metadata: { handle: "francopisso", author: "Franco Pisso" },
   };
 
+  const channel = {
+    id: "channel-item-1",
+    contentKey: "channel-item-1",
+    kind: "CHANNEL" as const,
+    sourceType: "YOUTUBE" as const,
+    sourceId: "source-1",
+    title: "Cómo diseñar ciudades que devuelvan tiempo",
+    summary:
+      "Una conversación sobre arquitectura, atención y decisiones que reducen fricción cotidiana.",
+    url: "https://example.com/referente",
+    topic: "Arquitectura",
+    publishedAt: now,
+    rank: 1,
+    section: "SOURCES" as const,
+    inclusionReason: "Aporta a tu frente Arquitecto con criterio.",
+    metadata: { source: "Franco Pisso", channelKind: "YOUTUBE" },
+  };
+
   const editions: SerializedEdition[] = [
     {
       id: "circle-today",
@@ -115,7 +133,7 @@ export default function CircleFixturePage() {
       reviewedCount: 1,
       createdAt: now,
       updatedAt: now,
-      items: [social, ...news],
+      items: [social, channel, ...news],
     },
   ];
 
@@ -136,6 +154,24 @@ export default function CircleFixturePage() {
         profileUrl: "https://www.instagram.com/francopisso/",
         status: "ACTIVE",
         lastSyncedAt: now,
+      },
+    },
+    {
+      id: "source-2",
+      name: "Lina Khan",
+      sourceType: "PERSON",
+      category: "REFERENCE",
+      priority: false,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+      account: {
+        id: "account-2",
+        platform: "INSTAGRAM",
+        handle: "linamkhan",
+        profileUrl: "https://www.instagram.com/linamkhan/",
+        status: "ACTIVE",
+        lastSyncedAt: null,
       },
     },
   ];
@@ -164,10 +200,85 @@ export default function CircleFixturePage() {
       initialEditions={editions}
       initialSources={sources}
       initialRadar={radar}
-      initialContacts={[]}
-      initialChannels={{}}
-      initialOrphans={[]}
-      initialFronts={[]}
+      initialContacts={[
+        {
+          id: "contact-1",
+          name: "Mateo",
+          phone: "5491155550101",
+          note: "Preguntarle cómo salió la entrega.",
+          tier: "CLOSE",
+          cadenceDays: 28,
+          lastContactAt: "2026-06-27T12:00:00.000Z",
+          createdAt: "2026-04-03T12:00:00.000Z",
+          daysSince: 35,
+          overdueDays: 7,
+          isDue: true,
+          neverContacted: false,
+        },
+        {
+          id: "contact-2",
+          name: "Sofi",
+          phone: "5491155550102",
+          note: "Contarle lo de Control.io.",
+          tier: "INTIMATE",
+          cadenceDays: 14,
+          lastContactAt: "2026-07-15T12:00:00.000Z",
+          createdAt: "2026-05-03T12:00:00.000Z",
+          daysSince: 17,
+          overdueDays: 3,
+          isDue: true,
+          neverContacted: false,
+        },
+        {
+          id: "contact-3",
+          name: "Juli",
+          phone: null,
+          note: null,
+          tier: "ORBIT",
+          cadenceDays: 84,
+          lastContactAt: "2026-07-20T12:00:00.000Z",
+          createdAt: "2026-02-02T12:00:00.000Z",
+          daysSince: 12,
+          overdueDays: -72,
+          isDue: false,
+          neverContacted: false,
+        },
+      ]}
+      initialChannels={{
+        "source-1": [
+          {
+            id: "channel-1",
+            sourceId: "source-1",
+            kind: "YOUTUBE",
+            siteUrl: "https://www.youtube.com/@francopisso",
+            feedUrl: "https://www.youtube.com/feeds/videos.xml?channel_id=fixture",
+            title: "Franco Pisso",
+            status: "ACTIVE",
+            lastError: null,
+            lastFetchedAt: now,
+          },
+        ],
+      }}
+      initialFronts={[
+        {
+          id: "front-1",
+          label: "Arquitecto con criterio",
+          detail: "Tomar mejores decisiones de diseño y explicar por qué.",
+          topics: ["arquitectura", "diseño urbano", "materiales"],
+          position: 0,
+          reviewedAt: now,
+          createdAt: "2026-06-22T12:00:00.000Z",
+        },
+        {
+          id: "front-2",
+          label: "Constructor de productos",
+          detail: "Convertir problemas reales en software simple.",
+          topics: ["inteligencia artificial", "producto digital", "SaaS"],
+          position: 1,
+          reviewedAt: now,
+          createdAt: "2026-06-22T12:00:00.000Z",
+        },
+      ]}
       initialMigration={{
         stage: "INVENTORY",
         inventoryUploadedAt: null,
@@ -177,27 +288,70 @@ export default function CircleFixturePage() {
         daysWithout: null,
         coexistDays: null,
       }}
-      initialInventory={[]}
-      initialChecklist={{
-        peopleWithPhone: 0,
-        peopleTotal: 0,
-        referencesWithChannel: 0,
-        referencesTotal: 0,
-        pendingInventory: 0,
-        ready: false,
-        blockers: [],
-      }}
+      initialInventory={[
+        {
+          id: "inventory-1",
+          handle: "amigo.real",
+          fullName: "Amigo Real",
+          decision: "PENDING",
+          resolvedType: null,
+          resolvedId: null,
+        },
+        {
+          id: "inventory-2",
+          handle: "referente.util",
+          fullName: "Referente Útil",
+          decision: "REFERENCE",
+          resolvedType: "SOURCE",
+          resolvedId: "source-1",
+        },
+        {
+          id: "inventory-3",
+          handle: "ruido.diario",
+          fullName: null,
+          decision: "NOISE",
+          resolvedType: null,
+          resolvedId: null,
+        },
+      ]}
       initialHarvest={{
-        opened: 0,
-        converted: 0,
-        conversionRate: 0,
-        byOutcome: { task: 0, habit: 0, note: 0 },
-        sources: [],
-        toPrune: [],
+        opened: 12,
+        converted: 4,
+        conversionRate: 33,
+        byOutcome: { task: 2, habit: 1, note: 1 },
+        sources: [
+          {
+            sourceId: "source-1",
+            name: "Franco Pisso",
+            conversions: 4,
+            lastConversionAt: now,
+            daysSinceLastConversion: 0,
+            suggestPruning: false,
+          },
+          {
+            sourceId: "source-2",
+            name: "Lina Khan",
+            conversions: 0,
+            lastConversionAt: null,
+            daysSinceLastConversion: null,
+            suggestPruning: true,
+          },
+        ],
+        toPrune: [
+          {
+            sourceId: "source-2",
+            name: "Lina Khan",
+            conversions: 0,
+            lastConversionAt: null,
+            daysSinceLastConversion: null,
+            suggestPruning: true,
+          },
+        ],
       }}
+      initialHarvestedUrls={["https://example.com/economia"]}
       northNeedsReview={false}
-      showCercanos={false}
-      showSystem={false}
+      showCercanos
+      showSystem
     />
   );
 }

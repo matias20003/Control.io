@@ -9,11 +9,10 @@ import {
 } from "@/lib/db/brief";
 import { ensureDailyTrendsForUser } from "@/lib/services/brief/radar";
 import { getCircleContacts } from "@/lib/db/circle";
-import { getChannelsBySource, getOrphanSources } from "@/lib/db/channels";
+import { getChannelsBySource } from "@/lib/db/channels";
 import { getFronts } from "@/lib/db/circle-north";
-import { getHarvestReport } from "@/lib/db/circle-harvest";
+import { getHarvestedUrls, getHarvestReport } from "@/lib/db/circle-harvest";
 import {
-  getCutChecklist,
   getInventory,
   getMigration,
 } from "@/lib/db/circle-migration";
@@ -63,25 +62,23 @@ export default async function NewsletterPage() {
   ]);
 
   // Todo lo del sistema nuevo se carga sólo si la feature está prendida: sin
-  // esto serían siete consultas de más en cada visita.
-  const [channelsMap, orphans, fronts, migration, inventory, checklist, harvest] =
+  // esto serían seis consultas de más en cada visita.
+  const harvestSince = hace30Dias();
+  const [channelsMap, fronts, migration, inventory, harvest, harvestedUrls] =
     showSystem
       ? await Promise.all([
           getChannelsBySource(user.id),
-          getOrphanSources(user.id),
           getFronts(user.id),
           getMigration(user.id),
           getInventory(user.id),
-          getCutChecklist(user.id),
-          getHarvestReport(user.id, hace30Dias()),
+          getHarvestReport(user.id, harvestSince),
+          getHarvestedUrls(user.id, harvestSince),
         ])
       : [
           new Map(),
           [],
-          [],
           await getMigration(user.id),
           [],
-          await getCutChecklist(user.id),
           {
             opened: 0,
             converted: 0,
@@ -90,6 +87,7 @@ export default async function NewsletterPage() {
             sources: [],
             toPrune: [],
           },
+          new Set<string>(),
         ];
 
   const needsReview =
@@ -108,12 +106,11 @@ export default async function NewsletterPage() {
       initialRadar={radar}
       initialContacts={contacts}
       initialChannels={Object.fromEntries(channelsMap)}
-      initialOrphans={orphans}
       initialFronts={fronts}
       initialMigration={migration}
       initialInventory={inventory}
-      initialChecklist={checklist}
       initialHarvest={harvest}
+      initialHarvestedUrls={[...harvestedUrls]}
       northNeedsReview={needsReview}
       showCercanos={showCercanos}
       showSystem={showSystem}

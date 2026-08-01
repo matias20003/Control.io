@@ -24,6 +24,8 @@ import type {
   SerializedInventoryItem,
   SerializedMigration,
 } from "@/lib/db/circle-migration";
+import type { CircleContact } from "@/lib/db/circle";
+import type { SerializedBriefSource } from "@/lib/brief/types";
 import {
   MIGRATION_STAGES,
   STAGE_DESCRIPTIONS,
@@ -40,12 +42,16 @@ export function MudanzaView({
   checklist,
   onMigrationChange,
   onInventoryChange,
+  onContactAdded,
+  onSourceAdded,
 }: {
   migration: SerializedMigration;
   inventory: SerializedInventoryItem[];
   checklist: CutChecklist;
   onMigrationChange: (next: SerializedMigration) => void;
   onInventoryChange: (next: SerializedInventoryItem[]) => void;
+  onContactAdded: (contact: CircleContact) => void;
+  onSourceAdded: (source: SerializedBriefSource) => void;
 }) {
   return (
     <section className="mt-7">
@@ -62,6 +68,8 @@ export function MudanzaView({
           inventory={inventory}
           uploadedAt={migration.inventoryUploadedAt}
           onInventoryChange={onInventoryChange}
+          onContactAdded={onContactAdded}
+          onSourceAdded={onSourceAdded}
         />
       )}
       {migration.stage === "REPLACE" && <ReplaceStage checklist={checklist} />}
@@ -152,10 +160,14 @@ function InventoryStage({
   inventory,
   uploadedAt,
   onInventoryChange,
+  onContactAdded,
+  onSourceAdded,
 }: {
   inventory: SerializedInventoryItem[];
   uploadedAt: string | null;
   onInventoryChange: (next: SerializedInventoryItem[]) => void;
+  onContactAdded: (contact: CircleContact) => void;
+  onSourceAdded: (source: SerializedBriefSource) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isImporting, startImporting] = useTransition();
@@ -281,6 +293,8 @@ function InventoryStage({
                   inventory.map((row) => (row.id === updated.id ? updated : row)),
                 )
               }
+              onContactAdded={onContactAdded}
+              onSourceAdded={onSourceAdded}
             />
           ))}
 
@@ -302,9 +316,13 @@ function InventoryStage({
 function InventoryRow({
   item,
   onDecided,
+  onContactAdded,
+  onSourceAdded,
 }: {
   item: SerializedInventoryItem;
   onDecided: (updated: SerializedInventoryItem) => void;
+  onContactAdded: (contact: CircleContact) => void;
+  onSourceAdded: (source: SerializedBriefSource) => void;
 }) {
   const [isPending, startPending] = useTransition();
 
@@ -316,6 +334,8 @@ function InventoryRow({
         return;
       }
       onDecided(result.inventoryItem);
+      if (result.contact) onContactAdded(result.contact);
+      if (result.source) onSourceAdded(result.source);
     });
   };
 

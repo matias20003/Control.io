@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   closeBridgeVisitAction,
+  createReferenceAction,
   deleteChannelAction,
   openBridgeVisitAction,
   resolveChannelAction,
@@ -24,14 +25,6 @@ import {
 import type { SerializedChannel } from "@/lib/db/channels";
 import type { SerializedBriefSource } from "@/lib/brief/types";
 import { SectionHeading, QuietEmpty } from "./CircleUI";
-
-export type OrphanSource = {
-  id: string;
-  name: string;
-  platform: string | null;
-  handle: string | null;
-  profileUrl: string | null;
-};
 
 const KIND_ICONS: Record<string, typeof Rss> = {
   YOUTUBE: MonitorPlay,
@@ -52,16 +45,17 @@ const KIND_LABELS: Record<string, string> = {
 export function ReferentesView({
   sources,
   channels,
-  orphans,
+  onSourcesChange,
   onChannelsChange,
 }: {
   sources: SerializedBriefSource[];
   channels: Record<string, SerializedChannel[]>;
-  orphans: OrphanSource[];
+  onSourcesChange: (next: SerializedBriefSource[]) => void;
   onChannelsChange: (next: Record<string, SerializedChannel[]>) => void;
 }) {
   const referentes = sources.filter((source) => source.category !== "CLOSE");
   const conCanal = referentes.filter((source) => (channels[source.id] ?? []).length > 0);
+  const orphanCount = referentes.length - conCanal.length;
   const percent =
     referentes.length === 0
       ? 0
@@ -97,10 +91,10 @@ export function ReferentesView({
               style={{ width: `${percent}%` }}
             />
           </div>
-          {orphans.length > 0 && (
+          {orphanCount > 0 && (
             <p className="mt-3 text-xs leading-relaxed text-muted">
-              {orphans.length}{" "}
-              {orphans.length === 1
+              {orphanCount}{" "}
+              {orphanCount === 1
                 ? "referente te obliga"
                 : "referentes te obligan"}{" "}
               a entrar a una plataforma cerrada. Ese número tiene que bajar.
@@ -108,6 +102,16 @@ export function ReferentesView({
           )}
         </div>
       )}
+
+      <AddReferenceForm
+        onCreated={(source, channel) => {
+          onSourcesChange([...sources, source]);
+          onChannelsChange({
+            ...channels,
+            [source.id]: channel ? [channel] : [],
+          });
+        }}
+      />
 
       <div className="mt-6 space-y-3">
         {referentes.map((source) => (
@@ -127,6 +131,71 @@ export function ReferentesView({
         )}
       </div>
     </section>
+  );
+}
+
+function AddReferenceForm({
+  onCreated,
+}: {
+  onCreated: (source: SerializedBriefSource, channel: SerializedChannel | null) => void;
+}) {
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [isAdding, startAdding] = useTransition();
+
+  const add = () => {
+    if (!name.trim() || !url.trim()) return;
+    startAdding(async () => {
+      const result = await createReferenceAction({ name, url });
+      if (!result.ok || !result.source) {
+        toast.error(result.error ?? "No pudimos agregar ese referente.");
+        return;
+      }
+      onCreated(result.source, result.channel ?? null);
+      setName("");
+      setUrl("");
+      if (result.orphan) {
+        toast.warning(
+          `${result.source.name} quedó como huérfano: ${result.error ?? "no tiene un canal abierto"}`,
+        );
+      } else {
+        toast.success(`${result.source.name} ya vive en Control.io.`);
+      }
+    });
+  };
+
+  return (
+    <div className="mt-6 rounded-xl border border-border bg-surface/60 p-5">
+      <p className="text-sm font-semibold text-foreground">Sumar un referente</p>
+      <p className="mt-1 text-xs leading-relaxed text-muted">
+        No necesitamos su @. Pegá el lugar donde publica la obra que te sirve:
+        YouTube, podcast, newsletter o blog.
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-[0.7fr_1.3fr_auto]">
+        <Input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Nombre"
+          aria-label="Nombre del referente"
+        />
+        <Input
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              add();
+            }
+          }}
+          placeholder="https://youtube.com/@canal o su newsletter"
+          aria-label="Canal del referente"
+        />
+        <Button onClick={add} disabled={isAdding || !name.trim() || !url.trim()}>
+          {isAdding ? <Loader2 size={16} className="animate-spin" /> : <Link2 size={16} />}
+          Agregar
+        </Button>
+      </div>
+    </div>
   );
 }
 

@@ -11,10 +11,14 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveChannel } from "@/lib/services/brief/channels";
 import {
   addChannel,
+  createReferenceWithChannel,
   deleteChannel,
   getChannelCoverage,
   type SerializedChannel,
 } from "@/lib/db/channels";
+import { createBriefSource } from "@/lib/db/brief";
+import type { SerializedBriefSource } from "@/lib/brief/types";
+import type { CircleContact } from "@/lib/db/circle";
 import {
   createFront,
   deleteFront,
@@ -60,6 +64,8 @@ export type CircleSystemResult = {
   ok?: boolean;
   error?: string;
   channel?: SerializedChannel;
+  source?: SerializedBriefSource;
+  contact?: CircleContact;
   front?: SerializedFront;
   migration?: SerializedMigration;
   inventoryItem?: SerializedInventoryItem;
@@ -81,6 +87,51 @@ function fail(error: unknown, fallback: string): CircleSystemResult {
  * no tiene un canal abierto, se responde `orphan: true` — que no es un error,
  * es información honesta y alimenta el contador del puente.
  */
+const referenceSchema = z.object({
+  name: z.string().trim().min(1, "Pone un nombre para reconocerlo.").max(100),
+  url: z.string().trim().min(1, "Pega donde publica lo que te sirve.").max(500),
+});
+
+/** Alta nombre + canal. Las plataformas cerradas quedan como huerfanas. */
+export async function createReferenceAction(
+  input: z.input<typeof referenceSchema>,
+): Promise<CircleSystemResult> {
+  try {
+    const parsed = referenceSchema.parse(input);
+    const uid = await userId();
+    const resolution = await resolveChannel(parsed.url);
+
+    if (resolution.ok) {
+      const created = await createReferenceWithChannel(
+        uid,
+        parsed.name,
+        resolution.channel,
+      );
+      revalidatePath(ROUTE);
+      return { ok: true, source: created.source, channel: created.channel };
+    }
+
+    if (!resolution.orphan) return { ok: false, error: resolution.reason };
+
+    const source = await createBriefSource(uid, {
+      name: parsed.name,
+      platform: "WEB",
+      handleOrUrl: parsed.url,
+      category: "REFERENCE",
+      priority: false,
+    });
+    revalidatePath(ROUTE);
+    return {
+      ok: true,
+      orphan: true,
+      error: resolution.reason,
+      source,
+    };
+  } catch (error) {
+    return fail(error, "No pudimos agregar ese referente.");
+  }
+}
+
 export async function resolveChannelAction(
   sourceId: string,
   url: string,
@@ -274,13 +325,18 @@ export async function decideInventoryItemAction(
     if (!INVENTORY_DECISIONS.includes(decision as InventoryDecision)) {
       throw new Error("Decisión inválida");
     }
-    const inventoryItem = await decideInventoryItem(
+    const result = await decideInventoryItem(
       await userId(),
       id,
       decision as InventoryDecision,
     );
     revalidatePath(ROUTE);
-    return { ok: true, inventoryItem };
+    return {
+      ok: true,
+      inventoryItem: result.inventoryItem,
+      contact: result.contact,
+      source: result.source,
+    };
   } catch (error) {
     return fail(error, "No pudimos guardar esa decisión.");
   }

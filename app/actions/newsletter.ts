@@ -107,9 +107,6 @@ export async function generateNewsletterNowAction() {
   if (!user) return { error: "No autorizado" };
 
   const config = await getConfig(user.id);
-  if (config.topics.length === 0) {
-    return { error: "Agregá al menos un tema antes de generar." };
-  }
 
   try {
     const result = await generateEditionForUser(user.id, {
@@ -127,7 +124,10 @@ export async function generateNewsletterNowAction() {
       usedAI: result.usedAI,
       count: result.count,
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === "Sin temas configurados") {
+      return { error: "Definí al menos un frente en El Norte antes de actualizar." };
+    }
     return { error: "No se pudieron traer noticias en este momento." };
   }
 }

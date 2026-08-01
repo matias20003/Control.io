@@ -7,6 +7,9 @@
 
 import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
+import { serializeCircleContact, type CircleContact } from "@/lib/db/circle";
+import { normalizeSocialSource } from "@/lib/brief/source-normalization";
+import type { SerializedBriefSource } from "@/lib/brief/types";
 import {
   cutChecklist,
   inventoryProgress,
@@ -110,6 +113,12 @@ export type SerializedInventoryItem = {
   resolvedId: string | null;
 };
 
+export type InventoryDecisionResult = {
+  inventoryItem: SerializedInventoryItem;
+  contact?: CircleContact;
+  source?: SerializedBriefSource;
+};
+
 export async function getInventory(
   userId: string,
   opts: { decision?: InventoryDecision; take?: number } = {},
@@ -170,30 +179,125 @@ export async function decideInventoryItem(
   userId: string,
   id: string,
   decision: InventoryDecision,
-  resolved?: { type: "CONTACT" | "SOURCE"; id: string },
-): Promise<SerializedInventoryItem> {
-  const found = await prisma.circleInventoryItem.findFirst({
-    where: { id, userId },
-    select: { id: true },
-  });
-  if (!found) throw new Error("Cuenta no encontrada en el inventario");
+): Promise<InventoryDecisionResult> {
+  const result = await prisma.$transaction(async (tx) => {
+    const found = await tx.circleInventoryItem.findFirst({
+      where: { id, userId },
+      select: {
+        id: true,
+        handle: true,
+        fullName: true,
+        decision: true,
+        resolvedType: true,
+        resolvedId: true,
+      },
+    });
+    if (!found) throw new Error("Cuenta no encontrada en el inventario");
 
-  return prisma.circleInventoryItem.update({
-    where: { id },
-    data: {
-      decision,
-      resolvedType: resolved?.type ?? null,
-      resolvedId: resolved?.id ?? null,
-    },
-    select: {
-      id: true,
-      handle: true,
-      fullName: true,
-      decision: true,
-      resolvedType: true,
-      resolvedId: true,
-    },
+    // Una respuesta perdida no puede crear dos personas o dos referentes.
+    if (found.decision !== "PENDING") return { inventoryItem: found };
+
+    let contactRow = null;
+    let sourceRow = null;
+    let resolvedType: "CONTACT" | "SOURCE" | null = null;
+    let resolvedId: string | null = null;
+
+    if (decision === "PERSON") {
+      const name = found.fullName?.trim() || `@${found.handle}`;
+      contactRow = await tx.circleContact.create({
+        data: {
+          userId,
+          name: encrypt(name) ?? name,
+          phone: null,
+          note: null,
+          tier: "CLOSE",
+          cadenceDays: 28,
+        },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          note: true,
+          tier: true,
+          cadenceDays: true,
+          lastContactAt: true,
+          createdAt: true,
+        },
+      });
+      resolvedType = "CONTACT";
+      resolvedId = contactRow.id;
+    } else if (decision === "REFERENCE") {
+      const normalized = normalizeSocialSource(found.handle, "INSTAGRAM");
+      if (!normalized) throw new Error("El usuario de Instagram no es valido");
+      sourceRow = await tx.briefSource.upsert({
+        where: {
+          userId_normalizedKey: { userId, normalizedKey: normalized.normalizedKey },
+        },
+        create: {
+          userId,
+          name: found.fullName?.trim() || `@${found.handle}`,
+          sourceType: "PERSON",
+          category: "REFERENCE",
+          normalizedKey: normalized.normalizedKey,
+          priority: false,
+          socialAccounts: {
+            create: {
+              platform: normalized.platform,
+              handle: normalized.handle,
+              profileUrl: normalized.profileUrl,
+            },
+          },
+        },
+        update: { isActive: true, category: "REFERENCE" },
+        include: { socialAccounts: { orderBy: { createdAt: "asc" }, take: 1 } },
+      });
+      resolvedType = "SOURCE";
+      resolvedId = sourceRow.id;
+    }
+
+    const inventoryItem = await tx.circleInventoryItem.update({
+      where: { id },
+      data: { decision, resolvedType, resolvedId },
+      select: {
+        id: true,
+        handle: true,
+        fullName: true,
+        decision: true,
+        resolvedType: true,
+        resolvedId: true,
+      },
+    });
+    return { inventoryItem, contactRow, sourceRow };
   });
+
+  const output: InventoryDecisionResult = { inventoryItem: result.inventoryItem };
+  if ("contactRow" in result && result.contactRow) {
+    output.contact = serializeCircleContact(result.contactRow, new Date());
+  }
+  if ("sourceRow" in result && result.sourceRow) {
+    const account = result.sourceRow.socialAccounts[0] ?? null;
+    output.source = {
+      id: result.sourceRow.id,
+      name: result.sourceRow.name,
+      sourceType: result.sourceRow.sourceType,
+      category: "REFERENCE",
+      priority: result.sourceRow.priority,
+      isActive: result.sourceRow.isActive,
+      createdAt: result.sourceRow.createdAt.toISOString(),
+      updatedAt: result.sourceRow.updatedAt.toISOString(),
+      account: account
+        ? {
+            id: account.id,
+            platform: account.platform as "INSTAGRAM",
+            handle: account.handle,
+            profileUrl: account.profileUrl,
+            status: account.status,
+            lastSyncedAt: account.lastSyncedAt?.toISOString() ?? null,
+          }
+        : null,
+    };
+  }
+  return output;
 }
 
 export async function getInventoryProgress(userId: string): Promise<InventoryProgress> {
