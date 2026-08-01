@@ -9,6 +9,15 @@ import {
 } from "@/lib/db/brief";
 import { ensureDailyTrendsForUser } from "@/lib/services/brief/radar";
 import { getCircleContacts } from "@/lib/db/circle";
+import { getChannelsBySource, getOrphanSources } from "@/lib/db/channels";
+import { getFronts } from "@/lib/db/circle-north";
+import { getHarvestReport } from "@/lib/db/circle-harvest";
+import {
+  getCutChecklist,
+  getInventory,
+  getMigration,
+} from "@/lib/db/circle-migration";
+import { northNeedsReview } from "@/lib/circle-north";
 import { hasFeature } from "@/lib/feature-flags";
 import { prisma } from "@/lib/prisma";
 
@@ -17,6 +26,11 @@ export const metadata: Metadata = { title: "Mi Círculo" };
 // "Generar ahora" puede esperar a un modelo free lento (hasta ~20s). Damos
 // margen para que la server action no corte antes de tiempo.
 export const maxDuration = 60;
+
+/** El informe de La Cosecha mira los últimos 30 días. */
+function hace30Dias(): Date {
+  return new Date(Date.now() - 30 * 86_400_000);
+}
 
 export default async function NewsletterPage() {
   const supabase = await createClient();
@@ -32,17 +46,59 @@ export default async function NewsletterPage() {
   }).catch(() => {
     // Radar es secundario: una fuente externa nunca bloquea la lectura del Brief.
   });
-  const [editions, sources, radar, profile, contacts] = await Promise.all([
+
+  const profile = await prisma.profile.findUnique({
+    where: { id: user.id },
+    select: { isTester: true },
+  });
+  const isTester = profile?.isTester ?? false;
+  const showCercanos = hasFeature("circuloCercanos", { isTester });
+  const showSystem = hasFeature("circuloSistema", { isTester });
+
+  const [editions, sources, radar, contacts] = await Promise.all([
     getEditions(user.id, 30),
     getBriefSources(user.id),
     getDailyTrendCandidates(user.id),
-    prisma.profile.findUnique({ where: { id: user.id }, select: { isTester: true } }),
-    getCircleContacts(user.id),
+    showCercanos ? getCircleContacts(user.id) : Promise.resolve([]),
   ]);
 
-  const showCercanos = hasFeature("circuloCercanos", {
-    isTester: profile?.isTester ?? false,
-  });
+  // Todo lo del sistema nuevo se carga sólo si la feature está prendida: sin
+  // esto serían siete consultas de más en cada visita.
+  const [channelsMap, orphans, fronts, migration, inventory, checklist, harvest] =
+    showSystem
+      ? await Promise.all([
+          getChannelsBySource(user.id),
+          getOrphanSources(user.id),
+          getFronts(user.id),
+          getMigration(user.id),
+          getInventory(user.id),
+          getCutChecklist(user.id),
+          getHarvestReport(user.id, hace30Dias()),
+        ])
+      : [
+          new Map(),
+          [],
+          [],
+          await getMigration(user.id),
+          [],
+          await getCutChecklist(user.id),
+          {
+            opened: 0,
+            converted: 0,
+            conversionRate: 0,
+            byOutcome: { task: 0, habit: 0, note: 0 },
+            sources: [],
+            toPrune: [],
+          },
+        ];
+
+  const needsReview =
+    fronts.length > 0 &&
+    northNeedsReview(
+      fronts[0].reviewedAt ? new Date(fronts[0].reviewedAt) : null,
+      new Date(fronts[0].createdAt),
+      new Date(),
+    );
 
   return (
     <MyCircleClient
@@ -50,8 +106,17 @@ export default async function NewsletterPage() {
       initialEditions={editions}
       initialSources={sources}
       initialRadar={radar}
-      initialContacts={showCercanos ? contacts : []}
+      initialContacts={contacts}
+      initialChannels={Object.fromEntries(channelsMap)}
+      initialOrphans={orphans}
+      initialFronts={fronts}
+      initialMigration={migration}
+      initialInventory={inventory}
+      initialChecklist={checklist}
+      initialHarvest={harvest}
+      northNeedsReview={needsReview}
       showCercanos={showCercanos}
+      showSystem={showSystem}
     />
   );
 }

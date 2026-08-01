@@ -165,7 +165,39 @@ export default function CircleFixturePage() {
       initialSources={sources}
       initialRadar={radar}
       initialContacts={[]}
+      initialChannels={{}}
+      initialOrphans={[]}
+      initialFronts={[]}
+      initialMigration={{
+        stage: "INVENTORY",
+        inventoryUploadedAt: null,
+        coexistStartedAt: null,
+        uninstalledAt: null,
+        reinstalledAt: null,
+        daysWithout: null,
+        coexistDays: null,
+      }}
+      initialInventory={[]}
+      initialChecklist={{
+        peopleWithPhone: 0,
+        peopleTotal: 0,
+        referencesWithChannel: 0,
+        referencesTotal: 0,
+        pendingInventory: 0,
+        ready: false,
+        blockers: [],
+      }}
+      initialHarvest={{
+        opened: 0,
+        converted: 0,
+        conversionRate: 0,
+        byOutcome: { task: 0, habit: 0, note: 0 },
+        sources: [],
+        toPrune: [],
+      }}
+      northNeedsReview={false}
       showCercanos={false}
+      showSystem={false}
     />
   );
 }

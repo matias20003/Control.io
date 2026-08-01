@@ -5,16 +5,19 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock3,
+  Compass,
   ExternalLink,
   Camera as Instagram,
   Loader2,
   MessageCircle,
   Newspaper,
+  PackageOpen,
   Plus,
   Radar,
   RefreshCw,
   Settings2,
   ShieldCheck,
+  Sprout,
   Trash2,
   UsersRound,
   X,
@@ -39,16 +42,33 @@ import type {
   SerializedDiscoveryCandidate,
 } from "@/lib/brief/types";
 import type { CircleContact } from "@/lib/db/circle";
+import type { SerializedChannel } from "@/lib/db/channels";
+import type { SerializedFront } from "@/lib/db/circle-north";
+import type { HarvestReport } from "@/lib/db/circle-harvest";
+import type {
+  SerializedInventoryItem,
+  SerializedMigration,
+} from "@/lib/db/circle-migration";
+import type { CutChecklist } from "@/lib/circle-inventory";
 import { rankDueContacts, sinceLabel } from "@/lib/circle-cadence";
+import { harvestItemAction } from "@/app/actions/circle-system";
 import { CercanosView } from "./CercanosView";
+import { CosechaView, HarvestButtons } from "./CosechaView";
+import { ReferentesView, type OrphanSource } from "./ReferentesView";
+import { NorteView } from "./NorteView";
+import { MudanzaView } from "./MudanzaView";
 import { SectionHeading, QuietEmpty } from "./CircleUI";
 
 type CircleSection =
   | "home"
   | "cercanos"
+  | "referentes"
   | "instagram"
   | "news"
   | "radar"
+  | "norte"
+  | "cosecha"
+  | "mudanza"
   | "settings";
 
 type Props = {
@@ -57,9 +77,19 @@ type Props = {
   initialSources: SerializedBriefSource[];
   initialRadar: SerializedDiscoveryCandidate[];
   initialContacts: CircleContact[];
+  initialChannels: Record<string, SerializedChannel[]>;
+  initialOrphans: OrphanSource[];
+  initialFronts: SerializedFront[];
+  initialMigration: SerializedMigration;
+  initialInventory: SerializedInventoryItem[];
+  initialChecklist: CutChecklist;
+  initialHarvest: HarvestReport;
+  northNeedsReview: boolean;
   showCercanos: boolean;
+  showSystem: boolean;
 };
 
+/** Lo de todos los días. */
 const SECTION_LINKS = [
   {
     id: "cercanos" as const,
@@ -68,9 +98,9 @@ const SECTION_LINKS = [
     icon: UsersRound,
   },
   {
-    id: "instagram" as const,
+    id: "referentes" as const,
     label: "Referentes",
-    description: "Perfiles elegidos, con acceso limitado",
+    description: "Su obra, traída a Control.io",
     icon: Instagram,
   },
   {
@@ -85,6 +115,14 @@ const SECTION_LINKS = [
     description: "Los temas que están en auge hoy",
     icon: Radar,
   },
+];
+
+/** Lo que se mira cada tanto, no todos los días. */
+const SECONDARY_LINKS = [
+  { id: "norte" as const, label: "El Norte", icon: Compass },
+  { id: "cosecha" as const, label: "La Cosecha", icon: Sprout },
+  { id: "mudanza" as const, label: "La Mudanza", icon: PackageOpen },
+  { id: "instagram" as const, label: "Ventana enfocada", icon: Clock3 },
 ];
 
 function metadataText(
@@ -194,18 +232,34 @@ export function MyCircleClient({
   initialSources,
   initialRadar,
   initialContacts,
+  initialChannels,
+  initialOrphans,
+  initialFronts,
+  initialMigration,
+  initialInventory,
+  initialChecklist,
+  initialHarvest,
+  northNeedsReview,
   showCercanos,
+  showSystem,
 }: Props) {
   const [section, setSection] = useState<CircleSection>("home");
   const [config, setConfig] = useState(initialConfig);
   const [editions, setEditions] = useState(initialEditions);
   const [sources, setSources] = useState(initialSources);
   const [contacts, setContacts] = useState(initialContacts);
+  const [channels, setChannels] = useState(initialChannels);
+  const [fronts, setFronts] = useState(initialFronts);
+  const [migration, setMigration] = useState(initialMigration);
+  const [inventory, setInventory] = useState(initialInventory);
+  const [harvest, setHarvest] = useState(initialHarvest);
+  const [harvested, setHarvested] = useState<Set<string>>(() => new Set());
   const [isGenerating, startGenerating] = useTransition();
 
   const edition = editions[0] ?? null;
   const items = edition?.items ?? [];
   const newsItems = items.filter((item) => item.kind === "NEWS");
+  const channelItems = items.filter((item) => item.kind === "CHANNEL");
   const instagramSources = sources.filter(
     (source) => source.account?.platform === "INSTAGRAM"
   );
@@ -238,6 +292,36 @@ export function MyCircleClient({
       recordBriefItemOpenedAction(edition.id, item.url).catch(() => {});
     }
     window.open(item.url, "_blank", "noopener,noreferrer");
+  };
+
+  /**
+   * La Cosecha: convertir una pieza en algo que vive en la app. Se marca al
+   * instante en el cliente porque el informe completo lo recalcula el server en
+   * la próxima carga.
+   */
+  const harvestItem = async (
+    item: SerializedBriefItem,
+    outcome: "TASK" | "HABIT" | "NOTE",
+  ) => {
+    const result = await harvestItemAction({
+      itemTitle: item.title,
+      itemUrl: item.url,
+      sourceId: item.sourceId,
+      frontId: null,
+      outcome,
+    });
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    setHarvested((current) => new Set(current).add(item.url));
+    toast.success(
+      outcome === "TASK"
+        ? "Quedó como tarea."
+        : outcome === "HABIT"
+          ? "Quedó como hábito."
+          : "Guardado.",
+    );
   };
 
   return (
@@ -286,12 +370,50 @@ export function MyCircleClient({
           radar={initialRadar}
           contacts={contacts}
           showCercanos={showCercanos}
+          showSystem={showSystem}
           onSection={setSection}
           onOpenItem={openItem}
         />
       )}
       {section === "cercanos" && showCercanos && (
         <CercanosView contacts={contacts} onContactsChange={setContacts} />
+      )}
+      {section === "referentes" && showSystem && (
+        <ReferentesView
+          sources={sources}
+          channels={channels}
+          orphans={initialOrphans}
+          onChannelsChange={setChannels}
+        />
+      )}
+      {section === "norte" && showSystem && (
+        <NorteView
+          fronts={fronts}
+          needsReview={northNeedsReview}
+          onFrontsChange={setFronts}
+        />
+      )}
+      {section === "cosecha" && showSystem && (
+        <CosechaView
+          report={harvest}
+          onSourcePruned={(sourceId) => {
+            setSources((current) => current.filter((item) => item.id !== sourceId));
+            setHarvest((current) => ({
+              ...current,
+              sources: current.sources.filter((item) => item.sourceId !== sourceId),
+              toPrune: current.toPrune.filter((item) => item.sourceId !== sourceId),
+            }));
+          }}
+        />
+      )}
+      {section === "mudanza" && showSystem && (
+        <MudanzaView
+          migration={migration}
+          inventory={inventory}
+          checklist={initialChecklist}
+          onMigrationChange={setMigration}
+          onInventoryChange={setInventory}
+        />
       )}
       {section === "instagram" && (
         <InstagramView
@@ -308,7 +430,14 @@ export function MyCircleClient({
         />
       )}
       {section === "news" && (
-        <NewsView items={newsItems} onOpenItem={openItem} />
+        <NewsView
+          items={newsItems}
+          channelItems={channelItems}
+          onOpenItem={openItem}
+          onHarvest={harvestItem}
+          harvested={harvested}
+          showHarvest={showSystem}
+        />
       )}
       {section === "radar" && (
         <RadarView radar={initialRadar} />
@@ -333,6 +462,7 @@ function CircleHome({
   radar,
   contacts,
   showCercanos,
+  showSystem,
   onSection,
   onOpenItem,
 }: {
@@ -344,6 +474,7 @@ function CircleHome({
   radar: SerializedDiscoveryCandidate[];
   contacts: CircleContact[];
   showCercanos: boolean;
+  showSystem: boolean;
   onSection: (section: CircleSection) => void;
   onOpenItem: (item: SerializedBriefItem) => void;
 }) {
@@ -453,6 +584,25 @@ function CircleHome({
           </button>
         ))}
       </nav>
+
+      {showSystem && (
+        <nav
+          aria-label="Lo que se mira cada tanto"
+          className="flex flex-wrap gap-2"
+        >
+          {SECONDARY_LINKS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onSection(item.id)}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-foreground"
+            >
+              <item.icon size={15} />
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      )}
 
       <section className="grid gap-0 overflow-hidden rounded-xl border border-border bg-surface/45 xl:grid-cols-[0.85fr_1.05fr_1.3fr]">
         <DashboardColumn
@@ -826,12 +976,91 @@ function InstagramView({
   );
 }
 
+/**
+ * Una pieza de la edición. La fila no puede ser un `<button>` entero: los
+ * botones de La Cosecha viven adentro, y un botón dentro de otro es HTML
+ * inválido (además de romper el foco con teclado).
+ */
+function BriefItemRow({
+  item,
+  index,
+  onOpenItem,
+  onHarvest,
+  harvested,
+  showHarvest,
+}: {
+  item: SerializedBriefItem;
+  index: number;
+  onOpenItem: (item: SerializedBriefItem) => void;
+  onHarvest: (item: SerializedBriefItem, outcome: "TASK" | "HABIT" | "NOTE") => void;
+  harvested: boolean;
+  showHarvest: boolean;
+}) {
+  const [isHarvesting, startHarvesting] = useTransition();
+
+  return (
+    <div className="grid gap-3 py-5 md:grid-cols-[2.5rem_1fr]">
+      <span className="font-news text-2xl text-muted-2">
+        {String(index + 1).padStart(2, "0")}
+      </span>
+      <div className="min-w-0">
+        <button
+          type="button"
+          onClick={() => onOpenItem(item)}
+          className="block w-full text-left"
+        >
+          <span className="block font-news text-xl leading-snug text-foreground">
+            {item.title}
+          </span>
+          {item.summary && (
+            <span className="mt-2 block max-w-[70ch] text-sm leading-relaxed text-muted">
+              {item.summary}
+            </span>
+          )}
+          {item.inclusionReason && (
+            <span className="mt-2 block text-xs text-primary">
+              {item.inclusionReason}
+            </span>
+          )}
+        </button>
+
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span className="inline-flex items-center gap-2 text-xs text-muted">
+            <ShieldCheck size={14} className="text-success" />
+            {metadataText(item.metadata, "source") || "Fuente verificada"}
+            <ExternalLink size={13} />
+          </span>
+          {showHarvest && (
+            <HarvestButtons
+              busy={isHarvesting}
+              done={harvested}
+              onHarvest={(outcome) =>
+                startHarvesting(async () => {
+                  onHarvest(item, outcome);
+                })
+              }
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NewsView({
   items,
+  channelItems,
   onOpenItem,
+  onHarvest,
+  harvested,
+  showHarvest,
 }: {
   items: SerializedBriefItem[];
+  channelItems: SerializedBriefItem[];
   onOpenItem: (item: SerializedBriefItem) => void;
+  onHarvest: (item: SerializedBriefItem, outcome: "TASK" | "HABIT" | "NOTE") => void;
+  harvested: Set<string>;
+  showHarvest: boolean;
 }) {
   const groups = topicGroups(items);
   return (
@@ -841,6 +1070,30 @@ function NewsView({
         title="Noticias"
         description="Hasta tres noticias por tema, con su fuente y el motivo por el que fueron seleccionadas."
       />
+
+      {channelItems.length > 0 && (
+        <section className="mt-7">
+          <div className="flex items-center gap-3 border-b border-border pb-3">
+            <h2 className="font-news text-2xl text-foreground">De tus referentes</h2>
+            <span className="text-xs text-muted">
+              {channelItems.length} {channelItems.length === 1 ? "pieza" : "piezas"}
+            </span>
+          </div>
+          <div className="divide-y divide-border">
+            {channelItems.map((item, index) => (
+              <BriefItemRow
+                key={item.id}
+                item={item}
+                index={index}
+                onOpenItem={onOpenItem}
+                onHarvest={onHarvest}
+                harvested={harvested.has(item.url)}
+                showHarvest={showHarvest}
+              />
+            ))}
+          </div>
+        </section>
+      )}
       <div className="mt-7 space-y-10">
         {groups.map(([topic, topicItems]) => (
           <section key={topic}>
@@ -852,34 +1105,15 @@ function NewsView({
             </div>
             <div className="divide-y divide-border">
               {topicItems.map((item, index) => (
-                <button
+                <BriefItemRow
                   key={item.id}
-                  type="button"
-                  onClick={() => onOpenItem(item)}
-                  className="grid w-full gap-3 py-5 text-left md:grid-cols-[2.5rem_1fr_auto]"
-                >
-                  <span className="font-news text-2xl text-muted-2">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <span>
-                    <span className="block font-news text-xl leading-snug text-foreground">
-                      {item.title}
-                    </span>
-                    <span className="mt-2 block max-w-[70ch] text-sm leading-relaxed text-muted">
-                      {item.summary}
-                    </span>
-                    {item.inclusionReason && (
-                      <span className="mt-2 block text-xs text-primary">
-                        {item.inclusionReason}
-                      </span>
-                    )}
-                  </span>
-                  <span className="flex items-center gap-2 text-xs text-muted md:justify-end">
-                    <ShieldCheck size={14} className="text-success" />
-                    {metadataText(item.metadata, "source") || "Fuente verificada"}
-                    <ExternalLink size={13} />
-                  </span>
-                </button>
+                  item={item}
+                  index={index}
+                  onOpenItem={onOpenItem}
+                  onHarvest={onHarvest}
+                  harvested={harvested.has(item.url)}
+                  showHarvest={showHarvest}
+                />
               ))}
             </div>
           </section>

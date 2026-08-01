@@ -16,6 +16,11 @@ import { syncNewsBriefItems } from "@/lib/db/brief";
 import { refreshSocialContentForEdition } from "@/lib/services/social/sync";
 import type { BriefLength, DiscoveryLevel } from "@/lib/brief/types";
 import { generateRadarForUser } from "@/lib/services/brief/radar";
+import {
+  applyNorthReasons,
+  effectiveTopics,
+  syncChannelBriefItems,
+} from "@/lib/services/brief/sources";
 import { sendPushToUser } from "@/lib/push/send";
 import { sendText } from "@/lib/whatsapp/kapso";
 
@@ -35,11 +40,22 @@ export async function generateEditionForUser(
   userId: string,
   opts: GenerateOptions
 ): Promise<{ edition: SerializedEdition; usedAI: boolean; count: number }> {
-  const topics = opts.topics.map((t) => t.trim()).filter(Boolean);
+  // El Norte manda sobre los temas sueltos: si el usuario declaró sus frentes,
+  // la edición se busca con eso. Si todavía no, se conserva lo que ya tenía.
+  const desdeNorte = await effectiveTopics(userId, {
+    topics: opts.topics,
+    priorityTopics: opts.priorityTopics ?? [],
+  }).catch(() => ({
+    topics: opts.topics,
+    priorityTopics: opts.priorityTopics ?? [],
+    fromNorth: false,
+  }));
+
+  const topics = desdeNorte.topics.map((t) => t.trim()).filter(Boolean);
   if (topics.length === 0) {
     throw new Error("Sin temas configurados");
   }
-  const priorityTopics = (opts.priorityTopics ?? [])
+  const priorityTopics = desdeNorte.priorityTopics
     .map((t) => t.trim())
     .filter(Boolean);
 
@@ -58,6 +74,12 @@ export async function generateEditionForUser(
     analysis.articles
   );
   await syncNewsBriefItems(savedEdition.id, analysis.articles);
+
+  // Los canales propios de los referentes. Un feed caído no tumba la edición.
+  await syncChannelBriefItems(userId, savedEdition.id).catch(() => {});
+  // Y por qué está cada pieza, atada al frente al que sirve.
+  await applyNorthReasons(userId, savedEdition.id).catch(() => {});
+
   await refreshSocialContentForEdition(
     userId,
     savedEdition.id,

@@ -28,7 +28,8 @@ export type BriefSourceCategory = (typeof BRIEF_SOURCE_CATEGORIES)[number];
 export type DiscoveryLevel = (typeof DISCOVERY_LEVELS)[number];
 export type BriefLength = (typeof BRIEF_LENGTHS)[number];
 
-export type BriefItemKind = "NEWS" | "SOCIAL" | "DISCOVERY";
+/** CHANNEL = lo publicado por un referente en su propio canal abierto. */
+export type BriefItemKind = "NEWS" | "SOCIAL" | "DISCOVERY" | "CHANNEL";
 export type BriefItemSection = "KEYS" | "SOURCES" | "TOPICS" | "RADAR";
 
 type SerializedBriefItemBase = {
@@ -61,10 +62,16 @@ export type DiscoveryBriefItem = SerializedBriefItemBase & {
   kind: "DISCOVERY";
 };
 
+/** Una publicación del canal propio de un referente (blog, YouTube, podcast). */
+export type ChannelBriefItem = SerializedBriefItemBase & {
+  kind: "CHANNEL";
+};
+
 export type SerializedBriefItem =
   | NewsBriefItem
   | SocialBriefItem
-  | DiscoveryBriefItem;
+  | DiscoveryBriefItem
+  | ChannelBriefItem;
 
 export type SerializedBriefSource = {
   id: string;

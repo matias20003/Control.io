@@ -137,6 +137,11 @@ model Profile {
   briefFeedback         BriefFeedback[]
   reportDeliveries      ReportDelivery[]
   circleContacts        CircleContact[]
+  circleFronts          CircleFront[]
+  circleHarvests        CircleHarvest[]
+  circleMigration       CircleMigration?
+  circleInventory       CircleInventoryItem[]
+  bridgeVisits          BridgeVisit[]
 
   @@map("profiles")
 }
@@ -1138,6 +1143,7 @@ model BriefSource {
   updatedAt      DateTime        @updatedAt
   socialAccounts SocialAccount[]
   briefItems     BriefItem[]
+  channels       SourceChannel[]
 
   @@unique([userId, normalizedKey])
   @@index([userId, isActive, priority])
@@ -1304,4 +1310,145 @@ model CircleTouch {
   @@index([contactId, happenedAt])
   @@index([userId, happenedAt])
   @@map("circle_touches")
+}
+
+// ─── Mi Círculo · Referentes por obra ────────────────────────────────────────
+// De un referente no importa la persona: importa lo que produce. Y lo que
+// produce casi nunca vive en Instagram — vive en un feed abierto y estable.
+// Un referente sin ningún canal es "huérfano" y es el único candidato al puente.
+model SourceChannel {
+  id       String      @id @default(cuid())
+  sourceId String
+  source   BriefSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  kind    String // RSS | YOUTUBE | PODCAST | NEWSLETTER | WEB
+  siteUrl String // lo que pegó el usuario
+  feedUrl String // el feed que resolvimos a partir de eso
+  title   String?
+
+  status        String    @default("ACTIVE") // ACTIVE | ERROR | EMPTY
+  lastError     String?
+  lastFetchedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sourceId, feedUrl])
+  @@index([status, lastFetchedAt])
+  @@map("source_channels")
+}
+
+// ─── Mi Círculo · El Norte ───────────────────────────────────────────────────
+// Quién querés ser, en dos o tres frentes. No es adorno motivacional: es el
+// parámetro con el que se filtra todo lo demás. Los temas se derivan de acá.
+model CircleFront {
+  id     String  @id @default(cuid())
+  userId String
+  user   Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  label  String // cifrado
+  detail String? // cifrado
+  topics String[] // términos derivados, en claro: son consultas de búsqueda
+
+  position   Int       @default(0)
+  isActive   Boolean   @default(true)
+  reviewedAt DateTime? // El Norte se revisa cada tres meses
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, isActive, position])
+  @@map("circle_fronts")
+}
+
+// ─── Mi Círculo · La Cosecha ─────────────────────────────────────────────────
+// Consumir sin convertir es entretenimiento. Cada conversión queda registrada
+// con la fuente que la produjo: eso es lo que después permite podar.
+model CircleHarvest {
+  id     String  @id @default(cuid())
+  userId String
+  user   Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Snapshot: la edición se puede borrar, la cosecha queda.
+  itemTitle String // cifrado
+  itemUrl   String
+  sourceId  String? // qué fuente lo produjo, para la poda mensual
+  frontId   String? // a qué frente del Norte sirvió
+
+  outcome   String // TASK | HABIT | GOAL_NOTE
+  outcomeId String? // id de lo que se creó
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([sourceId])
+  @@map("circle_harvests")
+}
+
+// ─── Mi Círculo · La Mudanza ─────────────────────────────────────────────────
+// La transición desde Instagram. Un hábito no se saca, se reemplaza: cada
+// etapa sustituye antes de quitar. Ver docs/MI_CIRCULO.md.
+model CircleMigration {
+  userId String  @id
+  user   Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // INVENTORY | REPLACE | COEXIST | CUT | AFTER
+  stage String @default("INVENTORY")
+
+  inventoryUploadedAt DateTime?
+  coexistStartedAt    DateTime?
+  uninstalledAt       DateTime?
+  // Volver a instalar no es un fracaso y no se castiga: se anota y se sigue.
+  reinstalledAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("circle_migrations")
+}
+
+// Cada cuenta que el usuario sigue en Instagram, según su propio export de
+// datos. El handle va en claro: es público y así se puede deduplicar (igual
+// que SocialAccount.handle).
+model CircleInventoryItem {
+  id     String  @id @default(cuid())
+  userId String
+  user   Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  handle   String
+  fullName String?
+
+  // PENDING | PERSON | REFERENCE | NOISE
+  decision     String  @default("PENDING")
+  resolvedType String? // CONTACT | SOURCE
+  resolvedId   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, handle])
+  @@index([userId, decision])
+  @@map("circle_inventory_items")
+}
+
+// ─── Mi Círculo · El puente ──────────────────────────────────────────────────
+// Para el referente que sólo publica en Instagram. Control.io no puede
+// encarcelar a Instagram desde afuera, pero sí puede ponerle marco: a qué vas
+// antes, qué encontraste después. Y contar cuánto te cuesta.
+model BridgeVisit {
+  id     String  @id @default(cuid())
+  userId String
+  user   Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sourceId String?
+  handle   String
+
+  intention String // cifrado — a qué vas
+  finding   String? // cifrado — qué encontraste
+
+  openedAt DateTime  @default(now())
+  closedAt DateTime?
+
+  @@index([userId, openedAt])
+  @@map("bridge_visits")
 }

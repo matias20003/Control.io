@@ -18,7 +18,8 @@ export type FeatureFlag =
   | "google"
   | "premium"
   | "onboardingWa"
-  | "circuloCercanos";
+  | "circuloCercanos"
+  | "circuloSistema";
 
 export const FEATURE_FLAGS: Record<FeatureFlag, Rollout> = {
   gastosHormiga: "testers", // detector de gastos hormiga / suscripciones
@@ -29,6 +30,7 @@ export const FEATURE_FLAGS: Record<FeatureFlag, Rollout> = {
   premium: "testers",       // paywall + suscripción MercadoPago
   onboardingWa: "testers",  // hero de onboarding WhatsApp-first
   circuloCercanos: "testers", // Mi Círculo · Cercanos (la mitad "gente")
+  circuloSistema: "testers",  // Mi Círculo · Referentes por obra, Norte, Cosecha y Mudanza
 };
 
 /** ¿Este usuario puede ver la feature? */

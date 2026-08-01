@@ -215,21 +215,48 @@ tender a bajar. Cuando uno de esos abre un canal propio, la app avisa y se migra
 
 ## Estado
 
-**Fase 1 (Cercanos) implementada**, detrás del flag `circuloCercanos` en
-`testers`. Piezas:
+Las cuatro fases están implementadas y desplegadas, detrás de dos flags en
+`testers`: `circuloCercanos` (la mitad gente) y `circuloSistema` (Referentes,
+Norte, Cosecha y Mudanza). Las dos migraciones están aplicadas.
+
+### Motores puros (con tests)
+
+| Archivo | Qué decide |
+| --- | --- |
+| `lib/circle-cadence.ts` | Quién aparece hoy y cuánto pide la lista. Fija la regla del límite. |
+| `lib/circle-north.ts` | De frentes a términos de búsqueda, y a qué frente sirve cada pieza. |
+| `lib/circle-inventory.ts` | Lectura del export de Instagram, avance del inventario y checklist del corte. |
+| `lib/brief/feed-parser.ts` | RSS y Atom sin dependencias. Ante la duda descarta, no inventa. |
+
+### Servicios
 
 | Archivo | Qué hace |
 | --- | --- |
-| `lib/circle-cadence.ts` | Aritmética de cadencia: quién toca hoy, presupuesto de la lista, etiquetas. Puro y testeado. |
-| `tests/circle-cadence.test.ts` | 14 casos, incluido el que fija la decisión de producto (50 personas a 8 semanas < 1 charla/día). |
-| `lib/db/circle.ts` | CRUD sobre `CircleContact` / `CircleTouch`, con cifrado de nombre, teléfono y nota. |
-| `app/actions/circle.ts` | Server actions con validación zod (el teléfono se normaliza a dígitos para `wa.me`). |
-| `app/(dashboard)/newsletter/CercanosView.tsx` | La sección: "Hoy", alta, lista agrupada por frecuencia, edición y archivado. |
-| `app/(dashboard)/newsletter/CircleUI.tsx` | `SectionHeading` y `QuietEmpty`, compartidos entre las vistas. |
-| `prisma/migrations-manual/2026-08-01-mi-circulo-cercanos.sql` | Migración aditiva. **Todavía sin aplicar.** |
+| `lib/services/brief/channels.ts` | Resuelve una URL a su feed (YouTube, podcast de Apple, RSS declarado, rutas habituales). Incluye la guarda de SSRF. |
+| `lib/services/brief/sources.ts` | Trae lo de los canales a la edición y escribe la razón de inclusión por frente. |
 
-Pendiente de fase 1: aplicar la migración, probar contra la base, y el registro
-de conversaciones por WhatsApp (hoy sólo se declara desde la app).
+### Datos
+
+`lib/db/circle.ts`, `circle-north.ts`, `circle-harvest.ts`, `circle-migration.ts`
+y `channels.ts`. Todo lo personal —nombres, teléfonos, notas, frentes,
+intenciones del puente— va cifrado con `lib/crypto.ts`.
+
+### Interfaz
+
+`CercanosView`, `ReferentesView`, `NorteView`, `CosechaView` y `MudanzaView`,
+bajo `app/(dashboard)/newsletter/`. La navegación separa lo diario (Cercanos,
+Referentes, Noticias, Radar) de lo periódico (Norte, Cosecha, Mudanza).
+
+### Lo que falta
+
+- **Nada de esto se ejercitó en el navegador con sesión iniciada.** Está
+  verificado por tests, tipos, lint y build, y el esquema fue comprobado contra
+  la base real — pero el recorrido de la interfaz no.
+- El registro de conversaciones por WhatsApp: hoy Cercanos sólo se declara
+  desde la app.
+- La vieja ventana enfocada de Instagram (extensión de escritorio) sigue viva y
+  accesible, ahora en la fila secundaria. Convive con el puente; en algún
+  momento hay que decidir si se retira.
 
 ## Restricciones que atraviesan todo
 
