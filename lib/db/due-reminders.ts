@@ -4,6 +4,7 @@ import { sendPushToUser } from "@/lib/push/send";
 import { sendText } from "@/lib/whatsapp/kapso";
 import { startOfTodayArg } from "@/lib/timezone";
 import { getRecurringOccurrences } from "@/lib/recurrence-schedule";
+import { recurringAccountStatus } from "@/lib/recurring-copy";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -76,9 +77,11 @@ export async function sendDueReminders(): Promise<{ users: number }> {
       if (date >= upper) continue;
       const description = decrypt(r.description) ?? r.description;
       const account = r.account ? decrypt(r.account.name) ?? r.account.name : null;
-      const status = account
-        ? `${executedToday && date.getTime() < today.getTime() + DAY_MS ? "descontado" : "se descuenta"} de ${account}`
-        : "requiere pago · asigná una cuenta";
+      const status = recurringAccountStatus(
+        r.type,
+        account,
+        executedToday && date.getTime() < today.getTime() + DAY_MS,
+      );
       add(r.userId, `${when(date)}: 🔁 ${description} — ${money(num(r.amount), r.currency)} · ${status}`);
     }
   }
@@ -176,9 +179,11 @@ export async function sendDueReminderToUser(
       const description = decrypt(r.description) ?? r.description;
       const account = r.account ? decrypt(r.account.name) ?? r.account.name : null;
       lines.push(
-        `${label(date)}: 🔁 ${description} — ${money(num(r.amount), r.currency)} · ${
-          account ? `${executedToday && date.getTime() < today.getTime() + DAY_MS ? "descontado" : "se descuenta"} de ${account}` : "requiere pago · asigná una cuenta"
-        }`
+        `${label(date)}: 🔁 ${description} — ${money(num(r.amount), r.currency)} · ${recurringAccountStatus(
+          r.type,
+          account,
+          executedToday && date.getTime() < today.getTime() + DAY_MS,
+        )}`
       );
     }
   }

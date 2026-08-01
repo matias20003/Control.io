@@ -4,6 +4,7 @@ import { addDays, startOfDay, format, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { getRecurringOccurrences } from "@/lib/recurrence-schedule";
 import { startOfTodayArg } from "@/lib/timezone";
+import { recurringAccountStatus } from "@/lib/recurring-copy";
 
 export type AgendaEvent = {
   id: string;
@@ -125,9 +126,10 @@ export async function getAgenda(userId: string, days = 30): Promise<AgendaEvent[
         type: "recurring",
         cashFlow: r.type === "INCOME" ? "income" : "expense",
         title: decrypt(r.description) ?? r.description,
-        subtitle: `${r.category?.name ?? "Sin categoría"} · ${
-          r.account ? `se descuenta de ${decrypt(r.account.name) ?? r.account.name}` : "requiere pago"
-        }`,
+        subtitle: `${r.category?.name ?? "Sin categoría"} · ${recurringAccountStatus(
+          r.type,
+          r.account ? decrypt(r.account.name) ?? r.account.name : null,
+        )}`,
         amount: toNum(r.amount),
         currency: r.currency,
         date: executionDate.toISOString(),
