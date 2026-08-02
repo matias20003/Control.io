@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ARG_TZ } from "@/lib/timezone";
 import { getResend, FROM } from "@/lib/email/client";
 import { sendPushToUser } from "@/lib/push/send";
-import { isOutsideServiceWindow, sendDocument, sendDocumentById, uploadMedia } from "@/lib/whatsapp/kapso";
+import { isOutsideServiceWindow, sendDocument, sendDocumentById, sendDocumentTemplate, uploadMedia } from "@/lib/whatsapp/kapso";
 import {
   buildPeriodicSnapshot, closedPeriod, createReportDelivery, frequencyLabel,
   type ReportFrequency,
@@ -143,10 +143,32 @@ export async function fireReportDeliveries(): Promise<DispatchResult> {
           await sendDocumentById(profile.whatsappNumber, mediaId, filename, caption);
         } catch (uploadError) {
           if (isOutsideServiceWindow(uploadError)) {
-            // No es una falla: Meta solo deja mandar plantillas aprobadas fuera
-            // de las 24h desde el último mensaje del usuario. Queda para push/email.
-            outsideWindow++;
-            console.warn(`[periodic-report] ${profile.id} fuera de la ventana de 24h de WhatsApp`);
+            // Fuera de las 24h solo entran plantillas aprobadas. Si hay una
+            // configurada con header de documento, el PDF llega igual; si no,
+            // queda para push/email y se cuenta aparte (no es una falla, es la
+            // regla de la plataforma).
+            const template = process.env.WHATSAPP_REPORT_TEMPLATE;
+            let sentByTemplate = false;
+            if (template) {
+              try {
+                const mediaId = await uploadMedia(pdf, filename, "application/pdf");
+                await sendDocumentTemplate(
+                  profile.whatsappNumber,
+                  template,
+                  process.env.WHATSAPP_REPORT_TEMPLATE_LANG ?? "es",
+                  mediaId,
+                  filename,
+                  [profile.name || profile.email.split("@")[0], label],
+                );
+                sentByTemplate = true;
+              } catch (templateError) {
+                console.error("[periodic-report] plantilla de reporte", templateError);
+              }
+            }
+            if (!sentByTemplate) {
+              outsideWindow++;
+              console.warn(`[periodic-report] ${profile.id} fuera de la ventana de 24h de WhatsApp`);
+            }
           } else {
             // Kapso podría no proxear la subida de media. Caemos al link, que
             // ahora sí es alcanzable, pero solo si devuelve un PDF de verdad.

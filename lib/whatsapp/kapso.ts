@@ -97,6 +97,49 @@ export async function sendDocumentById(
 }
 
 /**
+ * Envía una plantilla aprobada cuyo header es un documento.
+ *
+ * Es la única forma de hacerle llegar un PDF a alguien que no escribió en las
+ * últimas 24 h: fuera de esa ventana Meta rechaza todo lo que no sea plantilla.
+ * El archivo va por media id (ya subido con uploadMedia), no por link, por lo
+ * mismo de siempre: que Meta no tenga que salir a descargar nada.
+ */
+export async function sendDocumentTemplate(
+  to: string,
+  templateName: string,
+  langCode: string,
+  mediaId: string,
+  filename: string,
+  bodyParams: string[] = [],
+): Promise<void> {
+  const apiKey = process.env.KAPSO_API_KEY;
+  const phoneId = process.env.KAPSO_PHONE_NUMBER_ID;
+  if (!apiKey || !phoneId) throw new Error("Kapso no configurado");
+
+  const components: unknown[] = [
+    { type: "header", parameters: [{ type: "document", document: { id: mediaId, filename } }] },
+  ];
+  if (bodyParams.length) {
+    components.push({ type: "body", parameters: bodyParams.map((text) => ({ type: "text", text })) });
+  }
+
+  const res = await fetch(`${apiUrl()}/meta/whatsapp/v24.0/${phoneId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "template",
+      template: { name: templateName, language: { code: langCode }, components },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Kapso sendDocumentTemplate falló (${res.status}): ${body}`);
+  }
+}
+
+/**
  * ¿El error de Meta es por la ventana de 24 h?
  *
  * Fuera de esa ventana solo entran plantillas aprobadas, así que un documento
