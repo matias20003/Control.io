@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ARG_TZ } from "@/lib/timezone";
 import { getResend, FROM } from "@/lib/email/client";
 import { sendPushToUser } from "@/lib/push/send";
-import { sendDocument } from "@/lib/whatsapp/kapso";
+import { isOutsideServiceWindow, sendDocument, sendDocumentById, uploadMedia } from "@/lib/whatsapp/kapso";
 import {
   buildPeriodicSnapshot, closedPeriod, createReportDelivery, frequencyLabel,
   type ReportFrequency,
@@ -33,6 +33,8 @@ export type DispatchResult = {
   errors: number;
   /** Entregas cuyo PDF no era descargable: no se adjunto por WhatsApp. */
   broken: number;
+  /** Fuera de la ventana de 24h de Meta: no es una falla, es la regla. */
+  outsideWindow: number;
   candidates: number;
   hour: number;
 };
@@ -84,6 +86,7 @@ export async function fireReportDeliveries(): Promise<DispatchResult> {
   let skipped = 0;
   let errors = 0;
   let broken = 0;
+  let outsideWindow = 0;
 
   for (const profile of candidates) {
     const frequency = profile.reportFrequency as ReportFrequency;
@@ -120,30 +123,64 @@ export async function fireReportDeliveries(): Promise<DispatchResult> {
       const filename = `controlio-reporte-${label}-${start.toISOString().slice(0, 10)}.pdf`;
       const caption = `📊 Tu reporte ${label} y las tendencias del período ya están listos.`;
 
+      // Los tres canales van por separado a propósito. Antes compartían un
+      // try: si Meta rechazaba el documento (típico fuera de la ventana de 24h),
+      // se cortaba todo y el email tampoco salía. Un canal caído no puede
+      // llevarse puestos a los otros.
+      const wantsPdf = (profile.reportNotifyWhatsapp && !!profile.whatsappNumber) || profile.reportNotifyEmail;
+      const pdf = wantsPdf ? Buffer.from(await renderPeriodicReportPdf(snapshot)) : null;
+
       if (profile.reportNotifyApp) {
-        await sendPushToUser(profile.id, { title: `Reporte ${label} listo`, body: delivery.summary, url: pdfUrl }).catch(() => 0);
+        await sendPushToUser(profile.id, { title: `Reporte ${label} listo`, body: delivery.summary, url: pdfUrl })
+          .catch((error) => { console.error("[periodic-report] push", error); return 0; });
       }
-      if (profile.reportNotifyWhatsapp && profile.whatsappNumber) {
-        // Nunca mandar un documento sin confirmar que del otro lado hay un PDF:
-        // mandar el HTML del login disfrazado de reporte es peor que no mandar.
-        if (await servesPdf(pdfUrl)) {
-          await sendDocument(profile.whatsappNumber, pdfUrl, filename, caption);
-        } else {
-          broken++;
-          console.error(`[periodic-report] ${pdfUrl} no devuelve un PDF; no se adjunta por WhatsApp`);
+
+      if (profile.reportNotifyWhatsapp && profile.whatsappNumber && pdf) {
+        try {
+          // Se suben los bytes en vez de pasarle un link a Meta: así no depende
+          // de que la URL sea alcanzable ni de qué le responda el server.
+          const mediaId = await uploadMedia(pdf, filename, "application/pdf");
+          await sendDocumentById(profile.whatsappNumber, mediaId, filename, caption);
+        } catch (uploadError) {
+          if (isOutsideServiceWindow(uploadError)) {
+            // No es una falla: Meta solo deja mandar plantillas aprobadas fuera
+            // de las 24h desde el último mensaje del usuario. Queda para push/email.
+            outsideWindow++;
+            console.warn(`[periodic-report] ${profile.id} fuera de la ventana de 24h de WhatsApp`);
+          } else {
+            // Kapso podría no proxear la subida de media. Caemos al link, que
+            // ahora sí es alcanzable, pero solo si devuelve un PDF de verdad.
+            console.warn("[periodic-report] subida directa falló, probando por link", uploadError);
+            try {
+              if (await servesPdf(pdfUrl)) {
+                await sendDocument(profile.whatsappNumber, pdfUrl, filename, caption);
+              } else {
+                broken++;
+                console.error(`[periodic-report] ${pdfUrl} no devuelve un PDF; no se adjunta`);
+              }
+            } catch (linkError) {
+              if (isOutsideServiceWindow(linkError)) outsideWindow++;
+              else { broken++; console.error("[periodic-report] whatsapp", linkError); }
+            }
+          }
         }
       }
-      if (profile.reportNotifyEmail) {
-        const pdf = await renderPeriodicReportPdf(snapshot);
-        const { error } = await getResend().emails.send({
-          from: FROM,
-          to: profile.email,
-          subject: `Tu reporte ${label} y tendencias - control.io`,
-          html: `<p>Hola ${profile.name || ""},</p><p>Tu reporte ${label} ya está listo. Encontrás el PDF adjunto y también podés <a href="${pdfUrl}">abrirlo desde Control.io</a>.</p>`,
-          attachments: [{ filename, content: Buffer.from(pdf) }],
-        });
-        if (error) throw new Error(error.message);
+
+      if (profile.reportNotifyEmail && pdf) {
+        try {
+          const { error } = await getResend().emails.send({
+            from: FROM,
+            to: profile.email,
+            subject: `Tu reporte ${label} y tendencias - control.io`,
+            html: `<p>Hola ${profile.name || ""},</p><p>Tu reporte ${label} ya está listo. Encontrás el PDF adjunto y también podés <a href="${pdfUrl}">abrirlo desde Control.io</a>.</p>`,
+            attachments: [{ filename, content: pdf }],
+          });
+          if (error) throw new Error(error.message);
+        } catch (mailError) {
+          console.error("[periodic-report] email", mailError);
+        }
       }
+
       delivered++;
     } catch (error) {
       console.error(`[periodic-report] ${profile.id}`, error);
@@ -151,5 +188,5 @@ export async function fireReportDeliveries(): Promise<DispatchResult> {
     }
   }
 
-  return { delivered, skipped, errors, broken, candidates: candidates.length, hour };
+  return { delivered, skipped, errors, broken, outsideWindow, candidates: candidates.length, hour };
 }
