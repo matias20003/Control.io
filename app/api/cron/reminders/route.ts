@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
   // Reportes periódicos (semanal / quincenal / mensual) a la hora y el día que
   // eligió cada usuario. Va acá porque es el único cron que corre siempre;
   // vercel.json solo admite 2 y ya están usados. Es idempotente por período.
-  const reports = await fireReportDeliveries().catch(() => ({ delivered: 0, skipped: 0, errors: 0, candidates: 0, hour: -1 }));
+  const reports = await fireReportDeliveries().catch(() => ({ delivered: 0, skipped: 0, errors: 0, broken: 0, candidates: 0, hour: -1 }));
 
   return Response.json({ ok: true, due: due.length, sent, recurring: recurring.fired, study: study.sent, studyPlan: plan.sent, organizer, shutdown, reports });
 }

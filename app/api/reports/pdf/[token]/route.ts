@@ -4,6 +4,10 @@ import type { PeriodicReportSnapshot } from "@/lib/reports/periodic";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// El render con pdf-lib es rápido; lo que tarda es el arranque en frío de la
+// función más la conexión a la base. Con margen de sobra para que Meta no corte
+// la descarga del documento a medio camino.
+export const maxDuration = 30;
 
 export async function GET(_: Request, context: { params: Promise<{ token: string }> }) {
   const { token } = await context.params;
@@ -19,7 +23,11 @@ export async function GET(_: Request, context: { params: Promise<{ token: string
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="${filename}"`,
-      "Cache-Control": "private, max-age=3600",
+      // El reporte de un token es una foto de un período ya cerrado: no cambia
+      // nunca. Con immutable, volver a abrirlo desde el mismo dispositivo es
+      // instantáneo en vez de re-renderizar y pagar otro arranque en frío.
+      // Sigue siendo private: no se cachea en la CDN compartida.
+      "Cache-Control": "private, max-age=31536000, immutable",
       "X-Content-Type-Options": "nosniff",
     },
   });

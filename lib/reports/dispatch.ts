@@ -31,6 +31,8 @@ export type DispatchResult = {
   delivered: number;
   skipped: number;
   errors: number;
+  /** Entregas cuyo PDF no era descargable: no se adjunto por WhatsApp. */
+  broken: number;
   candidates: number;
   hour: number;
 };
@@ -38,6 +40,27 @@ export type DispatchResult = {
 /** El error de unique de Prisma: otra corrida ya reclamó este período. */
 function isDuplicate(error: unknown): boolean {
   return !!error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "P2002";
+}
+
+/**
+ * ¿La URL devuelve un PDF de verdad?
+ *
+ * Meta descarga el documento por su cuenta, sin cookies, y adjunta lo que le
+ * responda el server. Cuando la ruta no era pública, el proxy la mandaba a
+ * /login y el usuario recibía la pantalla de login como si fuera su reporte.
+ * Chequear antes de mandar convierte ese error silencioso en un log, y de paso
+ * despierta la función para que la descarga de Meta no arranque en frío.
+ *
+ * redirect "manual" es lo importante: un 3xx acá significa exactamente ese bug.
+ */
+async function servesPdf(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, { cache: "no-store", redirect: "manual" });
+    if (!response.ok) return false;
+    return (response.headers.get("content-type") ?? "").includes("application/pdf");
+  } catch {
+    return false;
+  }
 }
 
 export async function fireReportDeliveries(): Promise<DispatchResult> {
@@ -60,6 +83,7 @@ export async function fireReportDeliveries(): Promise<DispatchResult> {
   let delivered = 0;
   let skipped = 0;
   let errors = 0;
+  let broken = 0;
 
   for (const profile of candidates) {
     const frequency = profile.reportFrequency as ReportFrequency;
@@ -100,7 +124,14 @@ export async function fireReportDeliveries(): Promise<DispatchResult> {
         await sendPushToUser(profile.id, { title: `Reporte ${label} listo`, body: delivery.summary, url: pdfUrl }).catch(() => 0);
       }
       if (profile.reportNotifyWhatsapp && profile.whatsappNumber) {
-        await sendDocument(profile.whatsappNumber, pdfUrl, filename, caption);
+        // Nunca mandar un documento sin confirmar que del otro lado hay un PDF:
+        // mandar el HTML del login disfrazado de reporte es peor que no mandar.
+        if (await servesPdf(pdfUrl)) {
+          await sendDocument(profile.whatsappNumber, pdfUrl, filename, caption);
+        } else {
+          broken++;
+          console.error(`[periodic-report] ${pdfUrl} no devuelve un PDF; no se adjunta por WhatsApp`);
+        }
       }
       if (profile.reportNotifyEmail) {
         const pdf = await renderPeriodicReportPdf(snapshot);
@@ -120,5 +151,5 @@ export async function fireReportDeliveries(): Promise<DispatchResult> {
     }
   }
 
-  return { delivered, skipped, errors, candidates: candidates.length, hour };
+  return { delivered, skipped, errors, broken, candidates: candidates.length, hour };
 }
