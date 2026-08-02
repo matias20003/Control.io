@@ -8,6 +8,7 @@ import { sendPushToUser } from "@/lib/push/send";
 import { sendText } from "@/lib/whatsapp/kapso";
 import { fireOrganizerBriefs } from "@/lib/whatsapp/organizer-brief";
 import { fireShutdownNudges } from "@/lib/whatsapp/shutdown-nudge";
+import { fireReportDeliveries } from "@/lib/reports/dispatch";
 
 // Dispara los recordatorios cuya hora ya llegó. Pensado para correr cada minuto
 // (precisión de "en 5 min"). En Vercel Hobby no hay cron por minuto, así que lo
@@ -73,5 +74,10 @@ export async function GET(req: NextRequest) {
   // Empujón para cerrar el día. Se puede ignorar: no bloquea nada.
   const shutdown = await fireShutdownNudges().catch(() => ({ sent: 0, attempted: 0 }));
 
-  return Response.json({ ok: true, due: due.length, sent, recurring: recurring.fired, study: study.sent, studyPlan: plan.sent, organizer, shutdown });
+  // Reportes periódicos (semanal / quincenal / mensual) a la hora y el día que
+  // eligió cada usuario. Va acá porque es el único cron que corre siempre;
+  // vercel.json solo admite 2 y ya están usados. Es idempotente por período.
+  const reports = await fireReportDeliveries().catch(() => ({ delivered: 0, skipped: 0, errors: 0, candidates: 0, hour: -1 }));
+
+  return Response.json({ ok: true, due: due.length, sent, recurring: recurring.fired, study: study.sent, studyPlan: plan.sent, organizer, shutdown, reports });
 }
