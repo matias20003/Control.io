@@ -37,6 +37,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ImportCSVDialog } from "./ImportCSVDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatDate, formatMonth } from "@/lib/utils";
+import { SEARCH_RESULT_LIMIT } from "@/lib/search-range";
 import {
   createTransactionAction,
   updateTransactionAction,
@@ -49,6 +50,44 @@ import type { SerializedAccount } from "@/lib/db/accounts";
 import type { SerializedCategory } from "@/lib/db/categories";
 
 type TxType = "INCOME" | "EXPENSE" | "TRANSFER";
+
+/** Día calendario de hoy, corrido `months` meses hacia atrás. */
+function dayOffsetByMonths(months: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - months);
+  return toDayString(d);
+}
+
+function toDayString(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * "2026-08-03" → "03/08/2026", sin pasar por Date.
+ *
+ * formatCurrency y compañía sirven para instantes; acá el dato es un día suelto
+ * y `new Date("2026-08-03")` lo lee como medianoche UTC, que mostrado en hora
+ * argentina cae el día anterior. El rango diría un día menos del elegido.
+ */
+function formatDayString(day: string): string {
+  const [y, m, d] = day.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+/**
+ * Períodos de la búsqueda. `from` se resuelve al momento de buscar, no al
+ * cargar el módulo, para que la ventana no se congele si la pestaña queda
+ * abierta de un día para el otro.
+ */
+const SEARCH_RANGES = {
+  "1M":     { label: "Último mes",     from: () => dayOffsetByMonths(1) },
+  "3M":     { label: "Últimos 3 meses", from: () => dayOffsetByMonths(3) },
+  "6M":     { label: "Últimos 6 meses", from: () => dayOffsetByMonths(6) },
+  "12M":    { label: "Último año",      from: () => dayOffsetByMonths(12) },
+  "CUSTOM": { label: "Personalizado",   from: () => undefined },
+} as const;
+
+type SearchRangeKey = keyof typeof SEARCH_RANGES;
 
 const TYPE_CONFIG: Record<TxType, { label: string; icon: React.ElementType; color: string; bg: string }> = {
   INCOME:   { label: "Ingreso",        icon: ArrowDownLeft,  color: "text-success", bg: "bg-success/10" },
@@ -79,9 +118,13 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
   const [filterAccountId, setFilterAccountId] = useState<string>("ALL");
   const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get("q") ?? "");
-  // Resultados de búsqueda server-side (sobre 6 meses, no solo la página cargada).
+  // Resultados de búsqueda server-side (sobre el período elegido, no solo la
+  // página cargada).
   const [searchResults, setSearchResults] = useState<SerializedTransaction[]>([]);
   const [searching, setSearching]     = useState(false);
+  const [rangeKey, setRangeKey]       = useState<SearchRangeKey>("6M");
+  const [customFrom, setCustomFrom]   = useState("");
+  const [customTo, setCustomTo]       = useState("");
 
   // Create dialog
   const [isOpen, setIsOpen]           = useState(false);
@@ -102,22 +145,27 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
     if (searchParams.get("import") === "1") setImportOpen(true);
   }, [searchParams]);
 
-  // Búsqueda server-side con debounce: busca en los últimos 6 meses, no solo
-  // en la página cargada (antes un movimiento real podía quedar oculto).
+  // Búsqueda server-side con debounce sobre el período elegido, no solo sobre
+  // la página cargada (antes un movimiento real podía quedar oculto). Cambiar
+  // el rango vuelve a buscar: el recorte se hace en la consulta, así acotar el
+  // período también sirve para llegar más atrás.
   useEffect(() => {
     const q = searchQuery.trim();
     if (!q) { setSearchResults([]); setSearching(false); return; }
     setSearching(true);
     const handle = setTimeout(async () => {
       try {
-        const res = await searchTransactionsAction(q);
+        const range = rangeKey === "CUSTOM"
+          ? { from: customFrom || undefined, to: customTo || undefined }
+          : { from: SEARCH_RANGES[rangeKey].from() };
+        const res = await searchTransactionsAction(q, range);
         setSearchResults(res);
       } finally {
         setSearching(false);
       }
     }, 300);
     return () => clearTimeout(handle);
-  }, [searchQuery]);
+  }, [searchQuery, rangeKey, customFrom, customTo]);
 
   const [isPending, startTransition]  = useTransition();
 
@@ -172,6 +220,43 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
       return true;
     });
   }, [isSearchMode, searchResults, transactions, filterType, filterAccountId]);
+
+  /** Período que efectivamente se buscó, para que el total diga sobre qué suma. */
+  const rangeLabel = useMemo(() => {
+    if (rangeKey !== "CUSTOM") return SEARCH_RANGES[rangeKey].label.toLowerCase();
+    if (customFrom && customTo) return `del ${formatDayString(customFrom)} al ${formatDayString(customTo)}`;
+    if (customFrom) return `desde el ${formatDayString(customFrom)}`;
+    if (customTo) return `hasta el ${formatDayString(customTo)}`;
+    return "últimos 6 meses";
+  }, [rangeKey, customFrom, customTo]);
+
+  /**
+   * Total de lo que se está viendo cuando hay una búsqueda activa.
+   *
+   * Se calcula sobre `filtered`, no sobre los resultados crudos, así el número
+   * siempre coincide con la lista de abajo: si además filtrás por Gastos o por
+   * una cuenta, el total acompaña.
+   *
+   * Va separado por moneda porque sumar pesos con dólares daría un número que
+   * no significa nada. Las transferencias quedan afuera del total: mueven plata
+   * entre cuentas propias, no es gasto ni ingreso; se cuentan aparte.
+   */
+  const searchTotals = useMemo(() => {
+    if (!isSearchMode) return { byCurrency: [], transfers: 0 };
+    const map = new Map<string, { income: number; expense: number }>();
+    let transfers = 0;
+    for (const tx of filtered) {
+      if (tx.type === "TRANSFER") { transfers++; continue; }
+      const entry = map.get(tx.currency) ?? { income: 0, expense: 0 };
+      if (tx.type === "INCOME") entry.income += tx.amount;
+      else entry.expense += tx.amount;
+      map.set(tx.currency, entry);
+    }
+    const byCurrency = Array.from(map.entries())
+      .map(([currency, v]) => ({ currency, ...v, net: v.income - v.expense }))
+      .sort((a, b) => (b.income + b.expense) - (a.income + a.expense));
+    return { byCurrency, transfers };
+  }, [isSearchMode, filtered]);
 
   // KPIs del MES completo (calculados en el server), no de la página cargada.
   const totalIncome  = totals.income;
@@ -610,13 +695,86 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
                 {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             )}
+
+            {/* Período: solo tiene sentido en búsqueda; fuera de ella la vista
+                ya está parada sobre un mes puntual. */}
+            {isSearchMode && (
+              <>
+                <select value={rangeKey} onChange={(e) => setRangeKey(e.target.value as SearchRangeKey)}
+                  className="px-3 py-1 rounded-full text-xs font-medium bg-surface-2 text-muted border-none outline-none cursor-pointer">
+                  {Object.entries(SEARCH_RANGES).map(([key, r]) => (
+                    <option key={key} value={key}>{r.label}</option>
+                  ))}
+                </select>
+                {rangeKey === "CUSTOM" && (
+                  <div className="flex items-center gap-1.5">
+                    <input type="date" value={customFrom} max={customTo || undefined}
+                      onChange={(e) => setCustomFrom(e.target.value)}
+                      className="px-2.5 py-1 rounded-full text-xs bg-surface-2 text-foreground border-none outline-none cursor-pointer" />
+                    <span className="text-xs text-muted">a</span>
+                    <input type="date" value={customTo} min={customFrom || undefined}
+                      onChange={(e) => setCustomTo(e.target.value)}
+                      className="px-2.5 py-1 rounded-full text-xs bg-surface-2 text-foreground border-none outline-none cursor-pointer" />
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {isSearchMode && !searching && filtered.length > 0 && (
-            <p className="px-1 pb-2 text-xs text-muted">
-              {filtered.length} resultado{filtered.length !== 1 ? "s" : ""} en los últimos 6 meses
-              {searchResults.length >= 50 ? " (primeros 50)" : ""}
-            </p>
+            <div className="mb-4 rounded-xl border border-border bg-surface-2 px-4 py-3">
+              <p className="text-xs text-muted">
+                {filtered.length} resultado{filtered.length !== 1 ? "s" : ""} para “{searchQuery.trim()}” · {rangeLabel}
+                {searchResults.length >= SEARCH_RESULT_LIMIT
+                  ? ` (total sobre los primeros ${SEARCH_RESULT_LIMIT})`
+                  : ""}
+              </p>
+              <div className="mt-2 flex flex-wrap items-baseline gap-x-6 gap-y-2">
+                {searchTotals.byCurrency.map(({ currency, income, expense, net }) => {
+                  // Con un solo signo presente, el neto repetiría el mismo
+                  // número: se muestra el total y nada más.
+                  const mixed = income > 0 && expense > 0;
+                  return (
+                    <div key={currency} className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                      {expense > 0 && (
+                        <span className="text-sm">
+                          <span className="text-muted text-xs mr-1.5">Gastado</span>
+                          <span className="font-bold font-mono text-danger">
+                            −{formatCurrency(expense, currency)}
+                          </span>
+                        </span>
+                      )}
+                      {income > 0 && (
+                        <span className="text-sm">
+                          <span className="text-muted text-xs mr-1.5">Ingresado</span>
+                          <span className="font-bold font-mono text-success">
+                            +{formatCurrency(income, currency)}
+                          </span>
+                        </span>
+                      )}
+                      {mixed && (
+                        <span className="text-sm">
+                          <span className="text-muted text-xs mr-1.5">Neto</span>
+                          <span className={`font-bold font-mono ${net >= 0 ? "text-success" : "text-danger"}`}>
+                            {net >= 0 ? "+" : "−"}{formatCurrency(Math.abs(net), currency)}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+                {searchTotals.byCurrency.length === 0 && (
+                  <span className="text-sm text-muted">
+                    Sin gastos ni ingresos que sumar en estos resultados.
+                  </span>
+                )}
+                {searchTotals.transfers > 0 && (
+                  <span className="text-[11px] text-muted">
+                    ({searchTotals.transfers} transferencia{searchTotals.transfers !== 1 ? "s" : ""} sin contar)
+                  </span>
+                )}
+              </div>
+            </div>
           )}
 
           {filtered.length === 0 ? (

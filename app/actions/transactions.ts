@@ -10,6 +10,7 @@ import {
   searchTransactions,
 } from "@/lib/db/transactions";
 import { prisma } from "@/lib/prisma";
+import { SEARCH_RESULT_LIMIT, normalizeSearchRange, type SearchRange } from "@/lib/search-range";
 import { z } from "zod";
 
 function toNum(v: unknown): number {
@@ -141,13 +142,18 @@ export async function getTransactionsAction(
   return getTransactions(user.id, { ...filters, month, year });
 }
 
-/** Búsqueda libre de movimientos (server-side, sobre los últimos 6 meses). */
-export async function searchTransactionsAction(q: string) {
+/**
+ * Búsqueda libre de movimientos (server-side).
+ *
+ * Sin rango busca en los últimos 6 meses. Con rango busca exactamente ahí, así
+ * el usuario puede acotar el período o ir más atrás de esos 6 meses.
+ */
+export async function searchTransactionsAction(q: string, range?: SearchRange) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return [];
 
-  return searchTransactions(user.id, q, 50);
+  return searchTransactions(user.id, q, SEARCH_RESULT_LIMIT, normalizeSearchRange(range));
 }

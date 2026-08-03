@@ -4,6 +4,7 @@ import { encrypt, decrypt } from "@/lib/crypto";
 import { startOfTodayArg, endOfTodayArg } from "@/lib/timezone";
 import { snapshotConversion } from "@/lib/exchange";
 import { calculateTransferConversion } from "@/lib/transfer-conversion";
+import { searchWindow, type SearchRange } from "@/lib/search-range";
 
 export type SerializedTransaction = {
   id: string;
@@ -153,18 +154,23 @@ export async function getTransactions(
  * notas). Las descripciones/notas/cuentas están cifradas en la BD, así que
  * traemos una ventana reciente (6 meses) y filtramos en memoria tras descifrar.
  */
+/**
+ * El período se recorta en la consulta y no después, para que acotarlo sirva
+ * también para llegar más atrás: el tope de filas que se revisan se gasta
+ * dentro del rango elegido en vez de gastarse siempre en lo más reciente.
+ */
 export async function searchTransactions(
   userId: string,
   q: string,
-  take = 25
+  take = 25,
+  range: SearchRange = {}
 ): Promise<SerializedTransaction[]> {
   const term = q.toLowerCase().trim();
   if (!term) return [];
-  const since = new Date();
-  since.setMonth(since.getMonth() - 6);
+  const { since, until } = searchWindow(range);
 
   const rows = await prisma.transaction.findMany({
-    where: { userId, date: { gte: since } },
+    where: { userId, date: until ? { gte: since, lte: until } : { gte: since } },
     include: {
       category: { select: { name: true, icon: true, color: true } },
       account: { select: { name: true } },
