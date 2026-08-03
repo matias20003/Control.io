@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import {
+  annotateLastTouch,
   archiveCircleContact,
   createCircleContact,
   recordCircleTouch,
@@ -101,6 +102,26 @@ export async function recordCircleTouchAction(id: string): Promise<CircleActionR
     return { ok: true, contact };
   } catch (error) {
     return fail(error, "No pudimos registrar la conversación.");
+  }
+}
+
+/**
+ * Qué salió de esa conversación. Se pregunta DESPUÉS de registrarla y nunca
+ * bloquea nada: sin esto, dentro de seis meses el espejo puede decir "hablaste
+ * 14 veces" y nada más — un número, no un recuerdo.
+ */
+const memorySchema = z.string().trim().min(1, "Escribí algo o dejalo pasar.").max(500);
+
+export async function annotateLastTouchAction(
+  id: string,
+  note: string,
+): Promise<CircleActionResult> {
+  try {
+    await annotateLastTouch(await userId(), id, memorySchema.parse(note));
+    revalidatePath(ROUTE);
+    return { ok: true };
+  } catch (error) {
+    return fail(error, "No pudimos guardar esa nota.");
   }
 }
 

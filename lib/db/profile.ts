@@ -112,12 +112,29 @@ export function normalizeWhatsapp(input: string): string {
   return input.replace(/\D/g, "");
 }
 
-export async function getProfileWhatsapp(userId: string): Promise<string | null> {
-  const p = await prisma.profile.findUnique({
+export async function getProfileWhatsapp(userId: string, verifiedEmail?: string | null): Promise<string | null> {
+  // Primero buscamos cualquier vínculo real perteneciente al mismo ID o al
+  // correo autenticado. El fallback por email cubre cuentas históricas cuyo ID
+  // de Supabase cambió al volver a registrarse/iniciar sesión con otro método.
+  const linked = await prisma.profile.findFirst({
+    where: {
+      whatsappNumber: { not: null },
+      OR: [
+        { id: userId },
+        ...(verifiedEmail
+          ? [{ email: { equals: verifiedEmail, mode: "insensitive" as const } }]
+          : []),
+      ],
+    },
+    select: { whatsappNumber: true },
+  });
+  if (linked?.whatsappNumber?.trim()) return linked.whatsappNumber;
+
+  const current = await prisma.profile.findUnique({
     where: { id: userId },
     select: { whatsappNumber: true },
   });
-  return p?.whatsappNumber ?? null;
+  return current?.whatsappNumber ?? null;
 }
 
 /** ¿La cuenta está marcada como tester? (para ver features en desarrollo). */

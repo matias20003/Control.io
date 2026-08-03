@@ -352,6 +352,42 @@ export default function CircleFixturePage() {
       northNeedsReview={false}
       showCercanos
       showSystem
+      // La capa de recompensa, con material realista: alguien que ya se miró al
+      // espejo, tiene historia y todavía está dentro del andamio.
+      baseline={{
+        followedAtStart: 412,
+        capturedAt: "2026-06-22T12:00:00.000Z",
+        people: 11,
+        references: 14,
+        noise: 386,
+        pending: 1,
+      }}
+      lifetime={{
+        converted: 12,
+        byOutcome: { task: 6, habit: 3, note: 3 },
+        firstAt: "2026-06-24T12:00:00.000Z",
+        habitsAlive: 2,
+        tasksDone: 4,
+      }}
+      conversations={9}
+      conversationsWithMemory={4}
+      actDates={[
+        "2026-07-28T12:00:00.000Z",
+        "2026-07-29T12:00:00.000Z",
+        "2026-07-30T12:00:00.000Z",
+        "2026-07-21T12:00:00.000Z",
+        "2026-07-22T12:00:00.000Z",
+        "2026-07-23T12:00:00.000Z",
+      ]}
+      dose={{
+        phase: "ANDAMIO",
+        monthsIn: 1,
+        intensity: 100,
+        fullCelebration: true,
+        showStreak: true,
+        announce: true,
+        mirrorFirst: false,
+      }}
     />
   );
 }

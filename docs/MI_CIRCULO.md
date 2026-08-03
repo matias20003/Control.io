@@ -24,6 +24,53 @@ duración, valor alto: cinco minutos todos los días. Una visita corta, diaria e
 imprescindible. Si en algún momento alguien propone "contenido relacionado" o
 scroll infinito, la respuesta es no.
 
+## La recompensa
+
+Esto **no** es una app que renuncia a la dopamina: es una app que la dispara en
+otro lado. La maquinaria puede ser la misma que la de Instagram; lo que cambia
+es **qué la enciende**.
+
+En Instagram la recompensa dispara **al consumir** — scrolleás, aparece algo,
+hit. Por eso su óptimo es infinito. Acá dispara al **convertir** (una lectura se
+volvió tarea, hábito o nota), al **declarar una conversación real**, al **cerrar
+la ración** y al **podar una fuente**. Todos actos con fondo: no se pueden
+repetir sin límite en un día.
+
+**Regla dura:** nunca se premia cantidad leída, minutos adentro, días seguidos
+abriendo la app, ni cantidad de contactos o de fuentes. El día que se premie
+consumo, esto es Instagram con mejor contenido. La lista viva de qué cuenta como
+acto está en `lib/db/circle-acts.ts`.
+
+### Las dos capas
+
+- **Fabricada** — la maquinaria: celebración al convertir, racha, anticipación,
+  el cierre premiado. Va *en el momento*, sobre actos acotados.
+- **Reflejada** — el espejo: conversaciones que ocurrieron, hábitos que siguen
+  en pie, fuentes que se ganaron el lugar. Va *en el acumulado* y no se fabrica:
+  cada línea es algo que la persona hizo.
+
+Sola, la fabricada es un casino: el hit se siente y no queda nada. Solo, el
+espejo es una planilla verdadera que nadie abre. Van juntas.
+
+### El andamio se retira, y se anuncia
+
+La capa fabricada es un **andamio, no un cimiento**. El día 1 no hay nada real
+que reflejar, así que la maquinaria carga sola las primeras semanas; al tercer
+mes baja el volumen y al sexto se retira, porque para entonces el acumulado
+pesa más que cualquier animación.
+
+Y se dice en voz alta: *"ya no te necesito para engancharte, mirá lo que
+juntaste"*. Eso sólo se puede decir si **el contrato estuvo desde el minuto
+cero** — anunciado recién al final, se lee como que la app te abandona. La
+dosis y los textos viven en `lib/circle-scaffold.ts`.
+
+### Para quién
+
+Para alguien dispuesto a hacer el trabajo. El filtro es de **compromiso, nunca
+de confusión**: pedirle clasificar cuatrocientas cuentas es exigente a
+propósito, pero cada paso tiene que estar clarísimo. La fricción que no es una
+prueba de voluntad es una fuga con excusa.
+
 ## Las dos mitades
 
 Instagram resuelve dos necesidades distintas con la misma pantalla. Mi Círculo
@@ -96,8 +143,13 @@ termina". Cuando terminás, **Mi Círculo se cierra hasta la próxima ventana**.
 hay "seguí explorando": la pantalla dice que ya leíste lo de hoy y no queda nada
 que tocar. No hay scroll infinito porque no hay nada que scrollear.
 
-La app tiene que poder decir **"hoy no hay nada que valga tu tiempo"**. Radar ya
-lo hace con `INSUFFICIENT_SIGNALS`; se extiende a toda la sección.
+La app tiene que poder decir **"hoy no hay nada que valga tu tiempo"**, y lo
+dice en el inicio, en el aviso diario y en Radar. Por eso la racha cuenta actos
+por semana y no días abiertos: un día honesto no puede costarte una racha.
+
+Radar sólo deja entrar lo que toca alguno de tus frentes. Era la única parte de
+la sección que ofrecía contenido no elegido, sin destino — la puerta de atrás
+por donde se colaba el feed.
 
 Mejor tres piezas verificadas que doce de relleno. Esto es un límite duro: si la
 curaduría es mediocre, la premisa entera ("acá la información vale más") se cae.
@@ -117,15 +169,7 @@ en algo. Estas 3 fuentes te dieron todas las conversiones. Estas 5 no te dieron
 ninguna en 60 días — ¿las sacamos?". Las fuentes se ganan el lugar. Mientras
 todos los algoritmos expanden tu feed, este lo achica.
 
-## La Mudanza
-
-La transición desde Instagram. Sin esto, el día 1 el usuario tiene Mi Círculo
-vacío e Instagram lleno, y no hay competencia posible.
-
-**Principio rector: un hábito no se saca, se reemplaza.** Cada cosa que se quita
-se sustituye *antes*. Cortar primero falla siempre.
-
-### Etapa 0 · El inventario
+## El Espejo — el día 1
 
 Antes de sacar nada, ver qué hay. Instagram permite descargar tus propios datos
 (Centro de cuentas → *Descargar tu información*), y el export incluye
@@ -139,12 +183,34 @@ cuentas y le pide clasificar cada una en tres cubetas:
 - **Referente del que aprendo** → va a Referentes
 - **Ruido** → no va a ningún lado
 
-Ese acto de clasificar ya es la mitad del valor de la sección. Nadie lo hizo
-nunca conscientemente.
+**Esto es la puerta de entrada de la sección, no una etapa de La Mudanza.**
+Estuvo enterrado como "etapa 0" de un proceso opcional y era exactamente al
+revés, porque hace dos trabajos que ningún otro lugar puede hacer:
+
+1. **Es la evidencia.** Le muestra a la persona algo sobre su propia vida que
+   nunca vio — sigue a 412 cuentas y las que de verdad le importan son once.
+   No es una promesa de marketing y no cuesta nada, porque es verdad. Es lo que
+   convierte a alguien común en alguien dispuesto.
+2. **Es la línea de base.** Ese "412" es imposible de reconstruir después. Sin
+   él, el espejo del mes 6 queda en números absolutos, que no prueban un cambio.
+   Los items del inventario no se borran nunca por esa razón (`getBaseline`).
+
+Además ordena el setup: clasificar **ya crea** el contacto o la fuente, así que
+los pasos siguientes dejan de ser "cargá catorce referentes a mano" y pasan a
+ser "confirmá lo que ya clasificaste". El Norte va último, porque después de ver
+tu propia lista sabés mejor qué querés.
 
 *Caveats:* el export tarda en llegar (de horas a un día) y el formato lo define
 Meta, así que puede cambiar. La carga manual queda siempre como alternativa y
 como respaldo.
+
+## La Mudanza
+
+La transición desde Instagram, para el que quiera darla. **Desinstalar es una
+decisión del usuario, no un requisito de la sección.**
+
+**Principio rector: un hábito no se saca, se reemplaza.** Cada cosa que se quita
+se sustituye *antes*. Cortar primero falla siempre.
 
 ### Etapa 1 · El reemplazo
 
@@ -203,24 +269,24 @@ tender a bajar. Cuando uno de esos abre un canal propio, la app avisa y se migra
   diseño y así se queda.
 - Contenido relacionado, scroll infinito o cualquier mecánica de sesión larga.
 
-## Orden de construcción
+## El recorrido
 
-1. **Círculo Cercano.** No depende de ninguna API externa, es el diferencial más
-   fuerte y se puede lanzar solo. Incluye alta manual de personas.
-2. **Referentes por obra.** Resolución de canales legítimos, más El Norte y La
-   Cosecha sobre la edición que ya existe.
-3. **La Mudanza.** Import del export de Instagram, clasificación, cobertura,
-   convivencia y corte. Va después de 1 y 2 porque necesita destinos donde
-   clasificar.
-4. **El puente.** Último y a propósito: si existe desde el arranque, nadie migra
-   sus fuentes.
+**Minuto 0 · El contrato.** La app declara que va a engancharte a propósito y
+que la meta es dejar de hacerlo.
+**Día 1 · El Espejo.** La evidencia sobre su propia vida, antes de haberle dado
+nada. Acá se decide si esta persona quiere esto — y las dos respuestas son
+buenos resultados.
+**Mes 1–2 · El andamio.** La maquinaria fabricada carga sola: conversión
+celebrada, cierre premiado, poda que se siente bien, anticipación honesta.
+**Mes 3–6 · El retiro declarado.** La maquinaria baja el volumen y la app lo
+dice en voz alta, mostrando el antes y después contra la línea de base.
 
 ## Estado
 
-Las cuatro fases están implementadas detrás de dos flags en `testers`:
-`circuloCercanos` (la mitad gente) y `circuloSistema` (Referentes, Norte,
-Cosecha y Mudanza). Las dos migraciones están aplicadas. El perfil real de
-prueba tiene acceso a ambos flags.
+Todo lo anterior está implementado detrás de dos flags en `testers`:
+`circuloCercanos` (la mitad gente) y `circuloSistema` (Espejo, Referentes,
+Norte, Cosecha y Mudanza). Las tres migraciones están aplicadas. El perfil real
+de prueba tiene acceso a ambos flags.
 
 ### Motores puros (con tests)
 
@@ -229,6 +295,8 @@ prueba tiene acceso a ambos flags.
 | `lib/circle-cadence.ts` | Quién aparece hoy y cuánto pide la lista. Fija la regla del límite. |
 | `lib/circle-north.ts` | De frentes a términos de búsqueda, y a qué frente sirve cada pieza. |
 | `lib/circle-inventory.ts` | Lectura del export de Instagram, avance del inventario y checklist del corte. |
+| `lib/circle-scaffold.ts` | Cuánta maquinaria corresponde hoy, qué dice la app de sí misma y la racha honesta. |
+| `lib/circle-mirror.ts` | El antes y después. Nunca inventa una línea: sin material, dice que todavía no. |
 | `lib/brief/feed-parser.ts` | RSS y Atom sin dependencias. Ante la duda descarta, no inventa. |
 
 ### Servicios
@@ -240,25 +308,38 @@ prueba tiene acceso a ambos flags.
 
 ### Datos
 
-`lib/db/circle.ts`, `circle-north.ts`, `circle-harvest.ts`, `circle-migration.ts`
-y `channels.ts`. Todo lo personal —nombres, teléfonos, notas, frentes,
-intenciones del puente— va cifrado con `lib/crypto.ts`.
+`lib/db/circle.ts`, `circle-north.ts`, `circle-harvest.ts`, `circle-migration.ts`,
+`circle-acts.ts` y `channels.ts`. Todo lo personal —nombres, teléfonos, notas,
+frentes, intenciones del puente, y qué salió de cada conversación— va cifrado
+con `lib/crypto.ts`.
+
+`circle-acts.ts` es el único lugar donde se define qué cuenta como acto valioso.
+Si alguna vez entra ahí una métrica de consumo, la premisa se cayó.
 
 ### Interfaz
 
-`CercanosView`, `ReferentesView`, `NorteView`, `CosechaView` y `MudanzaView`,
-bajo `app/(dashboard)/newsletter/`. La navegación separa lo diario (Cercanos,
-Referentes, Noticias, Radar) de lo periódico (Norte, Cosecha, Mudanza).
+`EspejoView`, `CercanosView`, `ReferentesView`, `NorteView`, `CosechaView` y
+`MudanzaView`, bajo `app/(dashboard)/newsletter/`. Los componentes compartidos
+de la capa de recompensa —`RewardBurst`, `MirrorPanel`, `StreakChip`,
+`ScaffoldContract`— viven en `CircleUI.tsx`, para que ningún acto pueda
+celebrarse por su cuenta.
+
+El aviso diario sale del cron horario (`lib/services/newsletter.ts`) y **abre
+por la persona que espera, no por el contenido** — y sale igual en un día sin
+noticias, porque el día que la app tiene menos contenido es justo el día en que
+no puede quedarse callada.
 
 ### Lo que falta
 
 - **Falta el recorrido visual con la sesión real del usuario.** El entorno de
-  prueba cubre los estados con datos realistas, pero la validación final de tono
-  y comportamiento —sobre todo si Cercanos se siente humano o como un CRM— sólo
-  ocurre usándolo.
-- La vieja ventana enfocada de Instagram (extensión de escritorio) sigue viva y
-  accesible, ahora en la fila secundaria. Convive con el puente; en algún
-  momento hay que decidir si se retira.
+  prueba (`/circle-fixture`) cubre los estados con datos realistas, pero la
+  validación de tono —sobre todo si Cercanos se siente humano o como un CRM, y
+  si la celebración al convertir se siente ganada o barata— sólo ocurre usándolo.
+- **Falta calibrar la dosis del andamio.** Los cortes de 3 y 6 meses son una
+  decisión de diseño, no un dato medido.
+- La extensión de escritorio (`browser-extension/controlio-focus`) y su ruta
+  siguen existiendo, pero **ya no se ofrecen desde Mi Círculo**: para el
+  referente sin canal propio está el puente. Queda decidir si se retira del todo.
 
 ## Restricciones que atraviesan todo
 

@@ -141,6 +141,19 @@ export const MIGRATION_STAGES = [
 ] as const;
 export type MigrationStage = (typeof MIGRATION_STAGES)[number];
 
+/**
+ * Las etapas que se recorren DENTRO de La Mudanza.
+ *
+ * `INVENTORY` quedó afuera a propósito: mirarse al espejo dejó de ser la etapa
+ * 0 de un proceso opcional y pasó a ser la puerta de entrada de la sección —
+ * es el momento más persuasivo que tiene el producto y la única forma de
+ * capturar la línea de base. El valor sigue existiendo en la base para las
+ * mudanzas que ya venían arrancadas.
+ */
+export const MUDANZA_STAGES: MigrationStage[] = MIGRATION_STAGES.filter(
+  (stage) => stage !== "INVENTORY",
+);
+
 export const STAGE_LABELS: Record<MigrationStage, string> = {
   INVENTORY: "El inventario",
   REPLACE: "El reemplazo",
@@ -151,7 +164,7 @@ export const STAGE_LABELS: Record<MigrationStage, string> = {
 
 export const STAGE_DESCRIPTIONS: Record<MigrationStage, string> = {
   INVENTORY:
-    "Antes de sacar nada, ver qué hay. Subí tu export de Instagram y clasificá cada cuenta.",
+    "Antes de sacar nada, ver qué hay. Eso ahora se hace en El Espejo, apenas entrás a la sección.",
   REPLACE:
     "Por cada referente buscamos su canal propio. Por cada persona, su teléfono.",
   COEXIST:

@@ -23,6 +23,8 @@ import {
 } from "@/lib/services/brief/sources";
 import { sendPushToUser } from "@/lib/push/send";
 import { sendText } from "@/lib/whatsapp/kapso";
+import { getCircleContacts } from "@/lib/db/circle";
+import { rankDueContacts } from "@/lib/circle-cadence";
 
 export type GenerateOptions = {
   topics: string[];
@@ -116,31 +118,67 @@ function buildWhatsappDigest(articles: AnalyzedArticle[], summary: string): stri
   return `📰 *Tu newsletter de hoy*\n\n${summary}${top}\n\nLeelo completo 👉 ${SITE_URL}/newsletter`;
 }
 
-/** Avisa al usuario que su edición está lista, según los canales que activó. */
-async function notifyEditionReady(
+/**
+ * A quién le toca hoy, para el aviso diario.
+ *
+ * Mi Círculo no ve las conversaciones de nadie: esto sale de las cadencias que
+ * la propia persona declaró.
+ */
+async function dueTodayNames(userId: string): Promise<string[]> {
+  const contacts = await getCircleContacts(userId).catch(() => []);
+  return rankDueContacts(contacts).map((contact) => contact.name);
+}
+
+/**
+ * El aviso diario.
+ *
+ * Durante la transición desde Instagram el gancho no puede ser el contenido —
+ * ahí Instagram gana siempre. El gancho es la persona que espera, y por eso
+ * abre el mensaje. Y por eso el aviso sale aunque hoy no haya una sola noticia:
+ * el día que la app tiene menos contenido es justo el día que no puede
+ * quedarse callada.
+ */
+async function notifyDailyCircle(
   userId: string,
-  edition: SerializedEdition,
+  edition: SerializedEdition | null,
+  count: number,
+  people: string[],
   whatsappNumber: string | null,
   channels: { push: boolean; whatsapp: boolean }
 ): Promise<void> {
-  const bodyShort =
-    edition.summary.length > 160
-      ? edition.summary.slice(0, 157).trimEnd() + "…"
-      : edition.summary;
+  const vinculo =
+    people.length === 0
+      ? null
+      : people.length === 1
+        ? `Hoy: escribile a ${people[0]}.`
+        : `Hoy: ${people.slice(0, 2).join(" y ")} esperan noticias tuyas.`;
+
+  // La edición se anuncia por lo que es. Un día sin nada se dice, no se disfraza.
+  const lectura =
+    count === 0
+      ? "Hoy no hay nada que valga tu tiempo."
+      : `${count} ${count === 1 ? "lectura" : "lecturas"} y termina.`;
 
   if (channels.push) {
     await sendPushToUser(userId, {
-      title: "📰 Tu newsletter de hoy",
-      body: bodyShort || "Ya está lista tu edición de noticias del día.",
+      title: vinculo ? "Tu círculo" : "📰 Tu ración de hoy",
+      body: vinculo ? `${vinculo} ${lectura}` : lectura,
       url: "/newsletter",
     }).catch(() => {});
   }
 
   if (channels.whatsapp && whatsappNumber) {
-    await sendText(
-      whatsappNumber,
-      buildWhatsappDigest(edition.articles, edition.summary)
-    ).catch(() => {
+    const cuerpo = vinculo
+      ? `👋 *${vinculo}*\n\n${
+          edition && count > 0
+            ? buildWhatsappDigest(edition.articles, edition.summary)
+            : `${lectura}\n\n${SITE_URL}/newsletter`
+        }`
+      : edition && count > 0
+        ? buildWhatsappDigest(edition.articles, edition.summary)
+        : `📰 ${lectura}\n\n${SITE_URL}/newsletter`;
+
+    await sendText(whatsappNumber, cuerpo).catch(() => {
       // fuera de la ventana de 24h o sin Kapso configurado → ya avisamos por push.
     });
   }
@@ -224,20 +262,28 @@ export async function generateEditionsForHour(hour: number): Promise<{
       generated++;
       if (result.usedAI) aiUsed++;
 
+      // El gancho de la sección no es el contenido: es la persona que espera.
+      // Por eso el aviso también sale en un día sin noticias, si hay alguien.
+      const people = await dueTodayNames(cfg.userId);
+
       // Con varias ventanas, la clave atómica habilita un aviso por horario sin
       // duplicarlo cuando el pinger reintenta durante la misma hora.
       const shouldNotify =
         (cfg.notifyPush || cfg.notifyWhatsapp) &&
-        result.count > 0 &&
+        (result.count > 0 || people.length > 0) &&
         (hasMultipleWindows
           ? await claimDeliveryWindow(cfg.userId, hour)
           : !alreadyExisted);
 
       if (shouldNotify) {
-        await notifyEditionReady(cfg.userId, result.edition, cfg.whatsappNumber, {
-          push: cfg.notifyPush,
-          whatsapp: cfg.notifyWhatsapp,
-        });
+        await notifyDailyCircle(
+          cfg.userId,
+          result.edition,
+          result.count,
+          people,
+          cfg.whatsappNumber,
+          { push: cfg.notifyPush, whatsapp: cfg.notifyWhatsapp },
+        );
         notified++;
       }
     } catch (err) {

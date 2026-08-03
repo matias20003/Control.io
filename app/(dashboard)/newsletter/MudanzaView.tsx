@@ -1,76 +1,46 @@
 "use client";
 
-import { useMemo, useRef, useTransition } from "react";
-import {
-  ArrowRight,
-  Check,
-  CircleAlert,
-  Download,
-  Heart,
-  Loader2,
-  Trash2,
-  Upload,
-  UserRound,
-} from "lucide-react";
+import { useTransition } from "react";
+import { ArrowRight, Check, CircleAlert, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  decideInventoryItemAction,
-  importInventoryAction,
   recordReinstallAction,
   setMigrationStageAction,
 } from "@/app/actions/circle-system";
-import type {
-  SerializedInventoryItem,
-  SerializedMigration,
-} from "@/lib/db/circle-migration";
-import type { CircleContact } from "@/lib/db/circle";
-import type { SerializedBriefSource } from "@/lib/brief/types";
+import type { SerializedMigration } from "@/lib/db/circle-migration";
 import {
-  MIGRATION_STAGES,
+  MUDANZA_STAGES,
   STAGE_DESCRIPTIONS,
   STAGE_LABELS,
-  inventoryProgress,
   type CutChecklist,
   type MigrationStage,
 } from "@/lib/circle-inventory";
-import { SectionHeading, QuietEmpty } from "./CircleUI";
+import { SectionHeading } from "./CircleUI";
 
 export function MudanzaView({
   migration,
-  inventory,
   checklist,
   onMigrationChange,
-  onInventoryChange,
-  onContactAdded,
-  onSourceAdded,
+  onOpenEspejo,
 }: {
   migration: SerializedMigration;
-  inventory: SerializedInventoryItem[];
   checklist: CutChecklist;
   onMigrationChange: (next: SerializedMigration) => void;
-  onInventoryChange: (next: SerializedInventoryItem[]) => void;
-  onContactAdded: (contact: CircleContact) => void;
-  onSourceAdded: (source: SerializedBriefSource) => void;
+  onOpenEspejo: () => void;
 }) {
   return (
     <section className="mt-7">
       <SectionHeading
         eyebrow="La Mudanza"
         title="De Instagram a acá"
-        description="Un hábito no se saca, se reemplaza. Cada etapa sustituye antes de quitar: cortar primero falla siempre."
+        description="Un hábito no se saca, se reemplaza. Cada etapa sustituye antes de quitar: cortar primero falla siempre. Desinstalar es una decisión tuya, no un requisito de la sección."
       />
 
       <StageBar stage={migration.stage} onMigrationChange={onMigrationChange} />
 
       {migration.stage === "INVENTORY" && (
-        <InventoryStage
-          inventory={inventory}
-          uploadedAt={migration.inventoryUploadedAt}
-          onInventoryChange={onInventoryChange}
-          onContactAdded={onContactAdded}
-          onSourceAdded={onSourceAdded}
-        />
+        <InventoryMoved onOpenEspejo={onOpenEspejo} />
       )}
       {migration.stage === "REPLACE" && <ReplaceStage checklist={checklist} />}
       {migration.stage === "COEXIST" && <CoexistStage days={migration.coexistDays} />}
@@ -96,7 +66,9 @@ function StageBar({
   onMigrationChange: (next: SerializedMigration) => void;
 }) {
   const [isPending, startPending] = useTransition();
-  const actualIndex = MIGRATION_STAGES.indexOf(stage);
+  // Una mudanza que arrancó antes de que el inventario se mudara al Espejo
+  // puede estar todavía en INVENTORY: se muestra como "antes de empezar".
+  const actualIndex = MUDANZA_STAGES.indexOf(stage);
 
   const go = (next: MigrationStage) => {
     startPending(async () => {
@@ -111,8 +83,8 @@ function StageBar({
 
   return (
     <div className="mt-6 overflow-hidden rounded-xl border border-border bg-surface/45">
-      <div className="grid md:grid-cols-5">
-        {MIGRATION_STAGES.map((item, index) => {
+      <div className="grid md:grid-cols-4">
+        {MUDANZA_STAGES.map((item, index) => {
           const hecha = index < actualIndex;
           const actual = index === actualIndex;
           return (
@@ -135,7 +107,7 @@ function StageBar({
                         : "bg-surface-3 text-muted"
                   }`}
                 >
-                  {hecha ? <Check size={12} /> : index}
+                  {hecha ? <Check size={12} /> : index + 1}
                 </span>
                 <span
                   className={`text-sm font-semibold ${actual ? "text-primary" : "text-foreground"}`}
@@ -154,253 +126,28 @@ function StageBar({
   );
 }
 
-// ─── Etapa 0 · El inventario ────────────────────────────────────────────────
+// ─── Antes de empezar ───────────────────────────────────────────────────────
 
-function InventoryStage({
-  inventory,
-  uploadedAt,
-  onInventoryChange,
-  onContactAdded,
-  onSourceAdded,
-}: {
-  inventory: SerializedInventoryItem[];
-  uploadedAt: string | null;
-  onInventoryChange: (next: SerializedInventoryItem[]) => void;
-  onContactAdded: (contact: CircleContact) => void;
-  onSourceAdded: (source: SerializedBriefSource) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [isImporting, startImporting] = useTransition();
-  const progreso = useMemo(() => inventoryProgress(inventory), [inventory]);
-  const pendientes = inventory.filter((item) => item.decision === "PENDING");
-
-  const subir = (file: File) => {
-    startImporting(async () => {
-      const raw = await file.text();
-      const result = await importInventoryAction(raw);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success(
-        `${result.imported} cuentas nuevas${result.alreadyThere ? `, ${result.alreadyThere} ya estaban` : ""}.`,
-      );
-      // La lista completa la trae el server al revalidar; recargamos la vista.
-      window.location.reload();
-    });
-  };
-
+/**
+ * El inventario se mudó al Espejo. Acá queda sólo el puente para las mudanzas
+ * que ya estaban arrancadas en la etapa vieja.
+ */
+function InventoryMoved({ onOpenEspejo }: { onOpenEspejo: () => void }) {
   return (
-    <div className="mt-6 space-y-6">
-      <div className="rounded-xl border border-border bg-surface/60 p-5">
-        <p className="text-sm font-semibold text-foreground">
-          Traé tu lista de seguidos
-        </p>
-        <ol className="mt-3 space-y-2 text-xs leading-relaxed text-muted">
-          <li>
-            <span className="font-semibold text-foreground">1.</span> En
-            Instagram: Centro de cuentas → Tu información y permisos →{" "}
-            <span className="font-semibold text-foreground">
-              Descargar tu información
-            </span>
-            . Pedí el formato <span className="font-semibold">JSON</span>.
-          </li>
-          <li>
-            <span className="font-semibold text-foreground">2.</span> Te llega
-            por mail. Puede tardar de unas horas a un día.
-          </li>
-          <li>
-            <span className="font-semibold text-foreground">3.</span>{" "}
-            Descomprimí y buscá{" "}
-            <code className="rounded bg-surface-3 px-1 py-0.5 text-[11px]">
-              following.json
-            </code>
-            . Subilo acá.
-          </li>
-        </ol>
-        <p className="mt-3 text-xs leading-relaxed text-muted">
-          Son tus propios datos, pedidos por vos. No hay scraping ni se viola
-          ningún término.
-        </p>
-
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".json,application/json"
-          className="sr-only"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) subir(file);
-            event.target.value = "";
-          }}
-        />
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button onClick={() => inputRef.current?.click()} disabled={isImporting}>
-            {isImporting ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <Upload size={16} />
-            )}
-            Subir following.json
-          </Button>
-          <a
-            href="https://accountscenter.instagram.com/info_and_permissions/dyi/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold text-foreground hover:bg-surface-2"
-          >
-            <Download size={15} />
-            Pedirle el export a Instagram
-          </a>
-        </div>
-        {uploadedAt && (
-          <p className="mt-3 text-xs text-muted">
-            Último archivo subido:{" "}
-            {new Date(uploadedAt).toLocaleDateString("es-AR")}
-          </p>
-        )}
-      </div>
-
-      {inventory.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-border bg-surface/45">
-          <div className="border-b border-border px-5 py-4">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h3 className="font-news text-xl text-foreground">
-                Clasificá cada cuenta
-              </h3>
-              <p className="text-xs text-muted">
-                {progreso.classified} de {progreso.total} · {progreso.percent}%
-              </p>
-            </div>
-            <p className="mt-1 text-xs leading-relaxed text-muted">
-              Este acto es la mitad del valor de la sección. Nadie lo hizo nunca
-              a conciencia.
-            </p>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-3">
-              <div
-                className="h-full rounded-full bg-primary transition-[width] duration-500"
-                style={{ width: `${progreso.percent}%` }}
-              />
-            </div>
-          </div>
-
-          {pendientes.slice(0, 40).map((item) => (
-            <InventoryRow
-              key={item.id}
-              item={item}
-              onDecided={(updated) =>
-                onInventoryChange(
-                  inventory.map((row) => (row.id === updated.id ? updated : row)),
-                )
-              }
-              onContactAdded={onContactAdded}
-              onSourceAdded={onSourceAdded}
-            />
-          ))}
-
-          {pendientes.length === 0 && (
-            <QuietEmpty text="Clasificaste todo. Ya podés pasar al reemplazo." />
-          )}
-          {pendientes.length > 40 && (
-            <p className="border-t border-border px-5 py-3 text-xs text-muted">
-              Mostrando 40 de {pendientes.length} pendientes. Clasificá estas y
-              aparecen las que siguen.
-            </p>
-          )}
-        </div>
-      )}
+    <div className="mt-6 rounded-xl border border-border bg-surface/60 p-5 sm:p-6">
+      <h3 className="font-news text-xl text-foreground">
+        El inventario ahora es lo primero
+      </h3>
+      <p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-muted">
+        Mirar a quién seguís dejó de ser el paso 0 de este proceso: es la puerta
+        de entrada de la sección, porque es lo que te muestra de dónde partís.
+        Terminá ahí y volvé cuando quieras empezar a mudarte.
+      </p>
+      <Button onClick={onOpenEspejo} className="mt-5">
+        Ir a El Espejo
+        <ArrowRight size={16} />
+      </Button>
     </div>
-  );
-}
-
-function InventoryRow({
-  item,
-  onDecided,
-  onContactAdded,
-  onSourceAdded,
-}: {
-  item: SerializedInventoryItem;
-  onDecided: (updated: SerializedInventoryItem) => void;
-  onContactAdded: (contact: CircleContact) => void;
-  onSourceAdded: (source: SerializedBriefSource) => void;
-}) {
-  const [isPending, startPending] = useTransition();
-
-  const decidir = (decision: "PERSON" | "REFERENCE" | "NOISE") => {
-    startPending(async () => {
-      const result = await decideInventoryItemAction(item.id, decision);
-      if (result.error || !result.inventoryItem) {
-        toast.error(result.error ?? "No pudimos guardar esa decisión.");
-        return;
-      }
-      onDecided(result.inventoryItem);
-      if (result.contact) onContactAdded(result.contact);
-      if (result.source) onSourceAdded(result.source);
-    });
-  };
-
-  return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 last:border-b-0">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">
-          @{item.handle}
-        </p>
-        {item.fullName && (
-          <p className="truncate text-xs text-muted">{item.fullName}</p>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        <DecisionButton
-          icon={Heart}
-          label="Persona"
-          onClick={() => decidir("PERSON")}
-          disabled={isPending}
-        />
-        <DecisionButton
-          icon={UserRound}
-          label="Referente"
-          onClick={() => decidir("REFERENCE")}
-          disabled={isPending}
-        />
-        <DecisionButton
-          icon={Trash2}
-          label="Ruido"
-          onClick={() => decidir("NOISE")}
-          disabled={isPending}
-          quiet
-        />
-      </div>
-    </div>
-  );
-}
-
-function DecisionButton({
-  icon: Icon,
-  label,
-  onClick,
-  disabled,
-  quiet = false,
-}: {
-  icon: typeof Heart;
-  label: string;
-  onClick: () => void;
-  disabled: boolean;
-  quiet?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`inline-flex min-h-11 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors disabled:opacity-50 ${
-        quiet
-          ? "border-border text-muted hover:bg-surface-3"
-          : "border-primary/40 text-primary hover:bg-primary/10"
-      }`}
-    >
-      <Icon size={14} />
-      {label}
-    </button>
   );
 }
 

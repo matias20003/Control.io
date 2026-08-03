@@ -6,14 +6,19 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { deleteBriefSourceAction } from "@/app/actions/newsletter";
 import type { HarvestReport } from "@/lib/db/circle-harvest";
-import { SectionHeading, QuietEmpty } from "./CircleUI";
+import type { Mirror } from "@/lib/circle-mirror";
+import { SectionHeading, QuietEmpty, MirrorPanel, type Reward } from "./CircleUI";
 
 export function CosechaView({
   report,
+  mirror,
   onSourcePruned,
+  onReward,
 }: {
   report: HarvestReport;
+  mirror: Mirror;
   onSourcePruned: (sourceId: string) => void;
+  onReward?: (reward: Reward) => void;
 }) {
   return (
     <section className="mt-7">
@@ -22,6 +27,12 @@ export function CosechaView({
         title="Qué dejó lo que leíste"
         description="Consumir sin convertir es entretenimiento. Acá no se mide cuánto tiempo pasaste: se mide qué salió de eso."
       />
+
+      {/* El acumulado de siempre va primero. El informe del mes decide qué
+          fuente echás; esto prueba un cambio, y un cambio no cabe en un mes. */}
+      <div className="mt-6">
+        <MirrorPanel mirror={mirror} />
+      </div>
 
       <div className="mt-6 grid overflow-hidden rounded-xl border border-border bg-surface/60 sm:grid-cols-3">
         <Metric
@@ -56,7 +67,12 @@ export function CosechaView({
             </p>
           </div>
           {report.toPrune.map((source) => (
-            <PruneRow key={source.sourceId} source={source} onPruned={onSourcePruned} />
+            <PruneRow
+              key={source.sourceId}
+              source={source}
+              onPruned={onSourcePruned}
+              onReward={onReward}
+            />
           ))}
         </div>
       )}
@@ -100,12 +116,18 @@ export function CosechaView({
   );
 }
 
+/**
+ * Podar es un acto con fondo y se celebra como tal. Es la recompensa más rara
+ * de todo el sistema: en cualquier otra app achicar tu feed sería una pérdida.
+ */
 function PruneRow({
   source,
   onPruned,
+  onReward,
 }: {
   source: HarvestReport["toPrune"][number];
   onPruned: (sourceId: string) => void;
+  onReward?: (reward: Reward) => void;
 }) {
   const [isPending, startPending] = useTransition();
 
@@ -117,7 +139,10 @@ function PruneRow({
         return;
       }
       onPruned(source.sourceId);
-      toast.success(`${source.name} salió de tus fuentes.`);
+      onReward?.({
+        title: "Una fuente menos",
+        detail: `${source.name} no te dio nada en ${source.daysSinceLastConversion} días. Tu lista se achicó, que es exactamente lo que tiene que pasar.`,
+      });
     });
   };
 

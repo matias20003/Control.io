@@ -28,7 +28,8 @@ import { GuidedTour } from "@/components/GuidedTour";
 import { WhatsappPromoModal } from "@/components/WhatsappPromoModal";
 import { getOnboardingState } from "@/lib/db/onboarding";
 import { getProfileWhatsapp, getIsTester, getOrCreateWhatsappLinkCode } from "@/lib/db/profile";
-import { hasFeature, FEATURE_FLAGS } from "@/lib/feature-flags";
+import { hasFeature } from "@/lib/feature-flags";
+import { shouldShowWhatsappOnboarding } from "@/lib/whatsapp/onboarding";
 import { WhatsappOnboardingHero } from "./WhatsappOnboardingHero";
 import { getStreakInfo } from "@/lib/db/streak";
 import { nextStreakMilestone } from "@/lib/streak-utils";
@@ -83,7 +84,7 @@ export default async function DashboardPage({
       .find((part) => part.type === "hour")?.value ?? "0",
   );
 
-  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappNumber, streakInfo, netWorth, lastMovementAt, agenda, isTester] =
+  const [summary, accounts, categories, insights, trends, goals, recent, onboarding, whatsappResult, streakInfo, netWorth, lastMovementAt, agenda, isTester] =
     await Promise.all([
       getMonthSummary(user.id, month, year),
       getAccounts(user.id),
@@ -93,7 +94,9 @@ export default async function DashboardPage({
       getGoals(user.id).catch(() => []),
       getTransactions(user.id, { take: 6 }).then((r) => r.items).catch(() => []),
       getOnboardingState(user.id),
-      getProfileWhatsapp(user.id).catch(() => null),
+      getProfileWhatsapp(user.id, user.email)
+        .then((number) => ({ status: number?.trim() ? "linked" as const : "unlinked" as const, number }))
+        .catch(() => ({ status: "unknown" as const, number: null })),
       getStreakInfo(user.id).catch(() => ({ current: 0, longest: 0 })),
       getNetWorth(user.id).catch(() => null),
       getLastMovementDate(user.id).catch(() => null),
@@ -102,7 +105,10 @@ export default async function DashboardPage({
     ]);
 
   // Código para vincular WhatsApp en 1 toque (solo se genera si aún no vinculó).
-  const whatsappLinkCode = whatsappNumber ? "" : await getOrCreateWhatsappLinkCode(user.id).catch(() => "");
+  const whatsappNumber = whatsappResult.number;
+  const whatsappLinkCode = whatsappResult.status === "unlinked"
+    ? await getOrCreateWhatsappLinkCode(user.id).catch(() => "")
+    : "";
 
   const daysSinceLastMovement = lastMovementAt
     ? Math.floor((Date.now() - new Date(lastMovementAt).getTime()) / 86_400_000)
@@ -196,7 +202,7 @@ export default async function DashboardPage({
     /* dashboard-panel: alcance del modo privacidad (ver globals.css) */
     <div className="dashboard-panel p-4 md:p-6 max-w-[1440px] mx-auto space-y-5">
 
-      <WhatsappPromoModal isLinked={!!whatsappNumber} />
+      <WhatsappPromoModal isLinked={whatsappResult.status !== "unlinked"} />
 
       {/* Greeting — la racha y el ojo de privacidad viajan juntos a la derecha */}
       <div className="flex items-end justify-between gap-3">
@@ -235,12 +241,13 @@ export default async function DashboardPage({
           la primera pantalla del celular. `empty:hidden` la esconde cuando
           ningún aviso aplica (varios se descartan del lado del cliente). */}
       <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface empty:hidden">
-        {/* Onboarding WhatsApp-first: el aviso de más valor para quien no vinculó.
-            En modo "testers" se muestra siempre (preview); en "all", solo a unlinked. */}
-        {hasFeature("onboardingWa", { isTester }) &&
-          (!whatsappNumber || FEATURE_FLAGS.onboardingWa === "testers") && (
+        {/* Onboarding WhatsApp-first: se muestra únicamente si el usuario aún no vinculó su número. */}
+        {shouldShowWhatsappOnboarding(
+          hasFeature("onboardingWa", { isTester }),
+          whatsappResult.status,
+        ) && (
             <WhatsappOnboardingHero linkCode={whatsappLinkCode || ""} />
-          )}
+        )}
 
         <UpdateReminderBanner days={daysSinceLastMovement} />
 

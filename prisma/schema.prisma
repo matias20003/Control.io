@@ -1305,6 +1305,10 @@ model CircleTouch {
 
   happenedAt DateTime
   source     String   @default("APP") // APP | WHATSAPP
+  // Qué salió de esa conversación, en las palabras del usuario (cifrado).
+  // Sin esto el espejo puede decir "hablaste 14 veces" y nada más: un número,
+  // no un recuerdo. Es opcional — nunca se bloquea el registro por pedirlo.
+  note       String?
   createdAt  DateTime @default(now())
 
   @@index([contactId, happenedAt])

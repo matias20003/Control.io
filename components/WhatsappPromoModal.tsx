@@ -19,7 +19,10 @@ export function WhatsappPromoModal({ isLinked }: { isLinked: boolean }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (isLinked) return; // ya vinculó → no lo molestamos más
+    if (isLinked) {
+      setOpen(false);
+      return; // ya vinculó → no lo molestamos más
+    }
     let last = 0;
     try { last = Number(localStorage.getItem(WA_PROMO_KEY)) || 0; } catch {}
     if (Date.now() - last < COOLDOWN) return;
@@ -31,6 +34,10 @@ export function WhatsappPromoModal({ isLinked }: { isLinked: boolean }) {
     try { localStorage.setItem(WA_PROMO_KEY, String(Date.now())); } catch {}
   };
   const dismiss = () => setOpen(false);
+
+  // Protección adicional para navegación móvil/PWA: aunque el modal hubiera
+  // quedado abierto en el estado cliente anterior, no se renderiza vinculado.
+  if (isLinked) return null;
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) dismiss(); setOpen(o); }}>

@@ -8,15 +8,22 @@ import {
   getDailyTrendCandidates,
 } from "@/lib/db/brief";
 import { ensureDailyTrendsForUser } from "@/lib/services/brief/radar";
-import { getCircleContacts } from "@/lib/db/circle";
+import { getCircleContacts, getTouchStats } from "@/lib/db/circle";
 import { getChannelsBySource } from "@/lib/db/channels";
 import { getFronts } from "@/lib/db/circle-north";
-import { getHarvestedUrls, getHarvestReport } from "@/lib/db/circle-harvest";
 import {
+  getHarvestedUrls,
+  getHarvestReport,
+  getLifetimeHarvest,
+} from "@/lib/db/circle-harvest";
+import {
+  getBaseline,
   getInventory,
   getMigration,
 } from "@/lib/db/circle-migration";
+import { getCircleStartedAt, getValuableActDates } from "@/lib/db/circle-acts";
 import { northNeedsReview } from "@/lib/circle-north";
+import { scaffoldDose } from "@/lib/circle-scaffold";
 import { hasFeature } from "@/lib/feature-flags";
 import { prisma } from "@/lib/prisma";
 
@@ -98,6 +105,33 @@ export default async function NewsletterPage() {
       new Date(),
     );
 
+  // La capa de recompensa. El espejo mira todo el historial (no la ventana de
+  // 30 días de la poda) porque tiene que probar un cambio, y un cambio no cabe
+  // en un mes.
+  const [baseline, lifetime, touchStats, actDates, startedAt] = showSystem
+    ? await Promise.all([
+        getBaseline(user.id),
+        getLifetimeHarvest(user.id),
+        getTouchStats(user.id),
+        getValuableActDates(user.id),
+        getCircleStartedAt(user.id),
+      ])
+    : [
+        null,
+        {
+          converted: 0,
+          byOutcome: { task: 0, habit: 0, note: 0 },
+          firstAt: null,
+          habitsAlive: 0,
+          tasksDone: 0,
+        },
+        { total: 0, withMemory: 0 },
+        [] as Date[],
+        null,
+      ];
+
+  const dose = scaffoldDose(startedAt, new Date());
+
   return (
     <MyCircleClient
       initialConfig={config}
@@ -114,6 +148,12 @@ export default async function NewsletterPage() {
       northNeedsReview={needsReview}
       showCercanos={showCercanos}
       showSystem={showSystem}
+      baseline={baseline}
+      lifetime={lifetime}
+      conversations={touchStats.total}
+      conversationsWithMemory={touchStats.withMemory}
+      actDates={actDates.map((date) => date.toISOString())}
+      dose={dose}
     />
   );
 }

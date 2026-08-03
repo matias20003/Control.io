@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
-  Clock3,
   Compass,
   ExternalLink,
+  Eye,
   Camera as Instagram,
   Loader2,
   Newspaper,
@@ -19,7 +19,6 @@ import {
   Settings2,
   ShieldCheck,
   Sprout,
-  Trash2,
   UsersRound,
   X,
 } from "lucide-react";
@@ -27,8 +26,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  createBriefSourceAction,
-  deleteBriefSourceAction,
   generateNewsletterNowAction,
   markNewsletterReadAction,
   recordBriefItemOpenedAction,
@@ -44,33 +41,46 @@ import type {
 import type { CircleContact } from "@/lib/db/circle";
 import type { SerializedChannel } from "@/lib/db/channels";
 import type { SerializedFront } from "@/lib/db/circle-north";
-import type { HarvestReport } from "@/lib/db/circle-harvest";
+import type { HarvestReport, LifetimeHarvest } from "@/lib/db/circle-harvest";
 import type {
+  CircleBaseline,
   SerializedInventoryItem,
   SerializedMigration,
 } from "@/lib/db/circle-migration";
 import { cutChecklist } from "@/lib/circle-inventory";
 import { rankDueContacts, sinceLabel } from "@/lib/circle-cadence";
 import { frontForTopic } from "@/lib/circle-north";
+import { buildMirror, type Mirror } from "@/lib/circle-mirror";
+import { weeklyStreak, type ScaffoldDose, type Streak } from "@/lib/circle-scaffold";
 import { harvestItemAction } from "@/app/actions/circle-system";
 import { CercanosView } from "./CercanosView";
 import { CosechaView, HarvestButtons } from "./CosechaView";
 import { ReferentesView } from "./ReferentesView";
 import { NorteView } from "./NorteView";
 import { MudanzaView } from "./MudanzaView";
-import { SectionHeading, QuietEmpty } from "./CircleUI";
+import { EspejoView } from "./EspejoView";
+import {
+  SectionHeading,
+  QuietEmpty,
+  MirrorPanel,
+  RewardBurst,
+  ScaffoldContract,
+  StreakChip,
+  type Reward,
+} from "./CircleUI";
 
 type CircleSection =
   | "home"
   | "cercanos"
   | "referentes"
-  | "instagram"
+  | "espejo"
   | "news"
   | "radar"
   | "norte"
   | "cosecha"
   | "mudanza"
   | "settings";
+
 
 type Props = {
   initialConfig: SerializedConfig;
@@ -87,6 +97,16 @@ type Props = {
   northNeedsReview: boolean;
   showCercanos: boolean;
   showSystem: boolean;
+  /** El día 1: a cuántas cuentas seguía cuando abrió el espejo. */
+  baseline: CircleBaseline | null;
+  /** El acumulado de siempre, para el espejo. */
+  lifetime: LifetimeHarvest;
+  conversations: number;
+  conversationsWithMemory: number;
+  /** Fechas de actos valiosos (conversiones y conversaciones), para la racha. */
+  actDates: string[];
+  /** Cuánta maquinaria fabricada corresponde hoy. */
+  dose: ScaffoldDose;
 };
 
 function metadataText(
@@ -147,52 +167,6 @@ function topicGroups(items: SerializedBriefItem[]) {
   return [...groups.entries()];
 }
 
-function openFocusedInstagram(handle: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const correlationId = crypto.randomUUID();
-    const timeout = window.setTimeout(() => {
-      window.removeEventListener("message", receive);
-      reject(
-        new Error(
-          "Control.io Focus no respondió. Instalá o actualizá la extensión.",
-        ),
-      );
-    }, 5000);
-
-    function receive(event: MessageEvent) {
-      if (
-        event.source !== window ||
-        event.origin !== window.location.origin ||
-        event.data?.source !== "controlio-focus-extension" ||
-        event.data?.type !== "CONTROLIO_FOCUS_OPEN_RESULT" ||
-        event.data?.correlationId !== correlationId
-      ) {
-        return;
-      }
-      window.clearTimeout(timeout);
-      window.removeEventListener("message", receive);
-      if (event.data.ok) resolve();
-      else
-        reject(
-          new Error(
-            event.data.error || "No pudimos abrir la ventana enfocada.",
-          ),
-        );
-    }
-
-    window.addEventListener("message", receive);
-    window.postMessage(
-      {
-        source: "controlio-web",
-        type: "CONTROLIO_FOCUS_OPEN",
-        correlationId,
-        durationSeconds: 180,
-        handle,
-      },
-      window.location.origin,
-    );
-  });
-}
 
 export function MyCircleClient({
   initialConfig,
@@ -209,6 +183,12 @@ export function MyCircleClient({
   northNeedsReview,
   showCercanos,
   showSystem,
+  baseline,
+  lifetime,
+  conversations,
+  conversationsWithMemory,
+  actDates,
+  dose,
 }: Props) {
   const [section, setSection] = useState<CircleSection>("home");
   const [config, setConfig] = useState(initialConfig);
@@ -227,13 +207,18 @@ export function MyCircleClient({
   const [isCompleting, startCompleting] = useTransition();
   const [isReopening, startReopening] = useTransition();
 
+  // La capa fabricada. Un solo lugar para que ningún acto pueda celebrarse por
+  // su cuenta: si algo dispara un premio, pasa por acá.
+  const [reward, setReward] = useState<Reward | null>(null);
+  // El contrato se muestra mientras la persona se está instalando y se puede
+  // volver a leer siempre en Ajustes. No hace falta persistir que lo leyó: se
+  // retira solo cuando el setup termina.
+  const [contractDismissed, setContractDismissed] = useState(false);
+
   const edition = editions[0] ?? null;
   const items = edition?.items ?? [];
   const newsItems = items.filter((item) => item.kind === "NEWS");
   const channelItems = items.filter((item) => item.kind === "CHANNEL");
-  const instagramSources = sources.filter(
-    (source) => source.account?.platform === "INSTAGRAM",
-  );
   const delivery = windowState(config.sendHours);
   const checklist = cutChecklist({
     peopleTotal: contacts.length,
@@ -252,12 +237,33 @@ export function MyCircleClient({
       .length,
   });
 
-  useEffect(() => {
-    document.documentElement.dataset.controlioFocusAuthorized = "true";
-    return () => {
-      delete document.documentElement.dataset.controlioFocusAuthorized;
-    };
-  }, []);
+  const references = sources.filter(
+    (source) => source.isActive && source.category !== "CLOSE",
+  );
+
+  // El espejo: nada de esto se fabrica, todo salió de algo que la persona hizo.
+  const mirror = buildMirror({
+    followedAtStart: baseline?.followedAtStart ?? null,
+    sourcesNow: references.length,
+    peopleNow: contacts.length,
+    conversations,
+    conversationsWithMemory,
+    habitsAlive: lifetime.habitsAlive,
+    tasksDone: lifetime.tasksDone,
+    converted: lifetime.converted,
+    daysWithoutInstagram: migration.daysWithout,
+  });
+
+  const streak = weeklyStreak(
+    actDates.map((iso) => new Date(iso)),
+    new Date(),
+  );
+
+  // La ventana enfocada de Instagram (extensión de escritorio) salió de acá:
+  // una sección que declara en el minuto cero que te va a ir sacando las armas
+  // no puede tener un cajón con una puerta a Instagram adentro. Para el
+  // referente que sólo publica ahí está el puente, en Referentes.
+
 
   const generate = () => {
     startGenerating(async () => {
@@ -307,6 +313,12 @@ export function MyCircleClient({
             : entry,
         ),
       );
+      // Llegar al final es algo que Instagram estructuralmente no te puede dar.
+      setReward({
+        title: "Terminaste",
+        detail:
+          "No hay más. Eso es todo lo que había hoy y ya lo viste: podés cerrar la app.",
+      });
     });
   };
 
@@ -365,17 +377,33 @@ export function MyCircleClient({
         },
       };
     });
-    toast.success(
-      outcome === "TASK"
-        ? "Quedó como tarea."
-        : outcome === "HABIT"
-          ? "Quedó como hábito."
-          : "Guardado.",
-    );
+    // El pico de la sección. Convertir es el acto más valioso que existe acá y
+    // hasta ahora dejaba un tilde gris.
+    setReward({
+      title:
+        outcome === "NOTE" ? "Guardado contra tu Norte" : "Salió del papel",
+      detail:
+        outcome === "HABIT"
+          ? "Leer algo y hacerlo son cosas distintas. Esta cruzó."
+          : outcome === "TASK"
+            ? "Dejó de ser algo que leíste y pasó a ser algo que vas a hacer."
+            : "Queda guardado contra el frente al que sirve, no en una pila.",
+      outcome:
+        outcome === "TASK"
+          ? "Ya está en tus tareas"
+          : outcome === "HABIT"
+            ? "Ya está en tus hábitos"
+            : null,
+    });
   };
 
   return (
     <div className="mx-auto w-full max-w-[1380px] px-4 pb-10 sm:px-6 lg:px-8">
+      <RewardBurst
+        reward={reward}
+        full={dose.fullCelebration}
+        onDone={() => setReward(null)}
+      />
       <header className="flex flex-col gap-4 pt-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <button
@@ -437,10 +465,47 @@ export function MyCircleClient({
           onOpenItem={openItem}
           onHarvest={harvestItem}
           harvested={harvested}
+          mirror={mirror}
+          streak={streak}
+          dose={dose}
+          baseline={baseline}
+          inventoryPending={
+            inventory.filter((item) => item.decision === "PENDING").length
+          }
+          contractDismissed={contractDismissed}
+          onDismissContract={() => setContractDismissed(true)}
         />
       )}
       {section === "cercanos" && showCercanos && (
-        <CercanosView contacts={contacts} onContactsChange={setContacts} />
+        <CercanosView
+          contacts={contacts}
+          onContactsChange={setContacts}
+          onReward={setReward}
+        />
+      )}
+      {section === "espejo" && showSystem && (
+        <EspejoView
+          inventory={inventory}
+          baseline={baseline}
+          uploadedAt={migration.inventoryUploadedAt}
+          onInventoryChange={setInventory}
+          onContactAdded={(contact) =>
+            setContacts((current) =>
+              current.some((item) => item.id === contact.id)
+                ? current
+                : [...current, contact],
+            )
+          }
+          onSourceAdded={(source) =>
+            setSources((current) =>
+              current.some((item) => item.id === source.id)
+                ? current
+                : [...current, source],
+            )
+          }
+          onReward={setReward}
+          onContinue={() => setSection("home")}
+        />
       )}
       {section === "referentes" && showSystem && (
         <ReferentesView
@@ -460,6 +525,8 @@ export function MyCircleClient({
       {section === "cosecha" && showSystem && (
         <CosechaView
           report={harvest}
+          mirror={mirror}
+          onReward={setReward}
           onSourcePruned={(sourceId) => {
             setSources((current) =>
               current.filter((item) => item.id !== sourceId),
@@ -479,38 +546,9 @@ export function MyCircleClient({
       {section === "mudanza" && showSystem && (
         <MudanzaView
           migration={migration}
-          inventory={inventory}
           checklist={checklist}
           onMigrationChange={setMigration}
-          onInventoryChange={setInventory}
-          onContactAdded={(contact) =>
-            setContacts((current) =>
-              current.some((item) => item.id === contact.id)
-                ? current
-                : [...current, contact],
-            )
-          }
-          onSourceAdded={(source) =>
-            setSources((current) =>
-              current.some((item) => item.id === source.id)
-                ? current
-                : [...current, source],
-            )
-          }
-        />
-      )}
-      {section === "instagram" && (
-        <InstagramView
-          delivery={delivery}
-          sources={instagramSources}
-          onSourcesChange={(nextInstagramSources) =>
-            setSources((current) => [
-              ...current.filter(
-                (source) => source.account?.platform !== "INSTAGRAM",
-              ),
-              ...nextInstagramSources,
-            ])
-          }
+          onOpenEspejo={() => setSection("espejo")}
         />
       )}
       {section === "news" && (
@@ -526,9 +564,10 @@ export function MyCircleClient({
           isReopening={isReopening}
           onComplete={completeEdition}
           onReopen={reopenEdition}
+          mirror={mirror}
         />
       )}
-      {section === "radar" && <RadarView radar={initialRadar} />}
+      {section === "radar" && <RadarView radar={initialRadar} fronts={fronts} />}
       {section === "settings" && (
         <CircleSettings
           config={config}
@@ -537,12 +576,25 @@ export function MyCircleClient({
           fronts={fronts}
           showSystem={showSystem}
           onOpenNorth={() => setSection("norte")}
+          dose={dose}
+          mirror={mirror}
         />
       )}
     </div>
   );
 }
 
+/**
+ * El inicio.
+ *
+ * Dejó de ser un panel de tareas. Antes decía "3 por revisar", "0 de 9
+ * revisadas" y tenía una barra de progreso de lectura — que premiaba
+ * porcentaje consumido, o sea exactamente lo único que este producto no puede
+ * premiar. Instagram nunca te dice cuánto te falta: abrís y ya te dio algo.
+ *
+ * Lo que ocupa ese lugar ahora es la anticipación (qué trae hoy la edición) y
+ * la racha por actos, que no se rompe con un día vacío.
+ */
 function CircleHome({
   delivery,
   edition,
@@ -559,6 +611,13 @@ function CircleHome({
   onOpenItem,
   onHarvest,
   harvested,
+  mirror,
+  streak,
+  dose,
+  baseline,
+  inventoryPending,
+  contractDismissed,
+  onDismissContract,
 }: {
   delivery: ReturnType<typeof windowState>;
   edition: SerializedEdition | null;
@@ -578,6 +637,13 @@ function CircleHome({
     outcome: "TASK" | "HABIT" | "NOTE",
   ) => Promise<void>;
   harvested: Set<string>;
+  mirror: Mirror;
+  streak: Streak;
+  dose: ScaffoldDose;
+  baseline: CircleBaseline | null;
+  inventoryPending: number;
+  contractDismissed: boolean;
+  onDismissContract: () => void;
 }) {
   // El gancho diario de la sección. Va arriba de todo a propósito: durante la
   // transición desde Instagram, el contenido no alcanza para traer a alguien
@@ -596,19 +662,39 @@ function CircleHome({
       : Math.max(2, Math.min(6, Math.ceil(rationCount * 0.45)));
   const pendingReferences = references.length - referencesWithChannel;
   const referencesReady = references.length > 0 && pendingReferences === 0;
+  const espejoDone = baseline !== null && inventoryPending === 0;
   const setupComplete =
     fronts.length > 0 &&
     referencesReady &&
+    (!showSystem || espejoDone) &&
     (!showCercanos || contacts.length > 0);
   const dashboardItems = items.slice(0, 4);
-  const reviewedCount = edition?.reviewedCount ?? 0;
-  const progress =
-    rationCount > 0
-      ? Math.min(100, Math.round((reviewedCount / rationCount) * 100))
-      : 0;
+
+  // La anticipación: qué trae hoy, dicho antes de que abra. Sólo se anuncia lo
+  // que es verdad — el día que no hay nada bueno, lo dice.
+  const fromReferences = items.filter((item) => item.kind === "CHANNEL");
+  const anticipation = !edition
+    ? `Tu próxima edición llega ${delivery.label.toLowerCase()}.`
+    : edition.isRead
+      ? "Ya leíste lo de hoy. No hay nada más."
+      : rationCount === 0
+        ? "Hoy no hay nada que valga tu tiempo. Es una respuesta válida."
+        : fromReferences.length > 0
+          ? `Hoy hay ${fromReferences.length === 1 ? "algo" : `${fromReferences.length} cosas`} de tus referentes.`
+          : `${rationCount} ${rationCount === 1 ? "lectura" : "lecturas"}, ${rationMinutes} minutos, y termina.`;
 
   return (
     <div className="mt-7 space-y-9">
+      {/* El contrato acompaña la instalación y después se retira solo. Queda
+          siempre disponible en Ajustes. */}
+      {!contractDismissed && !setupComplete && (
+        <ScaffoldContract dose={dose} onDismiss={onDismissContract} />
+      )}
+
+      {dose.mirrorFirst && mirror.isReady && (
+        <MirrorPanel mirror={mirror} />
+      )}
+
       <section
         aria-labelledby="circle-dashboard-title"
         className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(19rem,0.7fr)]"
@@ -623,19 +709,21 @@ function CircleHome({
                 id="circle-dashboard-title"
                 className="mt-1 text-xl font-semibold text-foreground"
               >
-                Lo importante, en un solo lugar
+                {anticipation}
               </h2>
             </div>
-            <div className="flex items-center gap-3 text-sm text-muted">
-              <span>
-                {rationCount} {rationCount === 1 ? "lectura" : "lecturas"}
-              </span>
-              <span
-                aria-hidden="true"
-                className="h-1 w-1 rounded-full bg-muted-2"
-              />
-              <span>{rationMinutes} min</span>
-            </div>
+            {rationCount > 0 && (
+              <div className="flex items-center gap-3 text-sm text-muted">
+                <span>
+                  {rationCount} {rationCount === 1 ? "lectura" : "lecturas"}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="h-1 w-1 rounded-full bg-muted-2"
+                />
+                <span>{rationMinutes} min</span>
+              </div>
+            )}
           </header>
 
           {dashboardItems.length > 0 ? (
@@ -654,15 +742,15 @@ function CircleHome({
             </div>
           ) : (
             <div className="px-5 py-10 sm:px-7">
-              <QuietEmpty text="Tu edición todavía no está lista. Actualizala para ver las noticias de hoy." />
+              <QuietEmpty text="Todavía no hay edición. Cuando la haya, va a ser corta y va a terminar." />
             </div>
           )}
 
           <footer className="flex flex-col gap-3 border-t border-border bg-surface-2/35 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
             <p className="text-xs text-muted">
               {edition?.isRead
-                ? "Edición terminada por hoy."
-                : `${reviewedCount} de ${rationCount} revisadas`}
+                ? "Cerrada hasta la próxima ventana."
+                : "Esta es toda la ración."}
             </p>
             <Button variant="secondary" onClick={() => onSection("news")}>
               {edition?.isRead ? "Volver a la edición" : "Ver edición completa"}
@@ -696,7 +784,7 @@ function CircleHome({
                 label="Vínculos"
                 title={
                   dueToday.length === 0
-                    ? "Estás al día"
+                    ? "Tu círculo está al día"
                     : dueToday.length === 1
                       ? `Escribile a ${dueToday[0].name}`
                       : `${dueToday.length} personas esperan noticias tuyas`
@@ -705,7 +793,7 @@ function CircleHome({
                   dueToday.length === 1
                     ? `Hablaron ${sinceLabel(dueToday[0].daysSince, dueToday[0].neverContacted)}.`
                     : dueToday.length === 0
-                      ? "No tenés conversaciones pendientes."
+                      ? "Hoy no hay nadie a quien escribirle."
                       : "Elegí a una persona para empezar."
                 }
                 complete={dueToday.length === 0}
@@ -720,32 +808,35 @@ function CircleHome({
                   ? "Edición pendiente"
                   : edition.isRead
                     ? "Terminaste por hoy"
-                    : `${Math.max(0, rationCount - reviewedCount)} por revisar`
+                    : rationCount === 0
+                      ? "Hoy no hay nada"
+                      : "Tu ración está lista"
               }
               detail={
                 !edition
                   ? `Próxima actualización: ${delivery.label.toLowerCase()}.`
                   : edition.isRead
                     ? "No hay más contenido para cargar."
-                    : `Una selección de aproximadamente ${rationMinutes} minutos.`
+                    : rationCount === 0
+                      ? "Mejor tres piezas que valgan que doce de relleno."
+                      : `Unos ${rationMinutes} minutos y se termina.`
               }
-              complete={Boolean(edition?.isRead)}
+              complete={Boolean(edition?.isRead) || rationCount === 0}
               onClick={() => onSection("news")}
             />
           </div>
 
-          <div className="mt-7 border-t border-border pt-5">
-            <div className="flex items-center justify-between text-xs text-muted">
-              <span>Progreso de lectura</span>
-              <span>{progress}%</span>
+          {/* Donde antes había una barra de progreso de lectura. La racha
+              cuenta actos por semana, así que un día sin nada no cuesta nada. */}
+          {dose.showStreak && (
+            <div className="mt-7 border-t border-border pt-5">
+              <StreakChip streak={streak} />
+              <p className="mt-2 text-xs leading-relaxed text-muted">
+                Cuentan las conversaciones y lo que convertís, no las veces que
+                entrás.
+              </p>
             </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-3">
-              <div
-                className="h-full rounded-full bg-primary transition-[width] duration-200"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
+          )}
         </aside>
       </section>
 
@@ -757,16 +848,23 @@ function CircleHome({
           >
             Prepará Mi Círculo
           </h2>
-          <p className="mt-1 text-sm text-muted">
-            Estos pasos se hacen una vez. Después esta guía desaparece.
+          <p className="mt-1 max-w-[60ch] text-sm text-muted">
+            Es trabajo, y es a propósito: lo que sale de acá es tuyo y no lo
+            elige un algoritmo. Se hace una vez.
           </p>
           <div className="mt-4 divide-y divide-border border-y border-border">
+            {/* Primero el espejo: es lo que llena los otros dos pasos y lo
+                único que se puede capturar una sola vez en la vida. */}
             <SetupStep
-              complete={fronts.length > 0}
-              title="Definí qué querés aprender"
-              detail="El Norte decide qué información entra y cuál queda afuera."
-              action="Definir mi Norte"
-              onClick={() => onSection("norte")}
+              complete={espejoDone}
+              title={
+                inventoryPending > 0
+                  ? `Clasificá ${inventoryPending} cuentas`
+                  : "Mirá a quién estás siguiendo"
+              }
+              detail="Tu lista real de seguidos, repartida en gente, obra y ruido. De acá salen tus personas y tus referentes."
+              action={inventoryPending > 0 ? "Seguir clasificando" : "Abrir El Espejo"}
+              onClick={() => onSection("espejo")}
             />
             <SetupStep
               complete={referencesReady}
@@ -782,15 +880,24 @@ function CircleHome({
             {showCercanos && (
               <SetupStep
                 complete={contacts.length > 0}
-                title="Sumá a las personas que querés cuidar"
+                title="Confirmá a las personas que querés cuidar"
                 detail="Sólo aparecen cuando llega el momento de volver a hablar."
-                action="Agregar personas"
+                action="Ir a Cercanos"
                 onClick={() => onSection("cercanos")}
               />
             )}
+            <SetupStep
+              complete={fronts.length > 0}
+              title="Definí qué querés aprender"
+              detail="El Norte decide qué información entra y cuál queda afuera. Va último porque después de ver tu lista sabés mejor qué querés."
+              action="Definir mi Norte"
+              onClick={() => onSection("norte")}
+            />
           </div>
         </section>
       )}
+
+      {!dose.mirrorFirst && mirror.isReady && <MirrorPanel mirror={mirror} />}
 
       <section aria-labelledby="circle-tools-title">
         <h2
@@ -813,7 +920,7 @@ function CircleHome({
           <ToolRow
             icon={Radar}
             title="Radar"
-            description="Mirá qué temas están en la agenda general, fuera de tu selección."
+            description="Lo que está en la agenda general y toca alguno de tus frentes."
             status={`${Math.min(3, radar.length)} señales hoy`}
             onClick={() => onSection("radar")}
           />
@@ -827,31 +934,22 @@ function CircleHome({
                 onClick={() => onSection("cosecha")}
               />
               <ToolRow
+                icon={Eye}
+                title="El Espejo"
+                description="A quién seguías cuando empezaste, y cómo quedó repartido."
+                status={baseline ? `${baseline.followedAtStart} cuentas` : "Sin abrir"}
+                onClick={() => onSection("espejo")}
+              />
+              <ToolRow
                 icon={PackageOpen}
                 title="La Mudanza"
-                description="Pasá a Control.io lo importante que hoy seguís en Instagram."
-                status="Proceso opcional"
+                description="Sacarte Instagram de encima, si algún día querés."
+                status="Opcional"
                 onClick={() => onSection("mudanza")}
               />
             </>
           )}
         </div>
-
-        {showSystem && (
-          <details className="mt-5 text-sm text-muted">
-            <summary className="min-h-11 cursor-pointer py-3 hover:text-foreground">
-              Opciones anteriores
-            </summary>
-            <button
-              type="button"
-              onClick={() => onSection("instagram")}
-              className="inline-flex min-h-11 items-center gap-2 text-muted hover:text-foreground"
-            >
-              <Clock3 size={15} />
-              Abrir la antigua ventana de Instagram
-            </button>
-          </details>
-        )}
       </section>
     </div>
   );
@@ -1061,222 +1159,6 @@ function ToolRow({
   );
 }
 
-function InstagramView({
-  delivery,
-  sources,
-  onSourcesChange,
-}: {
-  delivery: ReturnType<typeof windowState>;
-  sources: SerializedBriefSource[];
-  onSourcesChange: (sources: SerializedBriefSource[]) => void;
-}) {
-  const [handle, setHandle] = useState("");
-  const [isAdding, startAdding] = useTransition();
-  const [remaining, setRemaining] = useState<number | null>(null);
-
-  const add = () => {
-    const clean = handle.trim().replace(/^@/, "");
-    if (!clean) return;
-    startAdding(async () => {
-      const result = await createBriefSourceAction({
-        name: clean,
-        platform: "INSTAGRAM",
-        handleOrUrl: clean,
-        category: "REFERENCE",
-        priority: true,
-      });
-      if (result.error || !result.source) {
-        toast.error(result.error ?? "No pudimos agregar esa persona.");
-        return;
-      }
-      onSourcesChange([...sources, result.source]);
-      setHandle("");
-      toast.success(`@${clean} se agregó a tus referentes.`);
-    });
-  };
-
-  const remove = async (source: SerializedBriefSource) => {
-    const result = await deleteBriefSourceAction(source.id);
-    if (result.error) {
-      toast.error(result.error);
-      return;
-    }
-    onSourcesChange(sources.filter((item) => item.id !== source.id));
-    toast.success(
-      `@${source.account?.handle ?? source.name} se quitó de tus referentes.`,
-    );
-  };
-
-  const openProfile = async (source: SerializedBriefSource) => {
-    if (!delivery.active) {
-      toast.error(`Podés ingresar en tu próxima ventana: ${delivery.label}.`);
-      return;
-    }
-    const profileHandle = source.account?.handle;
-    if (!profileHandle) {
-      toast.error("Ese perfil no tiene un usuario de Instagram válido.");
-      return;
-    }
-    try {
-      await openFocusedInstagram(profileHandle);
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "No pudimos abrir Instagram de forma segura.",
-      );
-      return;
-    }
-    let seconds = 180;
-    setRemaining(seconds);
-    const timer = window.setInterval(() => {
-      seconds -= 1;
-      setRemaining(seconds);
-      if (seconds === 15) {
-        toast.warning("Quedan 15 segundos. Vas a volver a Mi Círculo.");
-      }
-      if (seconds <= 0) {
-        window.clearInterval(timer);
-        setRemaining(null);
-        toast("Sesión finalizada. Llegaste al final de este perfil.");
-      }
-    }, 1000);
-  };
-
-  return (
-    <section className="mt-7">
-      <SectionHeading
-        eyebrow="Acceso consciente"
-        title="Referentes para consultar"
-        description="Accedé solamente a los perfiles que elegiste. Cada consulta tiene un máximo de 3 minutos."
-      />
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
-        <div className="rounded-xl border border-border bg-surface/60 p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-foreground">
-                Tu próxima ventana
-              </p>
-              <p className="mt-1 text-sm text-muted">{delivery.label}</p>
-            </div>
-            <span
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                delivery.active
-                  ? "bg-success-dim text-success"
-                  : "bg-surface-3 text-muted"
-              }`}
-            >
-              {delivery.active ? "Disponible" : "Cerrado"}
-            </span>
-          </div>
-          {remaining !== null && (
-            <div className="mt-5 rounded-lg bg-primary/8 p-4">
-              <p className="text-xs text-muted">Tiempo en el perfil</p>
-              <p className="mt-1 font-mono text-2xl text-primary">
-                {String(Math.floor(remaining / 60)).padStart(2, "0")}:
-                {String(remaining % 60).padStart(2, "0")}
-              </p>
-            </div>
-          )}
-
-          <div className="mt-6">
-            <label
-              htmlFor="circle-instagram-handle"
-              className="text-sm font-semibold text-foreground"
-            >
-              Agregar un referente
-            </label>
-            <p className="mt-1 text-xs leading-relaxed text-muted">
-              Escribí el usuario público o privado que ya podés ver desde tu
-              cuenta de Instagram.
-            </p>
-            <div className="mt-3 flex gap-2">
-              <Input
-                id="circle-instagram-handle"
-                value={handle}
-                onChange={(event) => setHandle(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    add();
-                  }
-                }}
-                placeholder="@usuario"
-              />
-              <Button onClick={add} disabled={isAdding || !handle.trim()}>
-                {isAdding ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <Plus size={16} />
-                )}
-                Agregar
-              </Button>
-            </div>
-            <a
-              href="/api/my-brief/focus-extension"
-              className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-xs font-semibold text-primary hover:bg-primary/8"
-            >
-              <ShieldCheck size={15} />
-              Instalar o actualizar Control.io Focus
-            </a>
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-border bg-surface/45">
-          <div className="border-b border-border px-5 py-4">
-            <h2 className="font-news text-xl text-foreground">
-              Referentes seleccionados
-            </h2>
-            <p className="mt-1 text-xs text-muted">
-              {sources.length}{" "}
-              {sources.length === 1 ? "referente" : "referentes"}
-            </p>
-          </div>
-          {sources.map((source) => (
-            <div
-              key={source.id}
-              className="flex min-h-20 items-center gap-3 border-b border-border px-4 py-3 last:border-b-0"
-            >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
-                <Instagram size={18} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-foreground">
-                  @{source.account?.handle ?? source.name}
-                </p>
-                <p className="mt-0.5 text-xs text-muted">
-                  {source.account?.lastSyncedAt
-                    ? `Revisado ${timeAgo(source.account.lastSyncedAt)}`
-                    : "Aún no comprobado"}
-                </p>
-              </div>
-              <Button
-                variant="secondary"
-                onClick={() => openProfile(source)}
-                disabled={!delivery.active}
-              >
-                <Clock3 size={15} />
-                Abrir 3 min
-              </Button>
-              <button
-                type="button"
-                onClick={() => remove(source)}
-                aria-label={`Quitar a ${source.name}`}
-                className="grid h-11 w-11 place-items-center rounded-lg text-muted hover:bg-danger-dim hover:text-danger"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          ))}
-          {sources.length === 0 && (
-            <QuietEmpty text="Todavía no elegiste referentes. Agregá el primero por su usuario de Instagram." />
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
 
 /**
  * Una pieza de la edición. La fila no puede ser un `<button>` entero: los
@@ -1364,6 +1246,7 @@ function NewsView({
   isReopening,
   onComplete,
   onReopen,
+  mirror,
 }: {
   items: SerializedBriefItem[];
   channelItems: SerializedBriefItem[];
@@ -1379,6 +1262,7 @@ function NewsView({
   isReopening: boolean;
   onComplete: () => void;
   onReopen: () => void;
+  mirror: Mirror;
 }) {
   const groups = topicGroups(items);
   const visibleCount = items.length + channelItems.length;
@@ -1387,32 +1271,45 @@ function NewsView({
       ? 0
       : Math.max(2, Math.min(6, Math.ceil(visibleCount * 0.45)));
 
+  // El cierre. Es el momento más importante del producto: llegar al final es
+  // algo que Instagram estructuralmente no te puede dar. Acá convergen las dos
+  // capas — la celebración la disparó el acto, y lo que queda en pantalla es el
+  // espejo, que no lo fabrica nadie.
   if (edition?.isRead) {
     return (
-      <section className="py-14 text-center" aria-live="polite">
-        <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-success/12 text-success">
-          <CheckCircle2 size={24} />
-        </span>
-        <p className="mt-4 text-xs font-semibold uppercase tracking-[0.15em] text-success">
-          Edición terminada
-        </p>
-        <h2 className="mt-2 font-news text-3xl text-foreground">
-          Ya estás al día
-        </h2>
-        <p className="mx-auto mt-3 max-w-[44ch] text-sm leading-relaxed text-muted">
-          Revisaste {edition.reviewedCount}{" "}
-          {edition.reviewedCount === 1 ? "pieza" : "piezas"}. No hay nada más
-          para cargar hasta la próxima actualización.
-        </p>
-        <Button
-          variant="secondary"
-          onClick={onReopen}
-          disabled={isReopening}
-          className="mt-6"
-        >
-          {isReopening && <Loader2 size={16} className="animate-spin" />}
-          Volver al contenido de hoy
-        </Button>
+      <section className="py-14" aria-live="polite">
+        <div className="text-center">
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-success/12 text-success">
+            <CheckCircle2 size={24} />
+          </span>
+          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.15em] text-success">
+            Edición terminada
+          </p>
+          <h2 className="mt-2 font-news text-3xl text-foreground">
+            Llegaste al final
+          </h2>
+          <p className="mx-auto mt-3 max-w-[44ch] text-sm leading-relaxed text-muted">
+            No hay más para cargar hasta la próxima ventana. Podés cerrar la
+            app: acá terminó de verdad.
+          </p>
+        </div>
+
+        {mirror.isReady && (
+          <div className="mx-auto mt-9 max-w-2xl">
+            <MirrorPanel mirror={mirror} compact />
+          </div>
+        )}
+
+        <div className="mt-8 text-center">
+          <Button
+            variant="secondary"
+            onClick={onReopen}
+            disabled={isReopening}
+          >
+            {isReopening && <Loader2 size={16} className="animate-spin" />}
+            Volver al contenido de hoy
+          </Button>
+        </div>
       </section>
     );
   }
@@ -1536,16 +1433,41 @@ function NewsView({
   );
 }
 
-function RadarView({ radar }: { radar: SerializedDiscoveryCandidate[] }) {
+/**
+ * Radar, acotado al Norte.
+ *
+ * Era la única parte de la sección que ofrecía contenido que la persona no
+ * eligió, sin destino y sin fondo — es decir, la puerta de atrás por donde se
+ * colaba el feed. Ahora sólo entra lo que toca alguno de tus frentes, y si hoy
+ * no toca nada, lo dice y se termina.
+ */
+function RadarView({
+  radar,
+  fronts,
+}: {
+  radar: SerializedDiscoveryCandidate[];
+  fronts: SerializedFront[];
+}) {
+  const relevantes =
+    fronts.length === 0
+      ? []
+      : radar.filter((trend) => frontForTopic(trend.topic, fronts) !== null);
+
   return (
     <section className="mt-7">
       <SectionHeading
-        eyebrow="Panorama general"
+        eyebrow="Fuera de tu selección"
         title="Lo que está pasando hoy"
-        description="Tres temas en auge de la agenda general, aunque no estén entre tus intereses o referentes."
+        description="De la agenda general entra sólo lo que toca alguno de tus frentes. El resto no es información para vos: es novedad."
       />
       <div className="mt-7 overflow-hidden rounded-xl border border-border bg-surface/50 px-4 sm:px-6">
-        <TrendTable radar={radar} />
+        {fronts.length === 0 ? (
+          <QuietEmpty text="Sin frentes declarados no hay con qué filtrar la agenda del día. Definí tu Norte y el Radar empieza a servir." />
+        ) : relevantes.length === 0 ? (
+          <QuietEmpty text="Hoy no hay nada en la agenda general que toque tus frentes. Es una respuesta válida." />
+        ) : (
+          <TrendTable radar={relevantes} />
+        )}
       </div>
     </section>
   );
@@ -1639,6 +1561,8 @@ function CircleSettings({
   fronts,
   showSystem,
   onOpenNorth,
+  dose,
+  mirror,
 }: {
   config: SerializedConfig;
   onSaved: (config: SerializedConfig) => void;
@@ -1646,6 +1570,8 @@ function CircleSettings({
   fronts: SerializedFront[];
   showSystem: boolean;
   onOpenNorth: () => void;
+  dose: ScaffoldDose;
+  mirror: Mirror;
 }) {
   const [topics, setTopics] = useState(config.topics);
   const [topic, setTopic] = useState("");
@@ -1711,6 +1637,17 @@ function CircleSettings({
         title="Ajustes de Mi Círculo"
         description="Elegí qué querés saber y en qué momentos querés recibirlo."
       />
+
+      {/* El retiro del andamio es declarado: acá se puede leer siempre en qué
+          fase está y qué significa. Una app que se retira sin avisar parece que
+          te abandona; avisando, es una promesa que se cumple. */}
+      <div className="mt-7 space-y-4">
+        <ScaffoldContract dose={dose} />
+        {dose.phase === "RETIRO" && mirror.isReady && (
+          <MirrorPanel mirror={mirror} title="Mirá lo que juntaste" compact />
+        )}
+      </div>
+
       <div className="mt-7 space-y-8 rounded-xl border border-border bg-surface/55 p-5 sm:p-7">
         {showSystem ? (
           <div className="rounded-xl border border-primary/20 bg-primary/[0.06] p-4">

@@ -94,6 +94,64 @@ export async function getHarvestedUrls(userId: string, since: Date): Promise<Set
   return new Set(rows.map((row) => row.itemUrl));
 }
 
+export type LifetimeHarvest = {
+  /** Todo lo que se convirtió alguna vez. */
+  converted: number;
+  byOutcome: { task: number; habit: number; note: number };
+  /** Cuándo convirtió algo por primera vez. */
+  firstAt: string | null;
+  /**
+   * Lo que sigue vivo hoy: hábitos que no abandonó y tareas que terminó. Esto
+   * es lo que separa "leí 74 cosas" de "mi vida cambió": no cuánto convertiste,
+   * sino cuánto de eso sobrevivió.
+   */
+  habitsAlive: number;
+  tasksDone: number;
+};
+
+/**
+ * El acumulado de siempre, sin ventana. La poda mensual mira 30 días porque
+ * decide qué fuente echás; el espejo mira todo porque tiene que probar un
+ * cambio, y un cambio no cabe en un mes.
+ */
+export async function getLifetimeHarvest(userId: string): Promise<LifetimeHarvest> {
+  const harvests = await prisma.circleHarvest.findMany({
+    where: { userId },
+    select: { outcome: true, outcomeId: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const habitIds = harvests
+    .filter((row) => row.outcome === "HABIT" && row.outcomeId)
+    .map((row) => row.outcomeId!);
+  const taskIds = harvests
+    .filter((row) => row.outcome === "TASK" && row.outcomeId)
+    .map((row) => row.outcomeId!);
+
+  const [habitsAlive, tasksDone] = await Promise.all([
+    habitIds.length === 0
+      ? 0
+      : prisma.habit.count({
+          where: { userId, id: { in: habitIds }, isActive: true },
+        }),
+    taskIds.length === 0
+      ? 0
+      : prisma.task.count({ where: { userId, id: { in: taskIds }, done: true } }),
+  ]);
+
+  return {
+    converted: harvests.length,
+    byOutcome: {
+      task: harvests.filter((row) => row.outcome === "TASK").length,
+      habit: harvests.filter((row) => row.outcome === "HABIT").length,
+      note: harvests.filter((row) => row.outcome === "NOTE").length,
+    },
+    firstAt: harvests[0]?.createdAt.toISOString() ?? null,
+    habitsAlive,
+    tasksDone,
+  };
+}
+
 export type SourceYield = {
   sourceId: string;
   name: string;

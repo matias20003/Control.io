@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  annotateLastTouchAction,
   archiveCircleContactAction,
   createCircleContactAction,
   recordCircleTouchAction,
@@ -30,7 +31,7 @@ import {
   tierForCadence,
   type CircleTier,
 } from "@/lib/circle-cadence";
-import { SectionHeading, QuietEmpty } from "./CircleUI";
+import { SectionHeading, QuietEmpty, type Reward } from "./CircleUI";
 
 const TIER_ORDER: CircleTier[] = ["INTIMATE", "CLOSE", "ORBIT"];
 
@@ -41,11 +42,16 @@ function whatsappLink(phone: string): string {
 export function CercanosView({
   contacts,
   onContactsChange,
+  onReward,
 }: {
   contacts: CircleContact[];
   onContactsChange: (next: CircleContact[]) => void;
+  onReward?: (reward: Reward) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [capturing, setCapturing] = useState<{ id: string; name: string } | null>(
+    null,
+  );
   const [isPending, startTransition] = useTransition();
 
   // El estado de cadencia lo calcula el server al serializar, así que acá sólo
@@ -76,7 +82,13 @@ export function CercanosView({
         return;
       }
       replace(result.contact);
-      toast.success(`Anotado: hablaste con ${contact.name}.`);
+      onReward?.({
+        title: `Hablaste con ${contact.name}`,
+        detail:
+          "Esa conversación no hubiera pasado sola. Es la única recompensa de acá que no la fabrica la app.",
+      });
+      // Y recién ahora, sin obligación, qué salió de ahí.
+      setCapturing({ id: contact.id, name: contact.name });
     });
   };
 
@@ -99,6 +111,13 @@ export function CercanosView({
         title="Cercanos"
         description="Acá no hay contenido: hay personas y cuánto hace que no hablás. La lista puede ser grande — lo que se mantiene chico es cuántas te pide la app por día."
       />
+
+      {capturing && (
+        <TouchMemoryCard
+          contact={capturing}
+          onDone={() => setCapturing(null)}
+        />
+      )}
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
         <div className="space-y-6">
@@ -167,6 +186,77 @@ export function CercanosView({
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * Qué salió de la conversación.
+ *
+ * Aparece después de registrarla, nunca antes: primero se declara que hablaron
+ * —que es el acto— y recién ahí, sin obligación, qué pasó. Un contador de
+ * llamadas no le prueba nada a nadie dentro de seis meses; esto sí.
+ */
+function TouchMemoryCard({
+  contact,
+  onDone,
+}: {
+  contact: { id: string; name: string };
+  onDone: () => void;
+}) {
+  const [note, setNote] = useState("");
+  const [isSaving, startSaving] = useTransition();
+
+  const save = () => {
+    const clean = note.trim();
+    if (!clean) {
+      onDone();
+      return;
+    }
+    startSaving(async () => {
+      const result = await annotateLastTouchAction(contact.id, clean);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Guardado.");
+      onDone();
+    });
+  };
+
+  return (
+    <div className="mt-6 rounded-xl border border-primary/25 bg-primary/[0.05] p-5">
+      <p className="text-sm font-semibold text-foreground">
+        ¿De qué hablaron con {contact.name}?
+      </p>
+      <p className="mt-1 max-w-[58ch] text-xs leading-relaxed text-muted">
+        Una línea alcanza. Dentro de unos meses esto es lo que te va a mostrar
+        que las conversaciones pasaron de verdad. Si no querés, seguí de largo.
+      </p>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <Input
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              save();
+            }
+          }}
+          placeholder="Se separó, le ofrecí ayuda con la mudanza"
+          autoFocus
+          className="flex-1"
+        />
+        <div className="flex gap-2">
+          <Button onClick={save} disabled={isSaving}>
+            {isSaving && <Loader2 size={16} className="animate-spin" />}
+            Guardar
+          </Button>
+          <Button variant="secondary" onClick={onDone} disabled={isSaving}>
+            Ahora no
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

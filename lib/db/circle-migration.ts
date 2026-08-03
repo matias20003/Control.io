@@ -300,6 +300,57 @@ export async function decideInventoryItem(
   return output;
 }
 
+// ─── La línea de base ────────────────────────────────────────────────────────
+
+export type CircleBaseline = {
+  /** A cuántas cuentas seguía el día que se miró al espejo. */
+  followedAtStart: number;
+  /** Cuándo fue ese día. */
+  capturedAt: string | null;
+  /** Cómo quedó repartido: gente, obra y ruido. */
+  people: number;
+  references: number;
+  noise: number;
+  pending: number;
+};
+
+/**
+ * El "412" del día 1.
+ *
+ * Es imposible de reconstruir después: o se captura cuando la persona sube su
+ * export, o el espejo del mes 6 no tiene contra qué comparar y queda en números
+ * absolutos, que no le prueban nada a nadie. Por eso los items del inventario
+ * no se borran nunca — el total es la marca de dónde arrancó.
+ */
+export async function getBaseline(userId: string): Promise<CircleBaseline | null> {
+  const [migration, grouped] = await Promise.all([
+    prisma.circleMigration.findUnique({
+      where: { userId },
+      select: { inventoryUploadedAt: true },
+    }),
+    prisma.circleInventoryItem.groupBy({
+      by: ["decision"],
+      where: { userId },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const total = grouped.reduce((sum, row) => sum + row._count._all, 0);
+  if (total === 0) return null;
+
+  const count = (decision: string) =>
+    grouped.find((row) => row.decision === decision)?._count._all ?? 0;
+
+  return {
+    followedAtStart: total,
+    capturedAt: migration?.inventoryUploadedAt?.toISOString() ?? null,
+    people: count("PERSON"),
+    references: count("REFERENCE"),
+    noise: count("NOISE"),
+    pending: count("PENDING"),
+  };
+}
+
 export async function getInventoryProgress(userId: string): Promise<InventoryProgress> {
   const rows = await prisma.circleInventoryItem.findMany({
     where: { userId },
