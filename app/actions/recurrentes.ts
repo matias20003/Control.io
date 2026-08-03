@@ -7,6 +7,7 @@ import {
   updateRecurrente,
   toggleRecurrente,
   deleteRecurrente,
+  runRecurrenteNow,
 } from "@/lib/db/recurrentes";
 import { z } from "zod";
 
@@ -30,10 +31,22 @@ const schema = z.object({
   endDate: z.string().optional(),
 });
 
+const createSchema = schema.extend({
+  // Sólo aplica al alta: si el primer pago entra hoy o recién el período que viene.
+  firstCharge: z.enum(["NOW", "NEXT"]).optional(),
+});
+
 function revalidateRecurringViews() {
   revalidatePath("/recurrentes");
   revalidatePath("/dashboard");
   revalidatePath("/agenda");
+}
+
+/** Cuando se registra un pago cambian además los movimientos y el saldo. */
+function revalidateAfterCharge() {
+  revalidateRecurringViews();
+  revalidatePath("/movimientos");
+  revalidatePath("/cuentas");
 }
 
 export async function createRecurrenteAction(formData: FormData) {
@@ -54,17 +67,36 @@ export async function createRecurrenteAction(formData: FormData) {
     dayOfMonth: formData.get("dayOfMonth") || undefined,
     startDate: formData.get("startDate"),
     endDate: formData.get("endDate") || undefined,
+    firstCharge: formData.get("firstCharge") || undefined,
   };
 
-  const result = schema.safeParse(raw);
+  const result = createSchema.safeParse(raw);
   if (!result.success) return { error: result.error.issues[0].message };
 
   try {
-    const rec = await createRecurrente(user.id, result.data);
-    revalidateRecurringViews();
-    return { success: true, recurrente: rec };
+    const { recurrente, charged } = await createRecurrente(user.id, result.data);
+    if (charged) revalidateAfterCharge();
+    else revalidateRecurringViews();
+    return { success: true, recurrente, charged };
   } catch {
     return { error: "Error al crear el recurrente" };
+  }
+}
+
+export async function runRecurrenteNowAction(id: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autorizado" };
+
+  try {
+    const rec = await runRecurrenteNow(user.id, id);
+    revalidateAfterCharge();
+    return { success: true, recurrente: rec };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Error al registrar el pago";
+    return { error: message };
   }
 }
 

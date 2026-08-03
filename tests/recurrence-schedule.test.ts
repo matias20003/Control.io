@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getNextDueDate, getRecurringOccurrences, isRecurringDue } from "@/lib/recurrence-schedule";
+import {
+  getNextDueDate,
+  getRecurringOccurrences,
+  isRecurringDue,
+  startOfNextPeriod,
+} from "@/lib/recurrence-schedule";
 
 const day = (iso: string) => new Date(`${iso}T12:00:00-03:00`);
 /** Igual que guarda la app un "YYYY-MM-DD" del formulario: medianoche UTC. */
@@ -152,5 +157,83 @@ describe("isRecurringDue", () => {
     };
     expect(isRecurringDue(weekly, argToday("2026-08-11"))).toBe(false);
     expect(isRecurringDue(weekly, argToday("2026-08-12"))).toBe(true);
+  });
+});
+
+describe("startOfNextPeriod", () => {
+  it("corre al mes siguiente un gasto fijo cuyo día ya cae hoy", () => {
+    const gym = {
+      frequency: "MONTHLY",
+      dayOfMonth: null,
+      startDate: stored("2026-08-03"),
+      endDate: null,
+      lastExecuted: null,
+      createdAt: argToday("2026-08-03"),
+    };
+    const shifted = startOfNextPeriod(gym, argToday("2026-08-03"));
+    expect(shifted?.toISOString().slice(0, 10)).toBe("2026-09-03");
+  });
+
+  it("no corre nada cuando el primer vencimiento todavía no llegó", () => {
+    const alquiler = {
+      frequency: "MONTHLY",
+      dayOfMonth: null,
+      startDate: stored("2026-08-10"),
+      endDate: null,
+      lastExecuted: null,
+      createdAt: argToday("2026-08-03"),
+    };
+    expect(startOfNextPeriod(alquiler, argToday("2026-08-03"))).toBeNull();
+  });
+
+  it("respeta los meses cortos al correr un día 31", () => {
+    const suscripcion = {
+      frequency: "MONTHLY",
+      dayOfMonth: 31,
+      startDate: stored("2027-01-31"),
+      endDate: null,
+      lastExecuted: null,
+      createdAt: argToday("2027-01-31"),
+    };
+    const shifted = startOfNextPeriod(suscripcion, argToday("2027-01-31"));
+    expect(shifted?.toISOString().slice(0, 10)).toBe("2027-02-28");
+  });
+
+  it("un semanal pasa a la semana que viene", () => {
+    const clases = {
+      frequency: "WEEKLY",
+      dayOfMonth: null,
+      startDate: stored("2026-08-03"),
+      endDate: null,
+      lastExecuted: null,
+      createdAt: argToday("2026-08-03"),
+    };
+    const shifted = startOfNextPeriod(clases, argToday("2026-08-03"));
+    expect(shifted?.toISOString().slice(0, 10)).toBe("2026-08-10");
+  });
+
+  it("el inicio corrido deja el próximo cobro recién el mes que viene", () => {
+    const shifted = startOfNextPeriod(
+      {
+        frequency: "MONTHLY",
+        dayOfMonth: null,
+        startDate: stored("2026-08-03"),
+        endDate: null,
+        lastExecuted: null,
+        createdAt: argToday("2026-08-03"),
+      },
+      argToday("2026-08-03")
+    )!;
+
+    const recurrente = {
+      frequency: "MONTHLY",
+      dayOfMonth: null,
+      startDate: shifted,
+      endDate: null,
+      lastExecuted: null,
+      createdAt: argToday("2026-08-03"),
+    };
+    expect(isRecurringDue(recurrente, argToday("2026-08-04"))).toBe(false);
+    expect(isRecurringDue(recurrente, argToday("2026-09-03"))).toBe(true);
   });
 });

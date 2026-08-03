@@ -98,6 +98,24 @@ export function firstOccurrence(input: RecurrenceScheduleInput): Date {
   }
 }
 
+/**
+ * Inicio corrido al período siguiente, o null si la primera ejecución todavía
+ * no llegó.
+ *
+ * Es la contracara de "descontarlo ya": cuando el usuario da de alta un gasto
+ * fijo cuyo primer vencimiento cae hoy o ya pasó y elige empezar el mes que
+ * viene, movemos el inicio a la próxima fecha en vez de dejar un cobro
+ * pendiente que el cron dispararía al otro día.
+ */
+export function startOfNextPeriod(
+  input: RecurrenceScheduleInput,
+  today: Date
+): Date | null {
+  const first = firstOccurrence(input);
+  if (isoDay(first) > isoDay(today)) return null;
+  return nextOccurrence(first, input.frequency, targetDayOf(input));
+}
+
 /** Próxima fecha pendiente de ejecución, o null si el recurrente ya terminó. */
 export function getNextDueDate(input: RecurrenceScheduleInput): Date | null {
   const due = input.lastExecuted

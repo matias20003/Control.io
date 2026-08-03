@@ -1,5 +1,22 @@
 import { prisma } from "@/lib/prisma";
 import { encrypt, decrypt } from "@/lib/crypto";
+import { startOfTodayArg } from "@/lib/timezone";
+import { startOfNextPeriod } from "@/lib/recurrence-schedule";
+import {
+  executeRecurringOnce,
+  FIRST_CHARGE_NOTE,
+  MANUAL_NOTE,
+} from "@/lib/db/recurring-execute";
+
+/**
+ * Cuándo empieza a impactar un movimiento fijo recién creado.
+ *
+ * - NOW: lo registra en el acto, así el neto del mes ya lo refleja en vez de
+ *   esperar al cron del día siguiente.
+ * - NEXT: corre el inicio al período siguiente, para cargar hoy algo que recién
+ *   se paga el mes que viene.
+ */
+export type FirstCharge = "NOW" | "NEXT";
 
 export type SerializedRecurring = {
   id: string;
@@ -85,8 +102,9 @@ export async function createRecurrente(
     dayOfMonth?: number;
     startDate: string;
     endDate?: string;
+    firstCharge?: FirstCharge;
   }
-): Promise<SerializedRecurring> {
+): Promise<{ recurrente: SerializedRecurring; charged: boolean }> {
   // Validamos ownership de la cuenta/categoría antes de guardar
   // (evita guardar IDs spoofed que después harían fallar el cron).
   if (data.accountId) {
@@ -96,6 +114,28 @@ export async function createRecurrente(
   if (data.categoryId) {
     const cat = await prisma.category.findFirst({ where: { id: data.categoryId, userId }, select: { id: true } });
     if (!cat) throw new Error("Categoría inválida");
+  }
+
+  const today = startOfTodayArg();
+  const endDate = data.endDate ? new Date(data.endDate) : null;
+  let startDate = new Date(data.startDate);
+
+  // "A partir del mes que viene": movemos el inicio al período siguiente. Si el
+  // primer vencimiento todavía no llegó no hay nada que correr — la fecha que
+  // eligió el usuario ya es la del mes que viene.
+  if (data.firstCharge === "NEXT") {
+    const shifted = startOfNextPeriod(
+      {
+        frequency: data.frequency,
+        dayOfMonth: data.dayOfMonth ?? null,
+        startDate,
+        endDate,
+        lastExecuted: null,
+        createdAt: today,
+      },
+      today
+    );
+    if (shifted) startDate = shifted;
   }
 
   const row = await prisma.recurringTransaction.create({
@@ -109,11 +149,52 @@ export async function createRecurrente(
       accountId: data.accountId || null,
       frequency: data.frequency as any,
       dayOfMonth: data.dayOfMonth ?? null,
-      startDate: new Date(data.startDate),
-      endDate: data.endDate ? new Date(data.endDate) : null,
+      startDate,
+      endDate,
     },
     include: INCLUDE,
   });
+
+  // "Descontarlo ya": el movimiento entra hoy mismo y `lastExecuted` queda
+  // marcado, así el cron no lo vuelve a cobrar mañana.
+  if (data.firstCharge === "NOW") {
+    const { executed } = await executeRecurringOnce(row, today, FIRST_CHARGE_NOTE);
+    if (executed) {
+      const refreshed = await prisma.recurringTransaction.findUnique({
+        where: { id: row.id },
+        include: INCLUDE,
+      });
+      return { recurrente: serialize(refreshed ?? row), charged: true };
+    }
+  }
+
+  return { recurrente: serialize(row), charged: false };
+}
+
+/**
+ * Registra el pago de un movimiento fijo en el acto (botón "registrar pago").
+ *
+ * Sirve para los que ya estaban creados antes de elegir cuándo empiezan a
+ * descontarse, y para adelantar un pago que se hizo antes de la fecha.
+ */
+export async function runRecurrenteNow(
+  userId: string,
+  id: string
+): Promise<SerializedRecurring> {
+  const current = await prisma.recurringTransaction.findFirst({
+    where: { id, userId },
+  });
+  if (!current) throw new Error("No encontrado");
+  if (!current.isActive) throw new Error("El movimiento fijo está pausado");
+
+  const { executed } = await executeRecurringOnce(current, startOfTodayArg(), MANUAL_NOTE);
+  if (!executed) throw new Error("Ya se registró el pago de este período");
+
+  const row = await prisma.recurringTransaction.findUnique({
+    where: { id },
+    include: INCLUDE,
+  });
+  if (!row) throw new Error("No encontrado");
   return serialize(row);
 }
 

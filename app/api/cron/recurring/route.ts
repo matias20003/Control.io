@@ -2,12 +2,13 @@ import { NextRequest } from "next/server";
 import { bearerMatches } from "@/lib/cron-auth";
 import { prisma } from "@/lib/prisma";
 import { sendPushToUser } from "@/lib/push/send";
-import { encrypt, decrypt } from "@/lib/crypto";
 import { startOfTodayArg } from "@/lib/timezone";
+// El alta con "descontarlo ya" y el botón "registrar pago" comparten esta misma
+// ejecución, para que el saldo de la cuenta se mueva igual venga de donde venga.
+import { executeRecurringOnce } from "@/lib/db/recurring-execute";
 // Misma fuente de verdad que la agenda y los recordatorios de vencimiento: lo
 // que el panel proyecta como próximo pago es exactamente lo que se ejecuta.
 import { isRecurringDue } from "@/lib/recurrence-schedule";
-import { snapshotConversion } from "@/lib/exchange";
 import { sendReactivationNudges } from "@/lib/reactivation";
 import { sendDueReminders } from "@/lib/db/due-reminders";
 
@@ -45,72 +46,8 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-      // Validar que la categoría / cuenta siguen siendo del mismo user.
-      // Si la cuenta fue borrada dejamos accountId=null para que la tx
-      // se cree sin impactar saldos, en vez de fallar el FK.
-      let safeCategoryId: string | null = null;
-      if (r.categoryId) {
-        const cat = await prisma.category.findFirst({
-          where: { id: r.categoryId, userId: r.userId },
-          select: { id: true },
-        });
-        safeCategoryId = cat?.id ?? null;
-      }
-      let safeAccountId: string | null = null;
-      if (r.accountId) {
-        const acc = await prisma.account.findFirst({
-          where: { id: r.accountId, userId: r.userId },
-          select: { id: true },
-        });
-        safeAccountId = acc?.id ?? null;
-      }
-
-      const amountNum = parseFloat(String(r.amount));
-      const { amountARS, exchangeRate } = await snapshotConversion(amountNum, r.currency);
-
-      // r.description ya viene encriptado desde la tabla de recurrentes.
-      // Lo desencriptamos para reutilizar el mismo nombre que puso el usuario
-      // (evita el doble-encriptado que dejaba "enc:..." visible en la lista).
-      const plainDescription = decrypt(r.description) ?? r.description;
-
-      // Claim + movimiento + saldo, todo atómico. El claim condicional evita
-      // duplicados si Vercel reintenta o dos invocaciones se superponen.
-      const didExecute = await prisma.$transaction(async (tx) => {
-        const claim = await tx.recurringTransaction.updateMany({
-          where: {
-            id: r.id,
-            isActive: true,
-            lastExecuted: r.lastExecuted,
-            updatedAt: r.updatedAt,
-          },
-          data: { lastExecuted: today },
-        });
-        if (claim.count === 0) return false;
-
-        await tx.transaction.create({
-          data: {
-            userId: r.userId,
-            type: r.type,
-            amount: r.amount,
-            currency: r.currency,
-            amountARS,
-            exchangeRate,
-            description: encrypt(plainDescription),
-            date: today,
-            categoryId: safeCategoryId,
-            accountId: safeAccountId,
-            notes: encrypt("✅ Ejecutado automáticamente"),
-          },
-        });
-        if (safeAccountId) {
-          const delta = r.type === "INCOME" ? amountNum : -amountNum;
-          await tx.account.update({
-            where: { id: safeAccountId, userId: r.userId },
-            data: { balance: { increment: delta } },
-          });
-        }
-        return true;
-      });
+      const { executed: didExecute, description: plainDescription } =
+        await executeRecurringOnce(r, today);
 
       if (!didExecute) {
         skipped++;

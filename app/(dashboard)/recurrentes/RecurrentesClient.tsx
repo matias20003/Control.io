@@ -3,7 +3,7 @@ import { SectionTabs } from "@/components/layout/SectionTabs";
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Trash2, RefreshCw, Power, Pencil, TrendingDown, TrendingUp } from "lucide-react";
+import { Trash2, RefreshCw, Power, Pencil, TrendingDown, TrendingUp, Zap } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import {
   updateRecurrenteAction,
   toggleRecurrenteAction,
   deleteRecurrenteAction,
+  runRecurrenteNowAction,
 } from "@/app/actions/recurrentes";
 import type { SerializedRecurring } from "@/lib/db/recurrentes";
 import type { SerializedCategory } from "@/lib/db/categories";
@@ -30,6 +31,16 @@ const FREQ_LABELS: Record<string, string> = {
   MONTHLY: "Mensual",
   QUARTERLY: "Trimestral",
   YEARLY: "Anual",
+};
+
+/** Cómo se lee "el período que viene" según la frecuencia elegida. */
+const NEXT_PERIOD_LABELS: Record<string, string> = {
+  DAILY: "mañana",
+  WEEKLY: "la semana que viene",
+  BIWEEKLY: "la quincena que viene",
+  MONTHLY: "el mes que viene",
+  QUARTERLY: "el trimestre que viene",
+  YEARLY: "el año que viene",
 };
 
 interface Props {
@@ -94,7 +105,8 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
       else if (result.success && result.recurrente) {
         setItems((prev) => [result.recurrente!, ...prev]);
         setIsCreateOpen(false);
-        toast.success(type === "INCOME" ? "Ingreso fijo creado" : "Gasto fijo creado");
+        const base = type === "INCOME" ? "Ingreso fijo creado" : "Gasto fijo creado";
+        toast.success(result.charged ? `${base} — ya impactó en el neto` : base);
       }
     });
   };
@@ -132,6 +144,18 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
     });
   };
 
+  /** Registra el pago del período actual sin esperar al cron del día siguiente. */
+  const handleRunNow = (id: string) => {
+    startTransition(async () => {
+      const result = await runRecurrenteNowAction(id);
+      if (result.error) toast.error(result.error);
+      else if (result.success && result.recurrente) {
+        setItems((prev) => prev.map((r) => (r.id === id ? result.recurrente! : r)));
+        toast.success("Pago registrado — ya se descontó del neto");
+      }
+    });
+  };
+
   const handleDelete = (id: string) => {
     setDeletingId(id);
     startTransition(async () => {
@@ -144,176 +168,6 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
       setDeletingId(null);
     });
   };
-
-  /* ── Form fields shared between create / edit ── */
-  function RecurringForm({
-    defaultValues,
-    txType,
-    onTypeChange,
-    filteredCats,
-    onSubmit,
-    onCancel,
-  }: {
-    defaultValues?: SerializedRecurring;
-    txType: "EXPENSE" | "INCOME";
-    onTypeChange: (t: "EXPENSE" | "INCOME") => void;
-    filteredCats: SerializedCategory[];
-    onSubmit: (fd: FormData) => void;
-    onCancel: () => void;
-  }) {
-    const startVal = defaultValues?.startDate
-      ? defaultValues.startDate.split("T")[0]
-      : new Date().toISOString().split("T")[0];
-    const endVal = defaultValues?.endDate
-      ? defaultValues.endDate.split("T")[0]
-      : "";
-
-    return (
-      <>
-        {/* Type tabs */}
-        <div className="flex rounded-xl overflow-hidden border border-border mb-4">
-          {(["EXPENSE", "INCOME"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => onTypeChange(t)}
-              className={`flex-1 py-2 text-xs font-semibold transition-colors ${
-                txType === t
-                  ? t === "EXPENSE"
-                    ? "bg-danger text-white"
-                    : "bg-success text-white"
-                  : "bg-surface text-muted hover:text-foreground"
-              }`}
-            >
-              {t === "EXPENSE" ? "Gasto" : "Ingreso"}
-            </button>
-          ))}
-        </div>
-
-        <form action={onSubmit} className="space-y-4">
-          <input type="hidden" name="type" value={txType} />
-
-          <div className="space-y-1.5">
-            <Label htmlFor="rec-desc">Descripción *</Label>
-            <Input
-              id="rec-desc"
-              name="description"
-              placeholder="Ej: Netflix, Alquiler, Sueldo"
-              defaultValue={defaultValues?.description ?? ""}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="rec-amount">Monto *</Label>
-              <Input
-                id="rec-amount"
-                name="amount"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                defaultValue={defaultValues?.amount ?? ""}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="rec-currency">Moneda</Label>
-              <Select
-                id="rec-currency"
-                name="currency"
-                defaultValue={defaultValues?.currency ?? "ARS"}
-              >
-                <option value="ARS">ARS</option>
-                <option value="USD">USD</option>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="rec-freq">Frecuencia *</Label>
-            <Select
-              id="rec-freq"
-              name="frequency"
-              defaultValue={defaultValues?.frequency ?? "MONTHLY"}
-              required
-            >
-              {Object.entries(FREQ_LABELS).map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="rec-cat">Categoría</Label>
-            <Select
-              id="rec-cat"
-              name="categoryId"
-              defaultValue={defaultValues?.categoryId ?? ""}
-            >
-              <option value="">Sin categoría</option>
-              {filteredCats.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.icon} {c.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="rec-account">Cuenta</Label>
-            <Select
-              id="rec-account"
-              name="accountId"
-              defaultValue={defaultValues?.accountId ?? ""}
-            >
-              <option value="">Sin cuenta (no afecta saldo)</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.icon ?? "🏦"} {a.name} ({a.currency})
-                </option>
-              ))}
-            </Select>
-            <p className="text-[11px] text-muted leading-snug">
-              Si elegís una cuenta, cuando se ejecute el gasto fijo se va a descontar/sumar al saldo automáticamente.
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="rec-start">Fecha de inicio *</Label>
-            <Input
-              id="rec-start"
-              name="startDate"
-              type="date"
-              defaultValue={startVal}
-              required
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="rec-end">Fecha de fin (opcional)</Label>
-            <Input
-              id="rec-end"
-              name="endDate"
-              type="date"
-              defaultValue={endVal}
-            />
-          </div>
-
-          <div className="flex gap-2 pt-1">
-            <Button type="button" variant="ghost" className="flex-1" onClick={onCancel}>
-              Cancelar
-            </Button>
-            <Button type="submit" className="flex-1" disabled={isPending}>
-              {isPending ? "Guardando..." : "Guardar"}
-            </Button>
-          </div>
-        </form>
-      </>
-    );
-  }
 
   return (
     <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-6">
@@ -376,6 +230,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
               onEdit={handleOpenEdit}
               onToggle={handleToggle}
               onDelete={handleDelete}
+              onRunNow={handleRunNow}
               deletingId={deletingId}
               isPending={isPending}
             />
@@ -396,6 +251,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
               onEdit={handleOpenEdit}
               onToggle={handleToggle}
               onDelete={handleDelete}
+              onRunNow={handleRunNow}
               deletingId={deletingId}
               isPending={isPending}
             />
@@ -407,9 +263,12 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent title={createType === "INCOME" ? "Nuevo ingreso fijo" : "Nuevo gasto fijo"}>
           <RecurringForm
+            mode="create"
             txType={createType}
             onTypeChange={setCreateType}
             filteredCats={createCategories}
+            accounts={accounts}
+            isPending={isPending}
             onSubmit={handleCreate}
             onCancel={() => setIsCreateOpen(false)}
           />
@@ -422,10 +281,13 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
           {editingItem && (
             <RecurringForm
               key={editingItem.id}
+              mode="edit"
               defaultValues={editingItem}
               txType={editType}
               onTypeChange={setEditType}
               filteredCats={editCategories}
+              accounts={accounts}
+              isPending={isPending}
               onSubmit={handleUpdate}
               onCancel={() => setEditingItem(null)}
             />
@@ -436,11 +298,245 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
   );
 }
 
+/**
+ * Formulario compartido entre alta y edición.
+ *
+ * Vive a nivel de módulo (y no dentro de RecurrentesClient) porque si se declara
+ * adentro React lo trata como un componente nuevo en cada render del padre y
+ * remonta el form: cambiar de Gasto a Ingreso borraba lo que ya estaba tipeado.
+ */
+function RecurringForm({
+  mode,
+  defaultValues,
+  txType,
+  onTypeChange,
+  filteredCats,
+  accounts,
+  isPending,
+  onSubmit,
+  onCancel,
+}: {
+  mode: "create" | "edit";
+  defaultValues?: SerializedRecurring;
+  txType: "EXPENSE" | "INCOME";
+  onTypeChange: (t: "EXPENSE" | "INCOME") => void;
+  filteredCats: SerializedCategory[];
+  accounts: SerializedAccount[];
+  isPending: boolean;
+  onSubmit: (fd: FormData) => void;
+  onCancel: () => void;
+}) {
+  const startVal = defaultValues?.startDate
+    ? defaultValues.startDate.split("T")[0]
+    : new Date().toISOString().split("T")[0];
+  const endVal = defaultValues?.endDate
+    ? defaultValues.endDate.split("T")[0]
+    : "";
+
+  const [frequency, setFrequency] = useState(defaultValues?.frequency ?? "MONTHLY");
+  const [firstCharge, setFirstCharge] = useState<"NOW" | "NEXT">("NOW");
+  const nextPeriod = NEXT_PERIOD_LABELS[frequency] ?? "el período que viene";
+  const isExpense = txType === "EXPENSE";
+
+  return (
+    <>
+      {/* Type tabs */}
+      <div className="flex rounded-xl overflow-hidden border border-border mb-4">
+        {(["EXPENSE", "INCOME"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => onTypeChange(t)}
+            className={`flex-1 py-2 text-xs font-semibold transition-colors ${
+              txType === t
+                ? t === "EXPENSE"
+                  ? "bg-danger text-white"
+                  : "bg-success text-white"
+                : "bg-surface text-muted hover:text-foreground"
+            }`}
+          >
+            {t === "EXPENSE" ? "Gasto" : "Ingreso"}
+          </button>
+        ))}
+      </div>
+
+      <form action={onSubmit} className="space-y-4">
+        <input type="hidden" name="type" value={txType} />
+
+        <div className="space-y-1.5">
+          <Label htmlFor="rec-desc">Descripción *</Label>
+          <Input
+            id="rec-desc"
+            name="description"
+            placeholder="Ej: Netflix, Alquiler, Sueldo"
+            defaultValue={defaultValues?.description ?? ""}
+            required
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="rec-amount">Monto *</Label>
+            <Input
+              id="rec-amount"
+              name="amount"
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              defaultValue={defaultValues?.amount ?? ""}
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="rec-currency">Moneda</Label>
+            <Select
+              id="rec-currency"
+              name="currency"
+              defaultValue={defaultValues?.currency ?? "ARS"}
+            >
+              <option value="ARS">ARS</option>
+              <option value="USD">USD</option>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="rec-freq">Frecuencia *</Label>
+          <Select
+            id="rec-freq"
+            name="frequency"
+            value={frequency}
+            onChange={(e) => setFrequency(e.target.value)}
+            required
+          >
+            {Object.entries(FREQ_LABELS).map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="rec-cat">Categoría</Label>
+          <Select
+            id="rec-cat"
+            name="categoryId"
+            defaultValue={defaultValues?.categoryId ?? ""}
+          >
+            <option value="">Sin categoría</option>
+            {filteredCats.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.icon} {c.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="rec-account">
+            {isExpense ? "¿De qué cuenta se descuenta? *" : "¿En qué cuenta entra? *"}
+          </Label>
+          <Select
+            id="rec-account"
+            name="accountId"
+            defaultValue={defaultValues?.accountId ?? ""}
+          >
+            <option value="">Sin cuenta (no afecta saldo)</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.icon ?? "🏦"} {a.name} ({a.currency})
+              </option>
+            ))}
+          </Select>
+          <p className="text-[11px] text-muted leading-snug">
+            Elegí la cuenta real (Mercado Pago, banco, efectivo): cada vez que se
+            ejecute, el monto se {isExpense ? "descuenta" : "suma"} de ese saldo.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="rec-start">Fecha de inicio *</Label>
+          <Input
+            id="rec-start"
+            name="startDate"
+            type="date"
+            defaultValue={startVal}
+            required
+          />
+          <p className="text-[11px] text-muted leading-snug">
+            El día de esta fecha es el que se repite (ej: si ponés el 3, se cobra
+            el 3 de cada mes).
+          </p>
+        </div>
+
+        {/* Cuándo empieza a impactar. Sólo en el alta: después ya hay historial. */}
+        {mode === "create" && (
+          <div className="space-y-1.5">
+            <Label>{isExpense ? "¿Cuándo se descuenta?" : "¿Cuándo se acredita?"}</Label>
+            <input type="hidden" name="firstCharge" value={firstCharge} />
+            <div className="grid gap-2">
+              {(
+                [
+                  {
+                    value: "NOW" as const,
+                    title: isExpense ? "Descontarlo ya" : "Acreditarlo ya",
+                    hint: `Lo registra hoy y se ve en el neto del mes. El próximo, ${nextPeriod}.`,
+                  },
+                  {
+                    value: "NEXT" as const,
+                    title: `A partir de ${nextPeriod}`,
+                    hint: "No mueve nada ahora; arranca recién en la próxima fecha.",
+                  },
+                ]
+              ).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setFirstCharge(opt.value)}
+                  className={`text-left rounded-xl border p-3 transition-colors ${
+                    firstCharge === opt.value
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:bg-surface-2"
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-foreground">{opt.title}</p>
+                  <p className="text-[11px] text-muted leading-snug mt-0.5">{opt.hint}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-1.5">
+          <Label htmlFor="rec-end">Fecha de fin (opcional)</Label>
+          <Input
+            id="rec-end"
+            name="endDate"
+            type="date"
+            defaultValue={endVal}
+          />
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <Button type="button" variant="ghost" className="flex-1" onClick={onCancel}>
+            Cancelar
+          </Button>
+          <Button type="submit" className="flex-1" disabled={isPending}>
+            {isPending ? "Guardando..." : "Guardar"}
+          </Button>
+        </div>
+      </form>
+    </>
+  );
+}
+
 function RecurringRow({
   item,
   onEdit,
   onToggle,
   onDelete,
+  onRunNow,
   deletingId,
   isPending,
 }: {
@@ -448,6 +544,7 @@ function RecurringRow({
   onEdit: (item: SerializedRecurring) => void;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
+  onRunNow: (id: string) => void;
   deletingId: string | null;
   isPending: boolean;
 }) {
@@ -470,6 +567,7 @@ function RecurringRow({
             <p className="text-xs text-muted">
               {FREQ_LABELS[item.frequency]}
               {item.categoryName && ` · ${item.categoryName}`}
+              {item.accountName ? ` · ${item.accountName}` : " · Sin cuenta"}
             </p>
           </div>
 
@@ -483,6 +581,16 @@ function RecurringRow({
           </p>
 
           <div className="flex items-center gap-1 flex-shrink-0">
+            {item.isActive && (
+              <button
+                onClick={() => onRunNow(item.id)}
+                disabled={isPending}
+                title="Registrar el pago de este período ahora"
+                className="p-1.5 rounded-lg text-muted hover:text-warning hover:bg-warning/10 transition-colors disabled:opacity-50"
+              >
+                <Zap size={13} />
+              </button>
+            )}
             <button
               onClick={() => onEdit(item)}
               disabled={isPending}
