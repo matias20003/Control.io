@@ -37,6 +37,120 @@ export async function sendText(to: string, text: string): Promise<void> {
   }
 }
 
+/**
+ * Sube un archivo a WhatsApp y devuelve su media id.
+ *
+ * Es preferible a mandar un `link`: con el link, Meta descarga la URL por su
+ * cuenta y adjunta lo que le respondan, así que cualquier redirect o error del
+ * server termina adjuntado como si fuera el archivo. Subiendo los bytes eso no
+ * puede pasar, y además no hace falta que la URL sea pública.
+ */
+export async function uploadMedia(file: Buffer, filename: string, mimeType: string): Promise<string> {
+  const apiKey = process.env.KAPSO_API_KEY;
+  const phoneId = process.env.KAPSO_PHONE_NUMBER_ID;
+  if (!apiKey || !phoneId) throw new Error("Kapso no configurado");
+
+  const form = new FormData();
+  form.set("messaging_product", "whatsapp");
+  form.set("type", mimeType);
+  form.set("file", new Blob([new Uint8Array(file)], { type: mimeType }), filename);
+
+  // Sin Content-Type a mano: FormData pone el suyo con el boundary correcto.
+  const res = await fetch(`${apiUrl()}/meta/whatsapp/v24.0/${phoneId}/media`, {
+    method: "POST",
+    headers: { "X-API-Key": apiKey },
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Kapso uploadMedia falló (${res.status}): ${body}`);
+  }
+  const json = await res.json().catch(() => ({})) as { id?: string };
+  if (!json.id) throw new Error("Kapso uploadMedia no devolvió un id");
+  return json.id;
+}
+
+/** Envía un documento ya subido, por media id. */
+export async function sendDocumentById(
+  to: string,
+  mediaId: string,
+  filename: string,
+  caption?: string,
+): Promise<void> {
+  const apiKey = process.env.KAPSO_API_KEY;
+  const phoneId = process.env.KAPSO_PHONE_NUMBER_ID;
+  if (!apiKey || !phoneId) throw new Error("Kapso no configurado");
+  const res = await fetch(`${apiUrl()}/meta/whatsapp/v24.0/${phoneId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "document",
+      document: { id: mediaId, filename, ...(caption ? { caption } : {}) },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Kapso sendDocumentById falló (${res.status}): ${body}`);
+  }
+}
+
+/**
+ * Envía una plantilla aprobada cuyo header es un documento.
+ *
+ * Es la única forma de hacerle llegar un PDF a alguien que no escribió en las
+ * últimas 24 h: fuera de esa ventana Meta rechaza todo lo que no sea plantilla.
+ * El archivo va por media id (ya subido con uploadMedia), no por link, por lo
+ * mismo de siempre: que Meta no tenga que salir a descargar nada.
+ */
+export async function sendDocumentTemplate(
+  to: string,
+  templateName: string,
+  langCode: string,
+  mediaId: string,
+  filename: string,
+  bodyParams: string[] = [],
+): Promise<void> {
+  const apiKey = process.env.KAPSO_API_KEY;
+  const phoneId = process.env.KAPSO_PHONE_NUMBER_ID;
+  if (!apiKey || !phoneId) throw new Error("Kapso no configurado");
+
+  const components: unknown[] = [
+    { type: "header", parameters: [{ type: "document", document: { id: mediaId, filename } }] },
+  ];
+  if (bodyParams.length) {
+    components.push({ type: "body", parameters: bodyParams.map((text) => ({ type: "text", text })) });
+  }
+
+  const res = await fetch(`${apiUrl()}/meta/whatsapp/v24.0/${phoneId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "template",
+      template: { name: templateName, language: { code: langCode }, components },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Kapso sendDocumentTemplate falló (${res.status}): ${body}`);
+  }
+}
+
+/**
+ * ¿El error de Meta es por la ventana de 24 h?
+ *
+ * Fuera de esa ventana solo entran plantillas aprobadas, así que un documento
+ * libre se rechaza. No es un fallo del sistema: es una regla de la plataforma,
+ * y conviene distinguirla para no contarla como error ni reintentarla.
+ */
+export function isOutsideServiceWindow(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /\b131047\b|\b131026\b|re-?engagement|outside.*24|24.*hour/i.test(message);
+}
+
 /** Envía un PDF como documento nativo de WhatsApp desde una URL pública HTTPS. */
 export async function sendDocument(
   to: string,
