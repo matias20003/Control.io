@@ -36,6 +36,7 @@ import { TransferFields } from "@/components/TransferFields";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ImportCSVDialog } from "./ImportCSVDialog";
 import { Card, CardContent } from "@/components/ui/card";
+import { DateRangePicker, toDayString, formatDayString } from "@/components/ui/date-range-picker";
 import { formatCurrency, formatDate, formatMonth } from "@/lib/utils";
 import { SEARCH_RESULT_LIMIT } from "@/lib/search-range";
 import {
@@ -56,22 +57,6 @@ function dayOffsetByMonths(months: number): string {
   const d = new Date();
   d.setMonth(d.getMonth() - months);
   return toDayString(d);
-}
-
-function toDayString(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-/**
- * "2026-08-03" → "03/08/2026", sin pasar por Date.
- *
- * formatCurrency y compañía sirven para instantes; acá el dato es un día suelto
- * y `new Date("2026-08-03")` lo lee como medianoche UTC, que mostrado en hora
- * argentina cae el día anterior. El rango diría un día menos del elegido.
- */
-function formatDayString(day: string): string {
-  const [y, m, d] = day.split("-");
-  return `${d}/${m}/${y}`;
 }
 
 /**
@@ -700,23 +685,31 @@ export function MovimientosClient({ initialTransactions, initialTotal, initialHa
                 ya está parada sobre un mes puntual. */}
             {isSearchMode && (
               <>
-                <select value={rangeKey} onChange={(e) => setRangeKey(e.target.value as SearchRangeKey)}
+                <select value={rangeKey}
+                  onChange={(e) => {
+                    const key = e.target.value as SearchRangeKey;
+                    setRangeKey(key);
+                    // Volver a un preset limpia las fechas a mano: si no, el
+                    // botón del calendario seguiría mostrando un lapso que ya
+                    // no es el que se está buscando.
+                    if (key !== "CUSTOM") { setCustomFrom(""); setCustomTo(""); }
+                  }}
                   className="px-3 py-1 rounded-full text-xs font-medium bg-surface-2 text-muted border-none outline-none cursor-pointer">
                   {Object.entries(SEARCH_RANGES).map(([key, r]) => (
                     <option key={key} value={key}>{r.label}</option>
                   ))}
                 </select>
-                {rangeKey === "CUSTOM" && (
-                  <div className="flex items-center gap-1.5">
-                    <input type="date" value={customFrom} max={customTo || undefined}
-                      onChange={(e) => setCustomFrom(e.target.value)}
-                      className="px-2.5 py-1 rounded-full text-xs bg-surface-2 text-foreground border-none outline-none cursor-pointer" />
-                    <span className="text-xs text-muted">a</span>
-                    <input type="date" value={customTo} min={customFrom || undefined}
-                      onChange={(e) => setCustomTo(e.target.value)}
-                      className="px-2.5 py-1 rounded-full text-xs bg-surface-2 text-foreground border-none outline-none cursor-pointer" />
-                  </div>
-                )}
+                {/* Elegir fechas alcanza para pasar a modo personalizado: no
+                    hace falta ir antes al desplegable. */}
+                <DateRangePicker
+                  from={customFrom}
+                  to={customTo}
+                  onChange={({ from, to }) => {
+                    setCustomFrom(from);
+                    setCustomTo(to);
+                    setRangeKey(from || to ? "CUSTOM" : "6M");
+                  }}
+                />
               </>
             )}
           </div>
