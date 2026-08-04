@@ -31,11 +31,6 @@ const schema = z.object({
   endDate: z.string().optional(),
 });
 
-const createSchema = schema.extend({
-  // Sólo aplica al alta: si el primer pago entra hoy o recién el período que viene.
-  firstCharge: z.enum(["NOW", "NEXT"]).optional(),
-});
-
 function revalidateRecurringViews() {
   revalidatePath("/recurrentes");
   revalidatePath("/dashboard");
@@ -67,10 +62,9 @@ export async function createRecurrenteAction(formData: FormData) {
     dayOfMonth: formData.get("dayOfMonth") || undefined,
     startDate: formData.get("startDate"),
     endDate: formData.get("endDate") || undefined,
-    firstCharge: formData.get("firstCharge") || undefined,
   };
 
-  const result = createSchema.safeParse(raw);
+  const result = schema.safeParse(raw);
   if (!result.success) return { error: result.error.issues[0].message };
 
   try {

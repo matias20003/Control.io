@@ -3,7 +3,7 @@ import { SectionTabs } from "@/components/layout/SectionTabs";
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Trash2, RefreshCw, Power, Pencil, TrendingDown, TrendingUp, Zap } from "lucide-react";
+import { Trash2, RefreshCw, Power, Pencil, TrendingDown, TrendingUp, Zap, Plus } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
+import { createCategoryAction } from "@/app/actions/categories";
 import {
   createRecurrenteAction,
   updateRecurrenteAction,
@@ -33,15 +34,11 @@ const FREQ_LABELS: Record<string, string> = {
   YEARLY: "Anual",
 };
 
-/** Cómo se lee "el período que viene" según la frecuencia elegida. */
-const NEXT_PERIOD_LABELS: Record<string, string> = {
-  DAILY: "mañana",
-  WEEKLY: "la semana que viene",
-  BIWEEKLY: "la quincena que viene",
-  MONTHLY: "el mes que viene",
-  QUARTERLY: "el trimestre que viene",
-  YEARLY: "el año que viene",
-};
+/** "2026-08-10" → "10/08/2026", sin pasar por Date (que restaría un día). */
+function formatDayLabel(day: string): string {
+  const [y, m, d] = day.split("-");
+  return `${d}/${m}/${y}`;
+}
 
 interface Props {
   initialRecurrentes: SerializedRecurring[];
@@ -99,6 +96,7 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
 
   const handleCreate = (formData: FormData) => {
     const type = formData.get("type") === "INCOME" ? "INCOME" : "EXPENSE";
+    const start = String(formData.get("startDate") ?? "");
     startTransition(async () => {
       const result = await createRecurrenteAction(formData);
       if (result.error) toast.error(result.error);
@@ -106,7 +104,14 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
         setItems((prev) => [result.recurrente!, ...prev]);
         setIsCreateOpen(false);
         const base = type === "INCOME" ? "Ingreso fijo creado" : "Gasto fijo creado";
-        toast.success(result.charged ? `${base} — ya impactó en el neto` : base);
+        const verbo = type === "INCOME" ? "acredita" : "descuenta";
+        // El toast confirma qué pasó con la plata: sin esto no se distingue
+        // "quedó agendado" de "ya se movió el saldo".
+        toast.success(
+          result.charged
+            ? `${base} — ya se ${verbo} de la cuenta`
+            : `${base} — se ${verbo} el ${formatDayLabel(start)}`
+        );
       }
     });
   };
@@ -178,11 +183,11 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
         subtitle="Sueldos, suscripciones, alquileres y otros movimientos periódicos automatizados."
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button size="sm" variant="secondary" onClick={() => openCreate("EXPENSE")}>
-              <TrendingDown size={16} className="mr-1.5 text-danger" />
+            <Button size="sm" variant="expense" onClick={() => openCreate("EXPENSE")}>
+              <TrendingDown size={16} className="mr-1.5" />
               Nuevo gasto fijo
             </Button>
-            <Button size="sm" onClick={() => openCreate("INCOME")}>
+            <Button size="sm" variant="income" onClick={() => openCreate("INCOME")}>
               <TrendingUp size={16} className="mr-1.5" />
               Nuevo ingreso fijo
             </Button>
@@ -207,11 +212,11 @@ export function RecurrentesClient({ initialRecurrentes, categories, accounts }: 
           description="Registrá ingresos, suscripciones, alquileres y otros movimientos periódicos."
           action={
             <div className="flex flex-wrap justify-center gap-2">
-              <Button variant="secondary" onClick={() => openCreate("EXPENSE")}>
-                <TrendingDown size={16} className="mr-1.5 text-danger" />
+              <Button variant="expense" onClick={() => openCreate("EXPENSE")}>
+                <TrendingDown size={16} className="mr-1.5" />
                 Nuevo gasto fijo
               </Button>
-              <Button onClick={() => openCreate("INCOME")}>
+              <Button variant="income" onClick={() => openCreate("INCOME")}>
                 <TrendingUp size={16} className="mr-1.5" />
                 Nuevo ingreso fijo
               </Button>
@@ -326,17 +331,54 @@ function RecurringForm({
   onSubmit: (fd: FormData) => void;
   onCancel: () => void;
 }) {
+  // El día de hoy tomado del reloj local, no de toISOString(): en Argentina,
+  // después de las 21:00 el UTC ya está en mañana y el formulario proponía una
+  // fecha de inicio que no era la de hoy — justo la que decide si se cobra al
+  // guardar.
+  const today = new Date();
+  const todayVal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const startVal = defaultValues?.startDate
     ? defaultValues.startDate.split("T")[0]
-    : new Date().toISOString().split("T")[0];
+    : todayVal;
   const endVal = defaultValues?.endDate
     ? defaultValues.endDate.split("T")[0]
     : "";
 
   const [frequency, setFrequency] = useState(defaultValues?.frequency ?? "MONTHLY");
-  const [firstCharge, setFirstCharge] = useState<"NOW" | "NEXT">("NOW");
-  const nextPeriod = NEXT_PERIOD_LABELS[frequency] ?? "el período que viene";
+  const [startDate, setStartDate] = useState(startVal);
   const isExpense = txType === "EXPENSE";
+  const startsToday = startDate <= todayVal;
+
+  // Crear categoría sin salir del alta: la nueva queda en estado local del
+  // form (no se remonta, no se pierde lo tipeado) y se persiste igual.
+  const [extraCats, setExtraCats] = useState<SerializedCategory[]>([]);
+  const [catId, setCatId] = useState(defaultValues?.categoryId ?? "");
+  const [addingCat, setAddingCat] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatIcon, setNewCatIcon] = useState("");
+  const [creatingCat, setCreatingCat] = useState(false);
+  const allCats = [...filteredCats, ...extraCats.filter((c) => c.type === txType)];
+
+  const createCat = async () => {
+    if (!newCatName.trim()) return;
+    setCreatingCat(true);
+    const fd = new FormData();
+    fd.set("name", newCatName.trim());
+    fd.set("type", txType);
+    if (newCatIcon.trim()) fd.set("icon", newCatIcon.trim());
+    const res = await createCategoryAction(fd);
+    setCreatingCat(false);
+    if ("category" in res && res.category) {
+      setExtraCats((prev) => [...prev, res.category as SerializedCategory]);
+      setCatId(res.category.id);
+      setAddingCat(false);
+      setNewCatName("");
+      setNewCatIcon("");
+      toast.success("Categoría creada ✓");
+    } else {
+      toast.error("error" in res && res.error ? res.error : "No se pudo crear la categoría");
+    }
+  };
 
   return (
     <>
@@ -418,24 +460,62 @@ function RecurringForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="rec-cat">Categoría</Label>
-          <Select
-            id="rec-cat"
-            name="categoryId"
-            defaultValue={defaultValues?.categoryId ?? ""}
-          >
-            <option value="">Sin categoría</option>
-            {filteredCats.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.icon} {c.name}
-              </option>
-            ))}
-          </Select>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="rec-cat">Categoría</Label>
+            <button
+              type="button"
+              onClick={() => setAddingCat((v) => !v)}
+              className="text-xs text-primary hover:underline inline-flex items-center gap-0.5"
+            >
+              {addingCat ? "Cancelar" : <><Plus size={12} /> Nueva</>}
+            </button>
+          </div>
+          {addingCat ? (
+            <>
+              <div className="flex gap-2">
+                <Input
+                  value={newCatIcon}
+                  onChange={(e) => setNewCatIcon(e.target.value)}
+                  maxLength={2}
+                  placeholder="🏋️"
+                  className="w-14 text-center"
+                />
+                <Input
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  placeholder={`Categoría de ${isExpense ? "gasto" : "ingreso"}`}
+                  className="flex-1"
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); createCat(); } }}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="shrink-0"
+                  disabled={creatingCat || !newCatName.trim()}
+                  onClick={createCat}
+                >
+                  {creatingCat ? "..." : "Crear"}
+                </Button>
+              </div>
+              <input type="hidden" name="categoryId" value={catId} />
+            </>
+          ) : (
+            <Select id="rec-cat" name="categoryId" value={catId} onChange={(e) => setCatId(e.target.value)}>
+              <option value="">Sin categoría</option>
+              {allCats.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.icon} {c.name}
+                </option>
+              ))}
+            </Select>
+          )}
         </div>
 
         <div className="space-y-1.5">
+          {/* Sin asterisco: se puede dejar "Sin cuenta" para llevar el registro
+              sin tocar ningún saldo. */}
           <Label htmlFor="rec-account">
-            {isExpense ? "¿De qué cuenta se descuenta? *" : "¿En qué cuenta entra? *"}
+            {isExpense ? "¿De qué cuenta se descuenta?" : "¿En qué cuenta entra?"}
           </Label>
           <Select
             id="rec-account"
@@ -461,52 +541,20 @@ function RecurringForm({
             id="rec-start"
             name="startDate"
             type="date"
-            defaultValue={startVal}
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
             required
           />
           <p className="text-[11px] text-muted leading-snug">
-            El día de esta fecha es el que se repite (ej: si ponés el 3, se cobra
-            el 3 de cada mes).
+            El día de esta fecha es el que se repite (ej: si ponés el 3, se
+            {isExpense ? " descuenta" : " acredita"} el 3 de cada mes).
+            {mode === "create" && startDate && (
+              startsToday
+                ? ` Como es hoy, al guardar ya se ${isExpense ? "descuenta" : "acredita"} de la cuenta elegida.`
+                : ` Se ${isExpense ? "descuenta" : "acredita"} recién el ${formatDayLabel(startDate)}.`
+            )}
           </p>
         </div>
-
-        {/* Cuándo empieza a impactar. Sólo en el alta: después ya hay historial. */}
-        {mode === "create" && (
-          <div className="space-y-1.5">
-            <Label>{isExpense ? "¿Cuándo se descuenta?" : "¿Cuándo se acredita?"}</Label>
-            <input type="hidden" name="firstCharge" value={firstCharge} />
-            <div className="grid gap-2">
-              {(
-                [
-                  {
-                    value: "NOW" as const,
-                    title: isExpense ? "Descontarlo ya" : "Acreditarlo ya",
-                    hint: `Lo registra hoy y se ve en el neto del mes. El próximo, ${nextPeriod}.`,
-                  },
-                  {
-                    value: "NEXT" as const,
-                    title: `A partir de ${nextPeriod}`,
-                    hint: "No mueve nada ahora; arranca recién en la próxima fecha.",
-                  },
-                ]
-              ).map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setFirstCharge(opt.value)}
-                  className={`text-left rounded-xl border p-3 transition-colors ${
-                    firstCharge === opt.value
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:bg-surface-2"
-                  }`}
-                >
-                  <p className="text-sm font-semibold text-foreground">{opt.title}</p>
-                  <p className="text-[11px] text-muted leading-snug mt-0.5">{opt.hint}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         <div className="space-y-1.5">
           <Label htmlFor="rec-end">Fecha de fin (opcional)</Label>
