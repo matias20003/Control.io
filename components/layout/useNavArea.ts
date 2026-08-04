@@ -2,7 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AREAS, NAV_AREA_STORAGE_KEY, areaFromPath, type NavArea } from "@/lib/nav";
+import { AREAS, AREA_ORDER, NAV_AREA_STORAGE_KEY, areaFromPath, type NavArea } from "@/lib/nav";
 
 /**
  * El área elegida vive en localStorage, no en un estado de React: el sidebar y
@@ -20,7 +20,9 @@ function subscribe(onChange: () => void) {
 function readPreferred(): NavArea | null {
   try {
     const saved = window.localStorage.getItem(NAV_AREA_STORAGE_KEY);
-    return saved === "finanzas" || saved === "organizacion" ? saved : null;
+    // Se compara contra la lista real de pilares: cuando se sumó el tercero,
+    // una comparación escrita a mano lo habría dejado afuera en silencio.
+    return AREA_ORDER.find((area) => area === saved) ?? null;
   } catch {
     // Safari en modo privado tira al leer localStorage. El default alcanza.
     return null;

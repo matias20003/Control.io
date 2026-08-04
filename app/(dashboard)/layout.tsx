@@ -74,7 +74,7 @@ export default async function DashboardLayout({
       kind: "reminder",
       title: reminder.text,
       description: `Recordatorio programado para ${when}`,
-      href: "/hoy",
+      href: "/calendario",
     });
   }
 

@@ -3,8 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle, Archive, Check, ChevronLeft, ChevronRight, Clock3,
-  Flame, Pencil, Plus, RefreshCw, Target, Trash2, Wallet,
+  AlertTriangle, Archive, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Columns3,
+  Flame, Pencil, Plus, RefreshCw, Sparkles, Target, Trash2, Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -36,7 +36,7 @@ type Habit = {
  */
 export type OrgSection = "today" | "calendar" | "tasks" | "habits";
 type WeekZoom = "week" | "month";
-type OrganizeAxis = "kanban" | "eisenhower" | "someday" | "lists";
+type OrganizeAxis = "kanban" | "eisenhower" | "someday" | "lists" | "habits";
 
 const TZ = "America/Argentina/Buenos_Aires";
 const dayKey = (date: Date) => date.toLocaleDateString("en-CA", { timeZone: TZ });
@@ -48,6 +48,16 @@ const SECTION_COPY: Record<OrgSection, { title: string; subtitle: string }> = {
   tasks: { title: "Tareas", subtitle: "Clasificá por estado, prioridad y listas." },
   habits: { title: "Hábitos", subtitle: "Lo que se controla es lo que se mejora." },
 };
+
+/**
+ * Las pestañas de la pantalla única, que es como sigue viéndolo todo el mundo.
+ * El menú por secciones separadas está en prueba y sólo lo ve el dueño.
+ */
+const TAB_ITEMS: { key: OrgSection; label: string; hint: string; icon: typeof Sparkles }[] = [
+  { key: "today", label: "Hoy", hint: "Arrancar el día", icon: Sparkles },
+  { key: "calendar", label: "Semana", hint: "Planificar", icon: CalendarDays },
+  { key: "tasks", label: "Organizar", hint: "Clasificar", icon: Columns3 },
+];
 
 /** Toggle segmentado para los sub-modos de Semana y Organizar. */
 function Toggle<T extends string>({ value, onChange, options }: {
@@ -430,15 +440,22 @@ function AddTask({ lists, initialDay }: { lists: List[]; initialDay?: string }) 
   );
 }
 
-export function OrganizationClient({ section, initial, financeEvents, googleConnected, initialDay }: {
+export function OrganizationClient({ section, initial, financeEvents, googleConnected, initialDay, tabbed = false }: {
   section: OrgSection;
   initial: { tasks: OrganizationTask[]; lists: List[]; habits: Habit[] };
   financeEvents: AgendaEvent[];
   googleConnected: boolean;
   /** Día a mostrar, si se llegó desde el calendario mensual (`?d=`). */
   initialDay?: string;
+  /**
+   * Pantalla única con pestañas, que es como lo sigue viendo todo el mundo.
+   * Sin esto, cada sección es su propia ruta y el menú hace de pestañas.
+   */
+  tabbed?: boolean;
 }) {
   const router = useRouter();
+  const [tab, setTab] = useState<OrgSection>(section);
+  const current = tabbed ? tab : section;
   // El día viene como YYYY-MM-DD; se ancla al mediodía para que ningún huso
   // horario lo corra al día anterior.
   const [anchor, setAnchor] = useState(() => initialDay ? new Date(`${initialDay}T12:00:00`) : new Date());
@@ -503,7 +520,7 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
     return Array.from({ length: 7 }, (_, index) => { const x = new Date(d); x.setDate(d.getDate() + index); return x; });
   }, [anchor]);
   const financeOn = (key: string) => financeEvents.filter((event) => dayKey(new Date(event.date)) === key);
-  const step = section === "today" ? 1 : zoom === "week" ? 7 : 30;
+  const step = current === "today" ? 1 : zoom === "week" ? 7 : 30;
   // La cola del cierre: lo de hoy sin terminar, más lo que quedó atrás.
   const todayPlan = planForDay(visibleActive, currentDay, today());
   const pendingToday = [...todayPlan.overdue, ...todayPlan.timed, ...todayPlan.untimed, ...todayPlan.due];
@@ -512,8 +529,14 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
     <main className="mx-auto w-full max-w-[1500px] space-y-5 pb-24">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{SECTION_COPY[section].title}</h1>
-          <p className="mt-1 text-sm text-muted">{SECTION_COPY[section].subtitle}</p>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {tabbed ? "Organización" : SECTION_COPY[current].title}
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            {tabbed
+              ? "Tareas, agenda, prioridades y hábitos en un solo lugar."
+              : SECTION_COPY[current].subtitle}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {googleConnected ? (
@@ -531,12 +554,31 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
           )}
           {/* En Hábitos el alta que corresponde es la de un hábito, no la de
               una tarea: el botón vive dentro del panel. */}
-          {section !== "habits" && <AddTask lists={initial.lists} initialDay={currentDay} />}
+          {current !== "habits" && <AddTask lists={initial.lists} initialDay={currentDay} />}
         </div>
       </header>
 
+      {tabbed && (
+        <nav className="flex gap-1 rounded-2xl border border-border bg-surface p-1.5">
+          {TAB_ITEMS.map((item) => (
+            <button
+              key={item.key} onClick={() => setTab(item.key)}
+              className={`inline-flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-2 text-sm font-medium transition-colors sm:flex-row sm:gap-2 ${
+                current === item.key ? "bg-primary text-white" : "text-muted hover:bg-surface-2"
+              }`}
+            >
+              <item.icon size={15} />
+              {item.label}
+              <span className={`hidden text-[11px] font-normal lg:inline ${current === item.key ? "text-white/70" : "text-muted/70"}`}>
+                · {item.hint}
+              </span>
+            </button>
+          ))}
+        </nav>
+      )}
+
       {/* Filtro por lista: aplica a las tres secciones de tareas. */}
-      {section !== "habits" && initial.lists.length > 0 && (
+      {current !== "habits" && initial.lists.length > 0 && (
         <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
           <button
             onClick={() => setListFilter("all")}
@@ -562,11 +604,11 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
         </div>
       )}
 
-      {(section === "today" || section === "calendar") && (
+      {(current === "today" || current === "calendar") && (
         <div className="flex items-center justify-between">
           <button aria-label="Anterior" onClick={() => setAnchor(new Date(anchor.getTime() - step * 86_400_000))} className="grid h-11 w-11 place-items-center rounded-xl border border-border"><ChevronLeft size={18} /></button>
           <button onClick={() => setAnchor(new Date())} className="text-sm font-semibold capitalize">
-            {section === "today"
+            {current === "today"
               ? anchor.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })
               : anchor.toLocaleDateString("es-AR", { month: "long", year: "numeric" })}
           </button>
@@ -576,7 +618,7 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
 
       {/* Los rituales están a un toque pero nunca bloquean: si no los abrís,
           la sección funciona igual. */}
-      {section === "today" && pendingToday.length > 0 && (
+      {current === "today" && pendingToday.length > 0 && (
         <button
           onClick={() => setRitual("shutdown")}
           className="flex w-full items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/5 px-4 py-3 text-left transition-colors hover:border-primary/50"
@@ -591,7 +633,7 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
         </button>
       )}
 
-      {section === "calendar" && zoom === "week" && undated.length > 0 && (
+      {current === "calendar" && zoom === "week" && undated.length > 0 && (
         <button
           onClick={() => setRitual("planner")}
           className="flex w-full items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/5 px-4 py-3 text-left transition-colors hover:border-primary/50"
@@ -606,7 +648,7 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
         </button>
       )}
 
-      {section === "today" && (
+      {current === "today" && (
         <TodayView
           day={currentDay}
           tasks={visibleActive}
@@ -619,7 +661,7 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
         />
       )}
 
-      {section === "calendar" && (
+      {current === "calendar" && (
         <div className="space-y-4">
           <Toggle
             value={zoom}
@@ -637,19 +679,23 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
               onOpen={open}
             />
           ) : (
-            // Elegir un día del mes lleva a Hoy en esa fecha: el día se pasa
-            // por la URL para que sobreviva al refresh y se pueda compartir.
+            // Elegir un día del mes lleva a Hoy en esa fecha. Con secciones
+            // separadas el día viaja por la URL, así sobrevive al refresh y se
+            // puede compartir; con pestañas basta con cambiar de pestaña.
             <MonthCalendar
               anchor={anchor}
               tasks={visibleActive}
               finance={financeEvents}
-              onSelect={(date) => router.push(`/hoy?d=${dayKey(date)}`)}
+              onSelect={(date) => {
+                if (tabbed) { setAnchor(date); setTab("today"); }
+                else router.push(`/hoy?d=${dayKey(date)}`);
+              }}
             />
           )}
         </div>
       )}
 
-      {section === "tasks" && (
+      {current === "tasks" && (
         <div className="space-y-4">
           <Toggle
             value={axis}
@@ -659,16 +705,19 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
               { value: "eisenhower", label: "Por prioridad" },
               { value: "someday", label: "Algún día" },
               { value: "lists", label: "Listas" },
+              // Con secciones separadas, Hábitos tiene ruta propia.
+              ...(tabbed ? [{ value: "habits" as const, label: "Hábitos" }] : []),
             ]}
           />
           {axis === "kanban" && <Kanban tasks={visible.filter((task) => !task.someday)} lists={initial.lists} update={update} onOpen={open} />}
           {axis === "eisenhower" && <Eisenhower tasks={visibleActive.filter((task) => !task.someday)} lists={initial.lists} update={update} onOpen={open} />}
           {axis === "someday" && <SomedayView tasks={somedayTasks} lists={initial.lists} update={update} onOpen={open} />}
           {axis === "lists" && <ListsView lists={initial.lists} tasks={tasks.filter((task) => !task.done && !task.someday)} update={update} onOpen={open} />}
+          {axis === "habits" && <Habits habits={initial.habits} />}
         </div>
       )}
 
-      {section === "habits" && <Habits habits={initial.habits} />}
+      {current === "habits" && <Habits habits={initial.habits} />}
       {pending && <div className="fixed bottom-24 right-5 rounded-full bg-foreground px-3 py-2 text-xs text-background shadow-lg"><RefreshCw size={12} className="mr-1 inline animate-spin" />Guardando</div>}
 
       <DayShutdown

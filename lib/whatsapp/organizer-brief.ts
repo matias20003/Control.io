@@ -57,7 +57,7 @@ export async function fireOrganizerBriefs(): Promise<{ sent: number; attempted: 
       delivered = (await sendPushToUser(recipient.user_id, {
         title: "☀️ Tu organización de hoy",
         body: events.length ? `Tenés ${events.length} evento(s) en el calendario.` : "Tu agenda de hoy está libre.",
-        url: "/hoy",
+        url: "/calendario",
       }).catch(() => 0)) > 0;
     }
     if (delivered) sent++;

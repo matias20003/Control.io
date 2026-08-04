@@ -1,19 +1,19 @@
 import {
-  ArrowUpDown, BarChart3, CalendarDays, CircleDollarSign, CreditCard, Flame,
+  ArrowUpDown, BarChart3, CalendarDays, CalendarCheck, CircleDollarSign, CreditCard, Flame,
   GraduationCap, HandCoins, LayoutDashboard, ListChecks, Mail, Newspaper,
   Sparkles, Target, Users, Wallet,
 } from "lucide-react";
 
 /**
- * Las dos áreas de Control.io. La app dejó de ser sólo finanzas: controlar la
- * plata y controlar el tiempo son dos trabajos distintos, y mezclar sus quince
- * secciones en una lista plana obligaba a leerlas todas para encontrar una.
+ * Los tres pilares de Control.io. La app dejó de ser sólo finanzas: controlar
+ * la plata, controlar el tiempo y sostener los vínculos son tres trabajos
+ * distintos, y mezclar sus quince secciones en una lista plana obligaba a
+ * leerlas todas para encontrar una.
  *
- * El sidebar muestra una sola área por vez y se cambia con un switch. Las
- * secciones transversales (Inicio, Mi Brief) quedan siempre arriba porque
- * hablan de las dos: el dashboard mezcla vencimientos con tareas del día.
+ * Cada pilar abre con su propio dashboard y despliega sus secciones debajo.
+ * Inicio queda arriba, fuera de los tres: es el resumen que los cruza.
  */
-export type NavArea = "finanzas" | "organizacion";
+export type NavArea = "finanzas" | "organizacion" | "circulo";
 
 export type NavItem = {
   href: string;
@@ -25,54 +25,99 @@ export type NavItem = {
   ownerOnly?: boolean;
 };
 
-/** Visibles en las dos áreas, arriba del switch. */
-export const TRANSVERSAL_ITEMS: NavItem[] = [
-  { href: "/dashboard",  icon: LayoutDashboard, label: "Inicio" },
-  { href: "/newsletter", icon: Newspaper,       label: "Mi Brief" },
-];
-
-export const FINANCE_ITEMS: NavItem[] = [
-  { href: "/movimientos",  icon: ArrowUpDown,      label: "Movimientos" },
-  { href: "/cuentas",      icon: Wallet,           label: "Cuentas" },
-  { href: "/presupuestos", icon: Target,           label: "Planificá", match: ["/presupuestos", "/metas", "/recurrentes"] },
-  { href: "/deudas",       icon: HandCoins,        label: "Deudas" },
-  { href: "/cuotas",       icon: CreditCard,       label: "Cuotas" },
-  { href: "/grupos",       icon: Users,            label: "Grupos" },
-  { href: "/reporte",      icon: BarChart3,        label: "Análisis", match: ["/reporte", "/tendencias", "/gastos-hormiga"] },
-  { href: "/cotizaciones", icon: CircleDollarSign, label: "Cotizaciones" },
-];
-
-export const ORGANIZATION_ITEMS: NavItem[] = [
-  { href: "/hoy",        icon: Sparkles,      label: "Hoy" },
-  { href: "/calendario", icon: CalendarDays,  label: "Calendario", match: ["/calendario", "/agenda"] },
-  { href: "/tareas",     icon: ListChecks,    label: "Tareas" },
-  { href: "/habitos",    icon: Flame,         label: "Hábitos" },
-  { href: "/estudio",    icon: GraduationCap, label: "Estudio" },
-  { href: "/correos",    icon: Mail,          label: "Correos", ownerOnly: true },
-];
-
-export const AREAS: Record<NavArea, { label: string; home: string; items: NavItem[] }> = {
-  finanzas:     { label: "Finanzas",     home: "/movimientos", items: FINANCE_ITEMS },
-  organizacion: { label: "Organización", home: "/hoy",         items: ORGANIZATION_ITEMS },
+export type Area = {
+  label: string;
+  icon: React.ElementType;
+  /** El dashboard del pilar: a dónde lleva tocar su nombre. */
+  home: string;
+  items: NavItem[];
 };
+
+/** Fuera de los pilares: resume los tres. */
+export const HOME_ITEM: NavItem = { href: "/dashboard", icon: LayoutDashboard, label: "Inicio" };
+
+export const AREAS: Record<NavArea, Area> = {
+  finanzas: {
+    label: "Finanzas",
+    icon: Wallet,
+    home: "/finanzas",
+    items: [
+      { href: "/movimientos",  icon: ArrowUpDown,      label: "Movimientos" },
+      { href: "/cuentas",      icon: Wallet,           label: "Cuentas" },
+      { href: "/presupuestos", icon: Target,           label: "Planificá", match: ["/presupuestos", "/metas", "/recurrentes"] },
+      { href: "/deudas",       icon: HandCoins,        label: "Deudas" },
+      { href: "/cuotas",       icon: CreditCard,       label: "Cuotas" },
+      { href: "/grupos",       icon: Users,            label: "Grupos" },
+      { href: "/reporte",      icon: BarChart3,        label: "Análisis", match: ["/reporte", "/tendencias", "/gastos-hormiga"] },
+      { href: "/cotizaciones", icon: CircleDollarSign, label: "Cotizaciones" },
+    ],
+  },
+  organizacion: {
+    label: "Organización",
+    icon: CalendarCheck,
+    home: "/organizacion",
+    items: [
+      { href: "/hoy",          icon: Sparkles,      label: "Hoy" },
+      { href: "/calendario",   icon: CalendarDays,  label: "Calendario", match: ["/calendario", "/agenda"] },
+      { href: "/tareas",       icon: ListChecks,    label: "Tareas" },
+      { href: "/habitos",      icon: Flame,         label: "Hábitos" },
+      { href: "/estudio",      icon: GraduationCap, label: "Estudio" },
+      { href: "/correos",      icon: Mail,          label: "Correos", ownerOnly: true },
+    ],
+  },
+  circulo: {
+    label: "Mi Círculo",
+    icon: Users,
+    home: "/circulo",
+    items: [
+      { href: "/newsletter", icon: Newspaper, label: "Mi Brief" },
+    ],
+  },
+};
+
+export const AREA_ORDER: NavArea[] = ["finanzas", "organizacion", "circulo"];
 
 export const NAV_AREA_STORAGE_KEY = "controlio:nav-area";
 
-/** Todas las rutas que pertenecen a un área, incluidas las que no tienen botón propio. */
-const routesOf = (items: NavItem[]) => items.flatMap((item) => item.match ?? [item.href]);
-const FINANCE_ROUTES = routesOf(FINANCE_ITEMS);
-const ORGANIZATION_ROUTES = routesOf(ORGANIZATION_ITEMS);
+/**
+ * El menú de siempre, plano, que sigue viendo todo el mundo. Los tres pilares
+ * de arriba están en prueba y sólo los ve el dueño: mover de lugar quince
+ * secciones para todos, antes de saber si el reordenamiento funciona, deja a
+ * la gente buscando cosas que ayer encontraba de memoria.
+ *
+ * Cuando el rediseño esté probado, esto se borra y AREAS queda para todos.
+ */
+export const LEGACY_ITEMS: NavItem[] = [
+  { href: "/dashboard",    icon: LayoutDashboard,  label: "Inicio" },
+  { href: "/calendario",   icon: CalendarCheck,    label: "Organización", match: ["/calendario", "/tareas"] },
+  { href: "/movimientos",  icon: ArrowUpDown,      label: "Movimientos" },
+  { href: "/cuentas",      icon: Wallet,           label: "Cuentas" },
+  { href: "/presupuestos", icon: Target,           label: "Planificá", match: ["/presupuestos", "/metas", "/recurrentes"] },
+  { href: "/newsletter",   icon: Newspaper,        label: "Mi Brief" },
+  { href: "/grupos",       icon: Users,            label: "Grupos" },
+  { href: "/deudas",       icon: HandCoins,        label: "Deudas" },
+  { href: "/cuotas",       icon: CreditCard,       label: "Cuotas" },
+  { href: "/reporte",      icon: BarChart3,        label: "Análisis", match: ["/reporte", "/tendencias", "/gastos-hormiga"] },
+  { href: "/cotizaciones", icon: CircleDollarSign, label: "Cotizaciones" },
+  { href: "/estudio",      icon: GraduationCap,    label: "Estudio", ownerOnly: true },
+  { href: "/correos",      icon: Mail,             label: "Correos", ownerOnly: true },
+];
+
+/** Todas las rutas del pilar: su dashboard más las de cada sección. */
+const routesOf = (area: Area) => [area.home, ...area.items.flatMap((item) => item.match ?? [item.href])];
 
 /**
- * A qué área pertenece la ruta actual, o null si es transversal (Inicio,
- * Mi Brief, Configuración, Buscar). El área de la ruta manda sobre la elección
- * guardada: estando en Cuotas el switch tiene que decir Finanzas, siempre.
+ * A qué pilar pertenece la ruta actual, o null si está fuera de los tres
+ * (Inicio, Configuración, Buscar). El pilar de la ruta manda sobre el elegido:
+ * estando en Cuotas el menú tiene que abrir Finanzas, siempre.
  */
 export function areaFromPath(pathname: string): NavArea | null {
-  const hits = (routes: string[]) =>
-    routes.some((route) => pathname === route || pathname.startsWith(route + "/"));
-  if (hits(ORGANIZATION_ROUTES)) return "organizacion";
-  if (hits(FINANCE_ROUTES)) return "finanzas";
+  for (const key of AREA_ORDER) {
+    const hit = routesOf(AREAS[key]).some(
+      (route) => pathname === route || pathname.startsWith(route + "/"),
+    );
+    if (hit) return key;
+  }
   return null;
 }
 

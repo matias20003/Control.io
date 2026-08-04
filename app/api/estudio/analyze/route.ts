@@ -6,8 +6,8 @@ import { extractPdfText } from "@/lib/study/ingest";
 import { pdfPageCount, renderPdfPages } from "@/lib/study/pdfpages";
 import { rateLimitKey, rateLimitMessage } from "@/lib/rate-limit";
 
-// Sube material (texto, PDF o foto) y la IA lo DIVIDE en bloques propuestos
-// (no los guarda; el cliente los revisa y confirma).
+// Solo dueño: sube material (texto, PDF o foto) y la IA lo DIVIDE en bloques
+// propuestos (no los guarda; el cliente los revisa y confirma).
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
@@ -18,7 +18,7 @@ const NOTEBOOK_PAGES_PER_RUN = 6;
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
+  if (!user || user.email !== process.env.ADMIN_EMAIL) {
     return Response.json({ error: "No autorizado" }, { status: 401 });
   }
   // Cada análisis son varias llamadas a la IA (una por página del cuaderno).

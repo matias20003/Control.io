@@ -15,7 +15,7 @@ export const metadata = { title: "Estudio" };
 export default async function EstudioPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user || user.email !== process.env.ADMIN_EMAIL) redirect("/dashboard");
 
   const [subjects, blocks, units, plan, stats, progress, exams, exercises, errors, availability, settings, notion, gcal] = await Promise.all([
     listSubjects(user.id).catch(() => []),

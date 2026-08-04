@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessageCircle } from "lucide-react";
+import { ChevronDown, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
-import { AreaSwitch } from "@/components/layout/AreaSwitch";
 import { useNavArea } from "@/components/layout/useNavArea";
-import { AREAS, TRANSVERSAL_ITEMS, isItemActive, visibleItems, type NavItem } from "@/lib/nav";
+import {
+  AREAS, AREA_ORDER, HOME_ITEM, LEGACY_ITEMS, isItemActive, visibleItems, type NavItem,
+} from "@/lib/nav";
 
 // Configuración y Cerrar sesión viven en el menú del perfil (Topbar). En
 // mobile, Configuración está en "Más" y el logout dentro de Configuración.
@@ -23,7 +24,6 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const { area, setArea } = useNavArea();
-  const items = visibleItems(AREAS[area].items, isOwner);
 
   const renderItem = (item: NavItem) => {
     const isActive = isItemActive(item, pathname);
@@ -32,7 +32,7 @@ export function Sidebar({
         key={item.href}
         href={item.href}
         className={cn(
-          "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150",
+          "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-all duration-150",
           isActive
             ? "bg-primary/10 text-primary font-medium"
             : "text-muted hover:text-foreground hover:bg-surface-2 font-normal",
@@ -40,7 +40,7 @@ export function Sidebar({
       >
         <item.icon size={15} strokeWidth={isActive ? 2.2 : 1.7} className="shrink-0" />
         <span className="truncate">
-          {item.href === "/newsletter" && showMyCircle ? "Mi Círculo" : item.label}
+          {item.href === "/newsletter" && showMyCircle && !isOwner ? "Mi Círculo" : item.label}
         </span>
         {item.href === "/newsletter" && newsletterUnread && !isActive && (
           <span
@@ -61,14 +61,59 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 px-2.5 py-3 overflow-y-auto">
-        {/* Transversales: valen para las dos áreas, así que no entran al switch. */}
-        <div className="space-y-0.5">{TRANSVERSAL_ITEMS.map(renderItem)}</div>
+        {isOwner ? (
+          <>
+            {/* Inicio cruza los tres pilares, así que vive afuera de ellos. */}
+            {renderItem(HOME_ITEM)}
 
-        <div className="mt-4 mb-2.5">
-          <AreaSwitch area={area} onChange={setArea} />
-        </div>
+            <div className="mt-3 space-y-1">
+              {AREA_ORDER.map((key) => {
+                const pillar = AREAS[key];
+                const isOpen = key === area;
+                return (
+                  <div key={key}>
+                    {/* El nombre del pilar es a la vez botón y link: abre su
+                        lista y lleva a su dashboard. Que sólo se desplegara
+                        dejaba la pantalla igual, sin explicar qué pasó. */}
+                    <Link
+                      href={pillar.home}
+                      onClick={() => setArea(key)}
+                      aria-expanded={isOpen}
+                      className={cn(
+                        "flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-all duration-150",
+                        isOpen
+                          ? "bg-surface-2 text-foreground font-semibold"
+                          : "text-muted hover:text-foreground hover:bg-surface-2/60 font-medium",
+                      )}
+                    >
+                      <pillar.icon size={16} strokeWidth={isOpen ? 2.2 : 1.8} className="shrink-0" />
+                      <span className="truncate">{pillar.label}</span>
+                      <ChevronDown
+                        size={14}
+                        className={cn(
+                          "ml-auto shrink-0 text-muted transition-transform duration-200",
+                          isOpen ? "rotate-0" : "-rotate-90",
+                        )}
+                      />
+                    </Link>
 
-        <div className="space-y-0.5">{items.map(renderItem)}</div>
+                    {isOpen && (
+                      // La línea al costado ata visualmente las secciones a su
+                      // pilar: sin ella, abierto o cerrado se leían igual.
+                      <div className="mt-0.5 ml-4 space-y-0.5 border-l border-border pl-1.5">
+                        {visibleItems(pillar.items, isOwner).map(renderItem)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="space-y-0.5">
+            {visibleItems(LEGACY_ITEMS, isOwner).map(renderItem)}
+          </div>
+        )}
       </nav>
 
       {/* Asistente C.io */}

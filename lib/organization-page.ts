@@ -15,6 +15,7 @@ export async function loadOrganizationPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+  const isOwner = !!process.env.ADMIN_EMAIL && user.email === process.env.ADMIN_EMAIL;
 
   const google = await getGoogleStatus(user.id).catch(() => ({ connected: false, email: null }));
   if (google.connected) {
@@ -29,7 +30,19 @@ export async function loadOrganizationPage() {
     getAgenda(user.id, 60).catch(() => []),
   ]);
 
-  return { initial, financeEvents, googleConnected: google.connected };
+  return { initial, financeEvents, googleConnected: google.connected, isOwner };
+}
+
+/**
+ * Las secciones separadas (Hoy, Tareas, Hábitos) son parte del rediseño en
+ * prueba. Quien no lo tiene activo sigue entrando por la pantalla única, así
+ * que llegar a estas rutas de casualidad lo devuelve ahí en vez de mostrarle
+ * media función suelta.
+ */
+export async function requireOwnerOrCalendar() {
+  const { isOwner, ...data } = await loadOrganizationPage();
+  if (!isOwner) redirect("/calendario");
+  return data;
 }
 
 /**

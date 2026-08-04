@@ -4,37 +4,27 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard, ListChecks, MoreHorizontal, Newspaper, Settings, Wallet, X,
-} from "lucide-react";
+import { ArrowUpDown, LayoutDashboard, MoreHorizontal, Settings, Target, Wallet, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { AreaSwitch } from "@/components/layout/AreaSwitch";
-import { useNavArea } from "@/components/layout/useNavArea";
-import { AREAS, isItemActive, visibleItems, type NavArea, type NavItem } from "@/lib/nav";
+import {
+  AREAS, AREA_ORDER, HOME_ITEM, LEGACY_ITEMS, isItemActive, visibleItems, type NavItem,
+} from "@/lib/nav";
 
-const INICIO: NavItem = { href: "/dashboard", icon: LayoutDashboard, label: "Inicio" };
 const CONFIGURACION: NavItem = { href: "/configuracion", icon: Settings, label: "Configuración" };
-const MI_BRIEF: NavItem = { href: "/newsletter", icon: Newspaper, label: "Mi Brief" };
 
-/**
- * Los cuatro slots que cambian con el área. Inicio queda fijo en el primero
- * (es el ancla de la app y no pertenece a ninguna de las dos) y "Más" en el
- * último; en el medio va lo más usado de cada área, con el FAB al centro.
- *
- * Lo que no entra acá vive en el sheet "Más": son cinco lugares, no quince.
- */
-const MOBILE_BAR: Record<NavArea, { secondary: string; fab: NavItem; fourth: string }> = {
-  finanzas: {
-    secondary: "/movimientos",
-    fab: { href: "/cuentas", icon: Wallet, label: "Cuentas" },
-    fourth: "/presupuestos",
-  },
-  organizacion: {
-    secondary: "/hoy",
-    fab: { href: "/tareas", icon: ListChecks, label: "Tareas" },
-    fourth: "/calendario",
-  },
-};
+// ── Barra de siempre (todos los usuarios) ──
+// Los tres pilares están en prueba y sólo los ve el dueño; el resto sigue con
+// la barra que ya tiene aprendida.
+const LEGACY_LEFT: NavItem[] = [
+  { href: "/dashboard",   icon: LayoutDashboard, label: "Inicio" },
+  { href: "/movimientos", icon: ArrowUpDown,     label: "Movimientos" },
+];
+const LEGACY_RIGHT: NavItem[] = [
+  { href: "/presupuestos", icon: Target, label: "Planificá", match: ["/presupuestos", "/metas", "/recurrentes"] },
+];
+const LEGACY_FAB: NavItem = { href: "/cuentas", icon: Wallet, label: "Cuentas" };
+/** Lo que no entra en los cinco lugares de la barra vive en el sheet "Más". */
+const LEGACY_BAR = new Set(["/dashboard", "/movimientos", "/cuentas", "/presupuestos"]);
 
 export function BottomNav({
   newsletterUnread = false,
@@ -46,27 +36,24 @@ export function BottomNav({
   showMyCircle?: boolean;
 }) {
   const pathname = usePathname();
-  const { area, setArea } = useNavArea();
   const [open, setOpen] = useState(false);
 
-  const areaItems = visibleItems(AREAS[area].items, isOwner);
-  const bar = MOBILE_BAR[area];
-  const find = (href: string) => areaItems.find((item) => item.href === href);
-  // Si el ítem destacado no existiera (por un gate futuro), el slot se cae con
-  // elegancia al sheet en vez de romper la barra.
-  const secondary = find(bar.secondary);
-  const fourth = find(bar.fourth);
-  const inBar = new Set([bar.secondary, bar.fab.href, bar.fourth]);
-
-  // El sheet junta lo que no entró en la barra y lo transversal que no es Inicio.
-  const more: NavItem[] = [
-    ...areaItems.filter((item) => !inBar.has(item.href)),
-    MI_BRIEF,
-    CONFIGURACION,
-  ];
-
   const labelOf = (item: NavItem) =>
-    item.href === "/newsletter" && showMyCircle ? "Mi Círculo" : item.label;
+    item.href === "/newsletter" && showMyCircle && !isOwner ? "Mi Círculo" : item.label;
+
+  // El sheet del dueño agrupa por pilar; el de siempre es una lista sola.
+  const groups = isOwner
+    ? AREA_ORDER.map((key) => ({
+        key: key as string,
+        label: AREAS[key].label,
+        // El dashboard del pilar ya está en la barra: repetirlo sería ruido.
+        items: visibleItems(AREAS[key].items, isOwner).filter((item) => item.href !== AREAS[key].home),
+      }))
+    : [{
+        key: "legacy",
+        label: "",
+        items: visibleItems(LEGACY_ITEMS, isOwner).filter((item) => !LEGACY_BAR.has(item.href)),
+      }];
 
   // Portalizamos el nav directo a document.body. Si algún ancestor del
   // layout queda alguna vez con transform/filter/backdrop-filter,
@@ -79,10 +66,13 @@ export function BottomNav({
     return () => window.clearTimeout(timer);
   }, []);
 
-  const isMoreActive = more.some((item) => isItemActive(item, pathname));
-  const isFabActive = isItemActive(bar.fab, pathname);
+  const sheetItems = [...groups.flatMap((group) => group.items), CONFIGURACION];
+  const isMoreActive = sheetItems.some((item) => isItemActive(item, pathname));
 
-  const barLink = (item: NavItem) => {
+  const fab = isOwner ? HOME_ITEM : LEGACY_FAB;
+  const isFabActive = isOwner ? pathname === HOME_ITEM.href : isItemActive(LEGACY_FAB, pathname);
+
+  const barLink = (item: NavItem, badge = false) => {
     const isActive = isItemActive(item, pathname);
     return (
       <Link
@@ -93,8 +83,37 @@ export function BottomNav({
           isActive ? "text-primary" : "text-muted",
         )}
       >
-        <item.icon size={20} strokeWidth={isActive ? 2.2 : 1.7} />
+        <div className="relative">
+          <item.icon size={20} strokeWidth={isActive ? 2.2 : 1.7} />
+          {badge && (
+            <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-surface" />
+          )}
+        </div>
         <span className="text-xs font-medium">{labelOf(item)}</span>
+      </Link>
+    );
+  };
+
+  /** Un pilar queda marcado cuando estás en su dashboard o en cualquier sección suya. */
+  const pillarLink = (key: (typeof AREA_ORDER)[number]) => {
+    const pillar = AREAS[key];
+    const isActive = visibleItems(pillar.items, isOwner).some((item) => isItemActive(item, pathname));
+    return (
+      <Link
+        key={key}
+        href={pillar.home}
+        className={cn(
+          "flex min-h-11 flex-col items-center justify-center gap-1 py-2 rounded-xl transition-all duration-150",
+          isActive ? "text-primary" : "text-muted",
+        )}
+      >
+        <div className="relative">
+          <pillar.icon size={20} strokeWidth={isActive ? 2.2 : 1.7} />
+          {key === "circulo" && newsletterUnread && (
+            <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-surface" />
+          )}
+        </div>
+        <span className="text-xs font-medium">{pillar.label}</span>
       </Link>
     );
   };
@@ -145,41 +164,37 @@ export function BottomNav({
               </button>
             </div>
 
-            {/* El switch va acá arriba: en celular es el único lugar donde
-                entran las dos etiquetas completas sin apretar la barra. */}
-            <div className="px-3 pb-3 shrink-0">
-              <AreaSwitch area={area} onChange={setArea} size="lg" />
-            </div>
-
             {/* Grid 2×2 balanceado — scrollable si hiciera falta */}
             <div className="overflow-y-auto overscroll-contain px-3 pb-2">
-              <div className="grid grid-cols-2 gap-2.5">
-                {more.map((item) => {
-                  const isActive = isItemActive(item, pathname);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setOpen(false)}
-                      className={cn(
-                        "flex flex-col items-center gap-2.5 px-3 py-5 rounded-2xl border transition-all duration-150",
-                        isActive
-                          ? "border-primary/40 bg-primary/10 text-primary"
-                          : "border-border bg-surface-2/40 text-muted hover:text-foreground hover:bg-surface-2",
-                      )}
-                    >
-                      <div className="relative">
-                        <item.icon size={24} strokeWidth={isActive ? 2.2 : 1.7} />
-                        {item.href === "/newsletter" && newsletterUnread && (
-                          <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-surface" />
-                        )}
-                      </div>
-                      <span className="text-sm font-medium text-center leading-tight">
-                        {labelOf(item)}
-                      </span>
-                    </Link>
-                  );
-                })}
+              {groups.map((group) => (
+                <section key={group.key} className="mb-4 last:mb-0">
+                  {group.label && (
+                    <h2 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                      {group.label}
+                    </h2>
+                  )}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {group.items.map((item) => (
+                      <SheetLink
+                        key={item.href}
+                        item={item}
+                        label={labelOf(item)}
+                        isActive={isItemActive(item, pathname)}
+                        badge={item.href === "/newsletter" && newsletterUnread}
+                        onNavigate={() => setOpen(false)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+              <div className="grid grid-cols-2 gap-2.5 border-t border-border pt-3">
+                <SheetLink
+                  item={CONFIGURACION}
+                  label={CONFIGURACION.label}
+                  isActive={isItemActive(CONFIGURACION, pathname)}
+                  badge={false}
+                  onNavigate={() => setOpen(false)}
+                />
               </div>
             </div>
           </div>
@@ -194,7 +209,7 @@ export function BottomNav({
           overflow:hidden para contener su línea decorativa superior — y eso
           rompe el FAB central que necesita sobresalir por arriba. */}
       <nav
-        data-bottom-nav="v4"
+        data-bottom-nav="v5"
         style={{
           position: "fixed",
           left: 0,
@@ -207,16 +222,16 @@ export function BottomNav({
       >
         <div className="grid grid-cols-5 py-1.5 overflow-visible">
 
-          {/* Inicio queda fijo: es el ancla de la app en las dos áreas. */}
-          {barLink(INICIO)}
-          {secondary ? barLink(secondary) : <span />}
+          {isOwner
+            ? [pillarLink("finanzas"), pillarLink("organizacion")]
+            : LEGACY_LEFT.map((item) => barLink(item))}
 
-          {/* Centro: FAB elevado, distinto por área. -translate-y-7 lo levanta
-              lo suficiente para que el medio del círculo quede por encima del
-              borde superior del zócalo. z-10 + relative aseguran que el
-              círculo y su sombra queden por encima del nav, no detrás. */}
+          {/* Centro: FAB elevado. -translate-y-7 lo levanta lo suficiente para
+              que el medio del círculo quede por encima del borde superior del
+              zócalo. z-10 + relative aseguran que el círculo y su sombra
+              queden por encima del nav, no detrás. */}
           <div className="relative z-10 flex flex-col items-center justify-end pb-2 -translate-y-7">
-            <Link href={bar.fab.href} className="flex flex-col items-center gap-1.5">
+            <Link href={fab.href} className="flex flex-col items-center gap-1.5">
               <div
                 className={cn(
                   "w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200",
@@ -226,7 +241,7 @@ export function BottomNav({
                     : "bg-primary/90 shadow-[0_8px_24px_oklch(0_0_0/45%)]",
                 )}
               >
-                <bar.fab.icon size={24} strokeWidth={2} className="text-white" />
+                <fab.icon size={24} strokeWidth={2} className="text-white" />
               </div>
               <span
                 className={cn(
@@ -234,12 +249,14 @@ export function BottomNav({
                   isFabActive ? "text-primary" : "text-muted",
                 )}
               >
-                {bar.fab.label}
+                {fab.label}
               </span>
             </Link>
           </div>
 
-          {fourth ? barLink(fourth) : <span />}
+          {isOwner
+            ? pillarLink("circulo")
+            : LEGACY_RIGHT.map((item) => barLink(item))}
 
           {/* Más */}
           <button
@@ -251,7 +268,8 @@ export function BottomNav({
           >
             <div className="relative">
               <MoreHorizontal size={20} strokeWidth={isMoreActive || open ? 2.2 : 1.7} />
-              {newsletterUnread && !open && (
+              {/* En el menú del dueño el aviso ya se ve en Mi Círculo. */}
+              {newsletterUnread && !open && !isOwner && (
                 <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-surface" />
               )}
             </div>
@@ -265,4 +283,33 @@ export function BottomNav({
 
   if (!mounted) return null;
   return createPortal(tree, document.body);
+}
+
+function SheetLink({ item, label, isActive, badge, onNavigate }: {
+  item: NavItem;
+  label: string;
+  isActive: boolean;
+  badge: boolean;
+  onNavigate: () => void;
+}) {
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      className={cn(
+        "flex flex-col items-center gap-2.5 px-3 py-5 rounded-2xl border transition-all duration-150",
+        isActive
+          ? "border-primary/40 bg-primary/10 text-primary"
+          : "border-border bg-surface-2/40 text-muted hover:text-foreground hover:bg-surface-2",
+      )}
+    >
+      <div className="relative">
+        <item.icon size={24} strokeWidth={isActive ? 2.2 : 1.7} />
+        {badge && (
+          <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-surface" />
+        )}
+      </div>
+      <span className="text-sm font-medium text-center leading-tight">{label}</span>
+    </Link>
+  );
 }

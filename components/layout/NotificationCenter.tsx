@@ -135,11 +135,11 @@ export function NotificationCenter({
           )}
 
           <Link
-            href="/hoy"
+            href="/calendario"
             onClick={() => setOpen(false)}
             className="block border-t border-border px-4 py-3 text-center text-xs font-medium text-primary transition-colors hover:bg-surface-2"
           >
-            Ver el plan de hoy
+            Ver calendario y recordatorios
           </Link>
         </div>
       )}
