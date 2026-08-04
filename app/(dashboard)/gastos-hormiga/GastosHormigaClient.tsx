@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PageHeader } from "@/components/ui/stat";
+import { SectionTabs } from "@/components/layout/SectionTabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatCurrency } from "@/lib/utils";
@@ -114,6 +115,9 @@ export function GastosHormigaClient({ data }: { data: GastosHormiga }) {
 
   return (
     <div className="mx-auto max-w-[760px] space-y-4 p-4 md:p-6">
+      {/* La página está gateada por el mismo flag, así que acá la pestaña
+          siempre corresponde. */}
+      <SectionTabs features={{ gastosHormiga: true }} />
       <PageHeader
         title="🐜 Gastos hormiga"
         subtitle="Dónde se te va la plata sin que te des cuenta."

@@ -22,7 +22,7 @@ const navItems = [
   { href: "/grupos",        icon: Users,           label: "Grupos" },
   { href: "/deudas",        icon: HandCoins,       label: "Deudas" },
   { href: "/cuotas",        icon: CreditCard,      label: "Cuotas" },
-  { href: "/reporte",       icon: BarChart3,       label: "Análisis", match: ["/reporte", "/tendencias"] },
+  { href: "/reporte",       icon: BarChart3,       label: "Análisis", match: ["/reporte", "/tendencias", "/gastos-hormiga"] },
   { href: "/cotizaciones",  icon: CircleDollarSign, label: "Cotizaciones" },
 ];
 

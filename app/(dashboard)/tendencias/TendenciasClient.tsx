@@ -1,5 +1,6 @@
 "use client";
 import { SectionTabs } from "@/components/layout/SectionTabs";
+import type { FeatureFlag } from "@/lib/feature-flags";
 
 import {
   BarChart, Bar, LineChart, Line,
@@ -15,7 +16,7 @@ import { PageHeader, StatCard } from "@/components/ui/stat";
 import { Sparkline } from "@/components/ui/sparkline";
 import { TrendingUp, TrendingDown, Wallet, Plus } from "lucide-react";
 
-interface Props { trends: TrendsData }
+interface Props { trends: TrendsData; features?: Partial<Record<FeatureFlag, boolean>> }
 
 function fmt(n: number) {
   return new Intl.NumberFormat("es-AR", {
@@ -44,7 +45,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-export function TendenciasClient({ trends }: Props) {
+export function TendenciasClient({ trends, features }: Props) {
   const { months, categories, avgIncome, avgExpense, bestMonth, worstMonth } = trends;
   const hasData = months.some((m) => m.income > 0 || m.expense > 0);
 
@@ -72,7 +73,7 @@ export function TendenciasClient({ trends }: Props) {
 
   return (
     <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-6">
-      <SectionTabs />
+      <SectionTabs features={features} />
       <PageHeader title="Tendencias" subtitle="Últimos 6 meses de actividad financiera." />
 
       {/* ── KPIs vs mes anterior ── */}

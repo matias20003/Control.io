@@ -21,6 +21,7 @@ import { IncomeExpenseChart, BalanceSparkline } from "./DashboardCharts";
 import { NetWorthCard } from "./NetWorthCard";
 import { PrivacyToggle } from "@/components/PrivacyToggle";
 import { TodayDate } from "./TodayDate";
+import { AntExpensesNotice } from "./AntExpensesNotice";
 import { Greeting } from "./Greeting";
 import { greetingFor } from "@/lib/greeting";
 import { OnboardingChecklist } from "@/components/OnboardingChecklist";
@@ -251,16 +252,8 @@ export default async function DashboardPage({
 
         <UpdateReminderBanner days={daysSinceLastMovement} />
 
-        {hasFeature("gastosHormiga", { isTester }) && (
-          <Link href="/gastos-hormiga" className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-2">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-warning/12 text-base">🐜</span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium leading-tight text-foreground">Gastos hormiga</p>
-              <p className="mt-0.5 text-xs leading-snug text-muted">Descubrí dónde se te va la plata</p>
-            </div>
-            <ChevronRight size={16} className="shrink-0 text-muted" />
-          </Link>
-        )}
+        {/* Solo se presenta una vez: la sección vive en Análisis. */}
+        {hasFeature("gastosHormiga", { isTester }) && <AntExpensesNotice />}
 
         <OnboardingChecklist state={onboarding} defaultOpen={welcome === "1"} />
       </div>

@@ -1,5 +1,6 @@
 "use client";
 import { SectionTabs } from "@/components/layout/SectionTabs";
+import type { FeatureFlag } from "@/lib/feature-flags";
 
 import { useRouter } from "next/navigation";
 import {
@@ -20,6 +21,7 @@ import {
 interface Props {
   reporte: ReporteSemanal;
   currentOffset: number;
+  features?: Partial<Record<FeatureFlag, boolean>>;
 }
 
 function fmt(n: number) {
@@ -46,7 +48,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-export function ReporteClient({ reporte: r, currentOffset }: Props) {
+export function ReporteClient({ reporte: r, currentOffset, features }: Props) {
   const router = useRouter();
 
   const goTo = (offset: number) => {
@@ -62,7 +64,7 @@ export function ReporteClient({ reporte: r, currentOffset }: Props) {
 
   return (
     <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-5">
-      <SectionTabs />
+      <SectionTabs features={features} />
 
       <PageHeader title="Análisis" subtitle="Entendé tu rendimiento financiero de un vistazo." />
 
