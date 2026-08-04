@@ -19,9 +19,17 @@ import {
 } from "@/lib/db/organization";
 import { deleteTaskFromGoogle, syncTaskToGoogle } from "@/lib/google-organization";
 
-// La sección vive en /calendario. /tareas es sólo un redirect, así que
-// revalidarla no refresca nada.
-const ROUTE = "/calendario";
+/**
+ * Las cuatro rutas muestran la misma foto desde ángulos distintos, así que
+ * cualquier cambio las afecta a todas: una tarea creada en Hoy también entra
+ * en el Kanban de Tareas y en la semana del Calendario. Revalidar sólo la que
+ * está abierta dejaría las otras tres mostrando datos viejos.
+ */
+const ROUTES = ["/hoy", "/calendario", "/tareas", "/habitos"];
+
+function revalidateOrganization() {
+  for (const route of ROUTES) revalidatePath(route);
+}
 
 async function userId() {
   const supabase = await createClient();
@@ -82,7 +90,7 @@ export async function createOrganizationTaskAction(input: z.input<typeof taskSch
       scheduledEnd: date(parsed.scheduledEnd),
     });
     if (task.scheduledStart) await syncTaskToGoogle(uid, task.id).catch(() => null);
-    revalidatePath(ROUTE);
+    revalidateOrganization();
     return { ok: true, task };
   } catch (error) {
     return fail(error, "No se pudo crear");
@@ -100,7 +108,7 @@ export async function updateOrganizationTaskAction(id: string, input: Partial<z.
       ...(parsed.scheduledEnd !== undefined ? { scheduledEnd: date(parsed.scheduledEnd) } : {}),
     } as Parameters<typeof updateOrganizationTask>[2]);
     if (task.scheduledStart || task.syncStatus === "PENDING") await syncTaskToGoogle(uid, id).catch(() => null);
-    revalidatePath(ROUTE);
+    revalidateOrganization();
     return { ok: true, task };
   } catch (error) {
     return fail(error, "No se pudo actualizar");
@@ -113,7 +121,7 @@ export async function deleteOrganizationTaskAction(id: string): Promise<Organiza
     const { googleEventId, googleCalendarId } = await deleteOrganizationTask(uid, id);
     // El evento espejo se limpia después: si Google falla, la tarea ya se borró.
     await deleteTaskFromGoogle(uid, googleEventId, googleCalendarId).catch(() => null);
-    revalidatePath(ROUTE);
+    revalidateOrganization();
     return { ok: true };
   } catch (error) {
     return fail(error, "No se pudo borrar la tarea");
@@ -125,7 +133,7 @@ export async function retryTaskSyncAction(id: string): Promise<OrganizationActio
   try {
     const uid = await userId();
     await syncTaskToGoogle(uid, id);
-    revalidatePath(ROUTE);
+    revalidateOrganization();
     return { ok: true };
   } catch (error) {
     return fail(error, "No se pudo sincronizar con Google");
@@ -139,7 +147,7 @@ export async function createOrganizationListAction(input: { name: string; color?
     const uid = await userId();
     const name = z.string().trim().min(1).max(80).parse(input.name);
     await createOrganizationList(uid, name, input.color, input.icon);
-    revalidatePath(ROUTE);
+    revalidateOrganization();
     return { ok: true };
   } catch (error) {
     return fail(error, "No se pudo crear la lista");
@@ -155,7 +163,7 @@ export async function updateOrganizationListAction(id: string, input: { name?: s
       icon: z.string().trim().max(8).nullable().optional(),
     }).parse(input);
     await updateOrganizationList(uid, id, parsed);
-    revalidatePath(ROUTE);
+    revalidateOrganization();
     return { ok: true };
   } catch (error) {
     return fail(error, "No se pudo actualizar la lista");
@@ -166,7 +174,7 @@ export async function deleteOrganizationListAction(id: string): Promise<Organiza
   try {
     const uid = await userId();
     const { movedToInbox } = await deleteOrganizationList(uid, id);
-    revalidatePath(ROUTE);
+    revalidateOrganization();
     return { ok: true, movedToInbox };
   } catch (error) {
     return fail(error, "No se pudo borrar la lista");
@@ -177,7 +185,7 @@ export async function reorderOrganizationListsAction(ids: string[]): Promise<Org
   try {
     const uid = await userId();
     await reorderOrganizationLists(uid, z.array(z.string()).max(200).parse(ids));
-    revalidatePath(ROUTE);
+    revalidateOrganization();
     return { ok: true };
   } catch (error) {
     return fail(error, "No se pudo reordenar");
@@ -200,7 +208,7 @@ export async function createHabitAction(input: z.input<typeof habitSchema>): Pro
   try {
     const uid = await userId();
     await createHabit(uid, habitSchema.parse(input));
-    revalidatePath(ROUTE);
+    revalidateOrganization();
     return { ok: true };
   } catch (error) {
     return fail(error, "No se pudo crear el hábito");
@@ -211,7 +219,7 @@ export async function updateHabitAction(id: string, input: Partial<z.input<typeo
   try {
     const uid = await userId();
     await updateHabit(uid, id, habitSchema.partial().parse(input));
-    revalidatePath(ROUTE);
+    revalidateOrganization();
     return { ok: true };
   } catch (error) {
     return fail(error, "No se pudo actualizar el hábito");
@@ -222,7 +230,7 @@ export async function deleteHabitAction(id: string): Promise<OrganizationActionR
   try {
     const uid = await userId();
     await deleteHabit(uid, id);
-    revalidatePath(ROUTE);
+    revalidateOrganization();
     return { ok: true };
   } catch (error) {
     return fail(error, "No se pudo borrar el hábito");
@@ -233,7 +241,7 @@ export async function toggleHabitAction(habitId: string, day: string): Promise<O
   try {
     const uid = await userId();
     await toggleHabitCompletion(uid, habitId, new Date(`${day}T12:00:00Z`));
-    revalidatePath(ROUTE);
+    revalidateOrganization();
     return { ok: true };
   } catch (error) {
     return fail(error, "No se pudo actualizar");

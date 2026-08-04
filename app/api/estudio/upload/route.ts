@@ -1,16 +1,23 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ingestStudyPdf, ingestStudyText, ingestStudyImage } from "@/lib/study/ingest";
+import { rateLimitKey, rateLimitMessage } from "@/lib/rate-limit";
 
-// Solo dueño: sube un apunte (PDF o texto) → resumen IA + repaso espaciado.
+// Sube un apunte (PDF o texto) → resumen IA + repaso espaciado.
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user || user.email !== process.env.ADMIN_EMAIL) {
+  if (!user) {
     return Response.json({ error: "No autorizado" }, { status: 401 });
+  }
+  // Cada subida cuesta una llamada a la IA. Con la sección abierta a todos, el
+  // límite por usuario es lo que evita que una cuenta sola dispare la factura.
+  const limit = await rateLimitKey(`estudio-upload:${user.id}`, 20, 3600);
+  if (!limit.success) {
+    return Response.json({ error: rateLimitMessage(limit.retryAfterSec) }, { status: 429 });
   }
 
   try {

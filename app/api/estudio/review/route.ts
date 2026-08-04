@@ -2,13 +2,14 @@ import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { markReviewDone } from "@/lib/db/study";
 
-// Solo dueño: marcar un repaso como hecho.
+// Marcar un repaso como hecho. markReviewDone filtra por userId, así que cada
+// uno sólo puede tocar los suyos.
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user || user.email !== process.env.ADMIN_EMAIL) {
+  if (!user) {
     return Response.json({ error: "No autorizado" }, { status: 401 });
   }
   const { reviewId } = await req.json().catch(() => ({}));

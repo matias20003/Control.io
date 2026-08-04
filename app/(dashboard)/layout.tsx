@@ -74,7 +74,7 @@ export default async function DashboardLayout({
       kind: "reminder",
       title: reminder.text,
       description: `Recordatorio programado para ${when}`,
-      href: "/calendario",
+      href: "/hoy",
     });
   }
 
@@ -97,12 +97,12 @@ export default async function DashboardLayout({
     });
   }
   // "Correos" (bandeja unificada) solo para el dueño.
-  const showCorreos = !!process.env.ADMIN_EMAIL && user.email === process.env.ADMIN_EMAIL;
+  const isOwner = !!process.env.ADMIN_EMAIL && user.email === process.env.ADMIN_EMAIL;
   const showMyCircle = true;
 
   return (
     <div className="ambient-mesh min-h-dvh bg-background">
-      <Sidebar newsletterUnread={newsletterUnread} showCorreos={showCorreos} showMyCircle={showMyCircle} />
+      <Sidebar newsletterUnread={newsletterUnread} isOwner={isOwner} showMyCircle={showMyCircle} />
       <Header name={name} email={user.email ?? ""} notifications={notifications} />
       <Calculator />
       <DeviceSessionTracker />
@@ -111,7 +111,7 @@ export default async function DashboardLayout({
         <InstallBanner />
         {children}
       </main>
-      <BottomNav newsletterUnread={newsletterUnread} showCorreos={showCorreos} showMyCircle={showMyCircle} />
+      <BottomNav newsletterUnread={newsletterUnread} isOwner={isOwner} showMyCircle={showMyCircle} />
       <FeedbackButton registeredAt={user.created_at} />
     </div>
   );

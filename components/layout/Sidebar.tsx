@@ -2,49 +2,56 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard, ArrowUpDown, Wallet, Target, HandCoins,
-  CreditCard, BarChart3, MessageCircle, CircleDollarSign, Users, CalendarCheck, Newspaper, Mail, GraduationCap,
-} from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoFull } from "@/components/layout/Logo";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { AreaSwitch } from "@/components/layout/AreaSwitch";
+import { useNavArea } from "@/components/layout/useNavArea";
+import { AREAS, TRANSVERSAL_ITEMS, isItemActive, visibleItems, type NavItem } from "@/lib/nav";
 
 // Configuración y Cerrar sesión viven en el menú del perfil (Topbar). En
 // mobile, Configuración está en "Más" y el logout dentro de Configuración.
-const navItems = [
-  { href: "/dashboard",     icon: LayoutDashboard, label: "Inicio" },
-  { href: "/calendario",    icon: CalendarCheck,   label: "Organización", match: ["/calendario", "/tareas"] },
-  { href: "/movimientos",   icon: ArrowUpDown,     label: "Movimientos" },
-  { href: "/cuentas",       icon: Wallet,          label: "Cuentas" },
-  { href: "/presupuestos",  icon: Target,          label: "Planificá", match: ["/presupuestos", "/metas", "/recurrentes"] },
-  { href: "/newsletter",    icon: Newspaper,       label: "Mi Brief" },
-  { href: "/grupos",        icon: Users,           label: "Grupos" },
-  { href: "/deudas",        icon: HandCoins,       label: "Deudas" },
-  { href: "/cuotas",        icon: CreditCard,      label: "Cuotas" },
-  { href: "/reporte",       icon: BarChart3,       label: "Análisis", match: ["/reporte", "/tendencias", "/gastos-hormiga"] },
-  { href: "/cotizaciones",  icon: CircleDollarSign, label: "Cotizaciones" },
-];
-
 export function Sidebar({
   newsletterUnread = false,
-  showCorreos = false,
+  isOwner = false,
   showMyCircle = false,
 }: {
   newsletterUnread?: boolean;
-  showCorreos?: boolean;
+  isOwner?: boolean;
   showMyCircle?: boolean;
 }) {
   const pathname = usePathname();
+  const { area, setArea } = useNavArea();
+  const items = visibleItems(AREAS[area].items, isOwner);
 
-  // "Estudio" y "Correos" solo se muestran al dueño (gate por email en el layout).
-  const items = showCorreos
-    ? [
-        ...navItems,
-        { href: "/estudio", icon: GraduationCap, label: "Estudio" },
-        { href: "/correos", icon: Mail, label: "Correos" },
-      ]
-    : navItems;
+  const renderItem = (item: NavItem) => {
+    const isActive = isItemActive(item, pathname);
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        className={cn(
+          "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150",
+          isActive
+            ? "bg-primary/10 text-primary font-medium"
+            : "text-muted hover:text-foreground hover:bg-surface-2 font-normal",
+        )}
+      >
+        <item.icon size={15} strokeWidth={isActive ? 2.2 : 1.7} className="shrink-0" />
+        <span className="truncate">
+          {item.href === "/newsletter" && showMyCircle ? "Mi Círculo" : item.label}
+        </span>
+        {item.href === "/newsletter" && newsletterUnread && !isActive && (
+          <span
+            className="ml-auto w-2 h-2 rounded-full bg-primary shrink-0"
+            title="Tu newsletter de hoy está listo"
+          />
+        )}
+        {isActive && <span className="ml-auto w-1 h-1 rounded-full bg-primary shrink-0" />}
+      </Link>
+    );
+  };
 
   return (
     <aside className="hidden md:flex flex-col w-56 fixed left-0 top-0 bottom-0 z-30 glass-panel border-r border-r-[color:var(--glass-border)] border-l-0 border-t-0 border-b-0">
@@ -53,46 +60,15 @@ export function Sidebar({
         <LogoFull size="sm" tagline />
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 px-2.5 py-3 space-y-0.5 overflow-y-auto">
-        {items.map((item) => {
-          const isActive = item.match
-            ? item.match.some((m) => pathname.startsWith(m))
-            : pathname === item.href ||
-              (item.href !== "/dashboard" && pathname.startsWith(item.href));
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150",
-                isActive
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "text-muted hover:text-foreground hover:bg-surface-2 font-normal"
-              )}
-            >
-              <item.icon
-                size={15}
-                strokeWidth={isActive ? 2.2 : 1.7}
-                className="shrink-0"
-              />
-              <span className="truncate">
-                {item.href === "/newsletter" && showMyCircle
-                  ? "Mi Círculo"
-                  : item.label}
-              </span>
-              {item.href === "/newsletter" && newsletterUnread && !isActive && (
-                <span
-                  className="ml-auto w-2 h-2 rounded-full bg-primary shrink-0"
-                  title="Tu newsletter de hoy está listo"
-                />
-              )}
-              {isActive && (
-                <span className="ml-auto w-1 h-1 rounded-full bg-primary shrink-0" />
-              )}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 px-2.5 py-3 overflow-y-auto">
+        {/* Transversales: valen para las dos áreas, así que no entran al switch. */}
+        <div className="space-y-0.5">{TRANSVERSAL_ITEMS.map(renderItem)}</div>
+
+        <div className="mt-4 mb-2.5">
+          <AreaSwitch area={area} onChange={setArea} />
+        </div>
+
+        <div className="space-y-0.5">{items.map(renderItem)}</div>
       </nav>
 
       {/* Asistente C.io */}
