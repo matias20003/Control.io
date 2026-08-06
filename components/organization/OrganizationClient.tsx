@@ -4,7 +4,7 @@ import { createContext, useContext, useMemo, useState, useTransition } from "rea
 import { useRouter } from "next/navigation";
 import {
   Archive, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Columns3,
-  Flame, Pencil, Plus, RefreshCw, Sparkles, Target, Trash2, Wallet, X,
+  Flame, GraduationCap, Pencil, Plus, RefreshCw, Sparkles, Target, Trash2, Wallet, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -17,12 +17,18 @@ import {
   retryTaskSyncAction, toggleHabitAction, updateHabitAction,
   updateOrganizationListAction, updateOrganizationTaskAction,
 } from "@/app/actions/organization";
+import { togglePlanItemAction } from "@/app/actions/study-career";
 import { getHabitStreak, isHabitDue } from "@/lib/habit-streak";
 import { hasTime, inboxOf, planForDay, scheduledOn } from "@/lib/organization-day";
 import { TaskDetailPanel, type TaskPatch } from "./TaskDetailPanel";
 import { DayShutdown, WeekPlanner } from "./Rituals";
 
 type List = { id: string; name: string; color: string; isInbox: boolean };
+/** Un tema del plan de estudio que toca hoy. */
+export type StudyToday = {
+  id: string; title: string; minutes: number; isReview: boolean;
+  examTitle: string; examDate: string; scheduledFor: string | null;
+};
 type Habit = {
   id: string; name: string; icon: string | null; color: string; frequency: string;
   daysOfWeek: number[]; completions: { id: string; date: string }[];
@@ -166,22 +172,29 @@ function TodayHabits({ habits, day, onToggle }: {
   );
 }
 
-function TodayView({ day, tasks, habits, finance, lists, update, onOpen, onToggleHabit }: {
+function TodayView({ day, tasks, habits, finance, lists, study, update, onOpen, onToggleHabit }: {
   day: string;
   tasks: OrganizationTask[];
   habits: Habit[];
   finance: AgendaEvent[];
   lists: List[];
+  study: StudyToday[];
   update: (id: string, patch: TaskPatch) => void;
   onOpen: (id: string) => void;
   onToggleHabit: (habitId: string, day: string) => void;
 }) {
   const plan = planForDay(tasks, day, today());
-  const total = plan.total + finance.length;
+  const total = plan.total + finance.length + study.length;
 
   return (
     <div className="space-y-6">
       <TodayHabits habits={habits} day={day} onToggle={onToggleHabit} />
+
+      {/* El material del parcial, en el día. Vive en su propia sección, pero se
+          estudia hoy: si no aparece acá hay que acordarse de ir a buscarlo. */}
+      <Section icon={<GraduationCap size={13} />} title="Para estudiar" count={study.length}>
+        {study.map((item) => <StudyRow key={item.id} item={item} />)}
+      </Section>
 
       {total === 0 ? (
         <Empty text="No hay nada para este día. Disfrutalo o planificá algo." />
@@ -480,10 +493,12 @@ function AddTask({ lists, initialDay }: { lists: List[]; initialDay?: string }) 
   );
 }
 
-export function OrganizationClient({ section, initial, financeEvents, googleConnected, initialDay, tabbed = false }: {
+export function OrganizationClient({ section, initial, financeEvents, googleConnected, initialDay, study = [], tabbed = false }: {
   section: OrgSection;
   initial: { tasks: OrganizationTask[]; lists: List[]; habits: Habit[] };
   financeEvents: AgendaEvent[];
+  /** Lo que toca estudiar hoy, si hay un plan de examen vivo. */
+  study?: StudyToday[];
   googleConnected: boolean;
   /** Día a mostrar, si se llegó desde el calendario mensual (`?d=`). */
   initialDay?: string;
@@ -722,6 +737,7 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
           habits={initial.habits}
           finance={financeOn(currentDay)}
           lists={initial.lists}
+          study={currentDay === today() ? study : []}
           update={update}
           onOpen={open}
           onToggleHabit={toggleHabit}
@@ -821,6 +837,39 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
 function Panel({ title, count, children }: { title: string; count: number; children: React.ReactNode }) { return <section className="rounded-2xl border border-border bg-surface p-4"><div className="mb-3 flex justify-between"><h2 className="font-semibold">{title}</h2><span className="text-xs text-muted">{count}</span></div><div className="space-y-2">{children || <p className="text-sm text-muted">Nada pendiente.</p>}</div></section>; }
 function Empty({ text }: { text: string }) { return <div className="grid min-h-48 place-items-center rounded-2xl border border-dashed border-border bg-surface/40 text-sm text-muted">{text}</div>; }
 function FinanceRow({ event }: { event: AgendaEvent }) { return <div className="rounded-xl border border-border/70 bg-surface-2/40 p-3"><div className="flex justify-between gap-2"><p className="truncate text-sm font-medium">{event.title}</p><span className={event.cashFlow === "income" ? "text-success" : "text-danger"}>{event.currency} {event.amount.toLocaleString("es-AR")}</span></div><p className="mt-1 text-[11px] text-muted">{event.subtitle}</p></div>; }
+
+/** Un tema del plan de estudio, marcable desde el día. */
+function StudyRow({ item }: { item: StudyToday }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const days = Math.max(
+    0,
+    Math.round((Date.parse(item.examDate) - Date.parse(`${today()}T00:00:00-03:00`)) / 86_400_000),
+  );
+  return (
+    <button
+      onClick={() => start(async () => {
+        const result = await togglePlanItemAction(item.id);
+        if (result.error) toast.error(result.error);
+        else { toast.success("Listo"); router.refresh(); }
+      })}
+      disabled={pending}
+      className="flex w-full items-center gap-3 rounded-xl border border-border/70 bg-surface px-3 py-3 text-left transition-colors hover:border-primary/35 disabled:opacity-60"
+    >
+      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-border" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-foreground">{item.title}</span>
+        <span className="mt-1 block text-[11px] text-muted">
+          {item.examTitle} · {days === 0 ? "es hoy" : days === 1 ? "falta 1 día" : `faltan ${days} días`}
+          {item.isReview && " · repaso"}
+        </span>
+      </span>
+      <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted">
+        <Clock3 size={11} />{item.minutes}m
+      </span>
+    </button>
+  );
+}
 
 const LIST_COLORS = ["#2563eb", "#16a34a", "#f59e0b", "#ef4444", "#a855f7", "#0ea5e9", "#64748b"];
 

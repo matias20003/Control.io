@@ -1,7 +1,7 @@
 import {
-  ArrowUpDown, BarChart3, CalendarDays, CalendarCheck, CircleDollarSign, Compass, CreditCard, Eye,
-  Flame, GraduationCap, HandCoins, HeartHandshake, LayoutDashboard, ListChecks, Mail, Newspaper,
-  Rss, Sparkles, Sprout, Target, Users, Wallet,
+  ArrowUpDown, BarChart3, BookOpenCheck, CalendarDays, CalendarCheck, CircleDollarSign, Compass,
+  CreditCard, Eye, Flame, GraduationCap, HandCoins, HeartHandshake, LayoutDashboard, ListChecks,
+  Mail, Milestone, Newspaper, Rss, Sparkles, Sprout, Target, Users, Wallet,
 } from "lucide-react";
 
 /**
@@ -64,6 +64,8 @@ export const AREAS: Record<NavArea, Area> = {
       { href: "/tareas",       icon: ListChecks,    label: "Tareas" },
       { href: "/habitos",      icon: Flame,         label: "Hábitos" },
       { href: "/estudio",      icon: GraduationCap, label: "Estudio" },
+      { href: "/carrera",      icon: Milestone,     label: "Mi carrera" },
+      { href: "/plan-estudio", icon: BookOpenCheck, label: "Plan de estudio" },
       { href: "/correos",      icon: Mail,          label: "Correos", ownerOnly: true },
     ],
   },

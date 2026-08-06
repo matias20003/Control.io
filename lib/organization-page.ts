@@ -4,6 +4,7 @@ import { getOrganization } from "@/lib/db/organization";
 import { getAgenda } from "@/lib/db/agenda";
 import { getGoogleStatus } from "@/lib/google";
 import { ensureCalendarWatch, syncGoogleOrganizationIfStale } from "@/lib/google-organization";
+import { getStudyToday } from "@/lib/db/study-career";
 
 /**
  * Los datos que comparten las cuatro secciones de Organización (Hoy, Calendario,
@@ -43,6 +44,21 @@ export async function requireOwnerOrCalendar() {
   const { isOwner, ...data } = await loadOrganizationPage();
   if (!isOwner) redirect("/calendario");
   return data;
+}
+
+/**
+ * Lo mismo, más lo que toca estudiar hoy.
+ *
+ * El plan del parcial vive en su propia sección, pero el día se mira en Hoy: si
+ * el material no aparece ahí, la persona tiene que acordarse de ir a buscarlo,
+ * que es exactamente la clase de trabajo que hace abandonar un plan.
+ */
+export async function loadDayWithStudy(day: string) {
+  const data = await requireOwnerOrCalendar();
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const study = user ? await getStudyToday(user.id, day).catch(() => []) : [];
+  return { ...data, study };
 }
 
 /**

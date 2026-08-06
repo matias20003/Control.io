@@ -900,8 +900,58 @@ model StudySubject {
   notebookPages Int      @default(0) @map("notebook_pages") // páginas ya procesadas del cuaderno PDF
   createdAt     DateTime @default(now()) @map("created_at")
 
+  // ── El estado real de una materia en una facultad argentina ──
+  //
+  // Ninguna app internacional puede representar esto: en el modelo de afuera
+  // una materia se aprueba y se termina. Acá una cursada aprobada con final
+  // pendiente puede quedar colgada meses o años, y es la fuente número uno de
+  // materias que se pierden de vista. Sin este campo, "aprobada" mentiría.
+  //
+  // PENDIENTE | CURSANDO | CURSADA_APROBADA (final pendiente) | APROBADA | LIBRE | ABANDONADA
+  status        String   @default("PENDIENTE")
+  /** Nota de cursada y nota final, separadas: promedian distinto. */
+  cursadaGrade  Float?   @map("cursada_grade")
+  finalGrade    Float?   @map("final_grade")
+  /** Promocionó sin rendir final. */
+  promoted      Boolean  @default(false)
+  /** Cuándo aprobó la cursada: desde ahí corre el plazo para rendir el final. */
+  cursadaAt     DateTime? @map("cursada_at")
+  finalAt       DateTime? @map("final_at")
+  /** Año del plan en que va la materia, para ordenar la carrera. */
+  planYear      Int?     @map("plan_year")
+
+  requires      SubjectPrerequisite[] @relation("SubjectRequires")
+  requiredBy    SubjectPrerequisite[] @relation("SubjectRequiredBy")
+
   @@index([userId, active])
+  @@index([userId, status])
   @@map("study_subjects")
+}
+
+/**
+ * Correlativas: qué hay que tener para poder cursar o rendir otra materia.
+ *
+ * `kind` distingue los dos requisitos que la facultad trata distinto:
+ *   CURSAR_NECESITA_CURSADA  → para cursar B tenés que tener la cursada de A
+ *   CURSAR_NECESITA_APROBADA → para cursar B tenés que tener A aprobada (final)
+ *   RENDIR_NECESITA_APROBADA → para rendir el final de B necesitás A aprobada
+ *
+ * Es la pregunta que ningún planner responde y que todo estudiante se hace en
+ * cada inscripción: "¿qué puedo cursar el cuatrimestre que viene?".
+ */
+model SubjectPrerequisite {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  subjectId    String   @map("subject_id")
+  subject      StudySubject @relation("SubjectRequires", fields: [subjectId], references: [id], onDelete: Cascade)
+  requiredId   String   @map("required_id")
+  required     StudySubject @relation("SubjectRequiredBy", fields: [requiredId], references: [id], onDelete: Cascade)
+  kind         String   @default("CURSAR_NECESITA_CURSADA")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([subjectId, requiredId, kind])
+  @@index([userId])
+  @@map("subject_prerequisites")
 }
 
 model StudyUnit {
@@ -998,9 +1048,74 @@ model StudyExam {
   done       Boolean  @default(false)
   createdAt  DateTime @default(now()) @map("created_at")
 
+  // PARCIAL | RECUPERATORIO | FINAL | TP — el ciclo argentino completo. Un
+  // recuperatorio no es un parcial nuevo: es la segunda chance del mismo.
+  kind       String   @default("PARCIAL")
+  /** Qué parcial recupera, si es un recuperatorio. */
+  recuperaId String?  @map("recupera_id")
+  /** Nota obtenida, si ya se rindió. */
+  grade      Float?
+
+  plan       StudyPlan?
+
   @@index([userId, examDate])
   @@index([subjectId])
   @@map("study_exams")
+}
+
+/**
+ * El plan de estudio de un examen: el material repartido entre los días que
+ * faltan.
+ *
+ * Es la función que valida el mercado (existe para exámenes médicos en EE.UU. y
+ * sus usuarios la citan como la razón de quedarse) y que no existe en español
+ * ni para el universitario generalista. La pieza que la gente más elogia no es
+ * armar el plan: es el botón que lo reacomoda cuando te atrasaste — que es
+ * siempre.
+ */
+model StudyPlan {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  examId      String   @unique @map("exam_id")
+  exam        StudyExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+  /** Minutos que puede estudiar por día, por día de la semana (0=Dom … 6=Sáb). */
+  minutesPerDay Int[]  @map("minutes_per_day")
+  /** Días antes del examen que se reservan sólo para repasar. */
+  reviewDays  Int      @default(2) @map("review_days")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  rebalancedAt DateTime? @map("rebalanced_at")
+  items       StudyPlanItem[]
+
+  @@index([userId])
+  @@map("study_plans")
+}
+
+/**
+ * Una pieza de material dentro de un plan: un tema, un capítulo, un práctico.
+ *
+ * `scheduledFor` lo pone el repartidor y lo mueve el rebalanceo; `done` lo pone
+ * la persona. Que sean campos distintos es lo que permite reacomodar sin
+ * perder lo hecho.
+ */
+model StudyPlanItem {
+  id           String   @id @default(cuid())
+  planId       String   @map("plan_id")
+  plan         StudyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  title        String
+  /** Cuánto lleva estudiarlo. El reparto es por tiempo, no por cantidad. */
+  minutes      Int      @default(45)
+  /** Peso en el examen, 1-3. Lo importante se reparte primero. */
+  weight       Int      @default(2)
+  position     Int      @default(0)
+  scheduledFor DateTime? @map("scheduled_for") @db.Date
+  done         Boolean  @default(false)
+  doneAt       DateTime? @map("done_at")
+  /** Segunda pasada: el repaso previo al examen de algo ya estudiado. */
+  isReview     Boolean  @default(false) @map("is_review")
+
+  @@index([planId, scheduledFor])
+  @@map("study_plan_items")
 }
 
 model StudyFlashcard {
