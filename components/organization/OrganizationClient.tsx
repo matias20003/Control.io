@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { createContext, useContext, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle, Archive, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Columns3,
-  Flame, Pencil, Plus, RefreshCw, Sparkles, Target, Trash2, Wallet,
+  Archive, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Columns3,
+  Flame, Pencil, Plus, RefreshCw, Sparkles, Target, Trash2, Wallet, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -13,6 +13,7 @@ import type { AgendaEvent } from "@/lib/db/agenda";
 import {
   createHabitAction, createOrganizationListAction, createOrganizationTaskAction,
   deleteHabitAction, deleteOrganizationListAction, deleteOrganizationTaskAction,
+  dropOrganizationTaskAction, restoreOrganizationTaskAction,
   retryTaskSyncAction, toggleHabitAction, updateHabitAction,
   updateOrganizationListAction, updateOrganizationTaskAction,
 } from "@/app/actions/organization";
@@ -25,6 +26,8 @@ type List = { id: string; name: string; color: string; isInbox: boolean };
 type Habit = {
   id: string; name: string; icon: string | null; color: string; frequency: string;
   daysOfWeek: number[]; completions: { id: string; date: string }[];
+  /** El evento que lo dispara: "después de desayunar". */
+  anchor?: string | null;
 };
 /**
  * Cuatro secciones, una por trabajo real: arrancar el día, planificar la
@@ -58,6 +61,16 @@ const TAB_ITEMS: { key: OrgSection; label: string; hint: string; icon: typeof Sp
   { key: "calendar", label: "Semana", hint: "Planificar", icon: CalendarDays },
   { key: "tasks", label: "Organizar", hint: "Clasificar", icon: Columns3 },
 ];
+
+/**
+ * Descartar una tarea, disponible en cualquier vista.
+ *
+ * Va por contexto y no por props porque las tareas se listan en ocho lugares
+ * distintos (Hoy, la semana, la bandeja, el kanban, los cuadrantes, las listas,
+ * algún día). Enhebrar la función por los ocho garantiza que alguno quede sin
+ * ella, y la salida tiene que estar donde sea que estés mirando la tarea.
+ */
+const DropTaskContext = createContext<((id: string) => void) | null>(null);
 
 /** Toggle segmentado para los sub-modos de Semana y Organizar. */
 function Toggle<T extends string>({ value, onChange, options }: {
@@ -126,10 +139,24 @@ function TodayHabits({ habits, day, onToggle }: {
             <span className={`grid h-5 w-5 place-items-center rounded-full border ${done ? "border-primary bg-primary text-white" : "border-border"}`}>
               {done && <Check size={12} />}
             </span>
-            <span>{habit.icon ?? "●"} {habit.name}</span>
-            {streak.current > 0 && (
-              <span className="inline-flex items-center gap-0.5 text-[11px] text-amber-500">
-                <Flame size={11} />{streak.current}
+            <span>
+              {habit.icon ?? "●"} {habit.name}
+              {/* El ancla es la mitad del hábito: leerla acá es lo que
+                  convierte el chip en un recordatorio con contexto. */}
+              {habit.anchor && <span className="ml-1 opacity-60">· {habit.anchor}</span>}
+            </span>
+            {/* Barrita de fuerza en vez del número de racha: no hay nada que
+                romper, así que tampoco hay nada que perder por faltar un día. */}
+            {streak.strength > 0 && (
+              <span
+                aria-label={`Fuerza ${streak.strength} de 100`}
+                title={`Fuerza del hábito: ${streak.strength}/100`}
+                className="h-1.5 w-8 shrink-0 overflow-hidden rounded-full bg-surface-2"
+              >
+                <span
+                  className="block h-full rounded-full bg-primary"
+                  style={{ width: `${Math.max(6, streak.strength)}%` }}
+                />
               </span>
             )}
           </button>
@@ -160,14 +187,11 @@ function TodayView({ day, tasks, habits, finance, lists, update, onOpen, onToggl
         <Empty text="No hay nada para este día. Disfrutalo o planificá algo." />
       ) : (
         <>
-          {/* Lo atrasado va primero y nunca se esconde: es justo lo que más
-              importa ver, y lo que se pierde si el día se cierra sin decidir. */}
-          <Section icon={<AlertTriangle size={13} />} title="Atrasado" count={plan.overdue.length}>
-            {plan.overdue.map((task) => (
-              <TaskRow key={task.id} task={task} lists={lists} onChange={update} onOpen={onOpen} overdue />
-            ))}
-          </Section>
-
+          {/* Lo que quedó sin hacer ya está adentro de "Sin hora", mezclado con
+              lo de hoy. Antes abría la pantalla en una sección "Atrasado" roja,
+              con la fecha en que debería haberse hecho — y esa es la pantalla
+              que convierte cada mañana en un balance de deudas. La tarea sigue;
+              lo que se fue es el reproche. */}
           <Section icon={<Clock3 size={13} />} title="Con hora" count={plan.timed.length}>
             {plan.timed.map((task) => (
               <TaskRow key={task.id} task={task} lists={lists} onChange={update} onOpen={onOpen} />
@@ -186,6 +210,15 @@ function TodayView({ day, tasks, habits, finance, lists, update, onOpen, onToggl
               <TaskRow key={task.id} task={task} lists={lists} onChange={update} onOpen={onOpen} />
             ))}
           </Section>
+
+          {plan.rolled > 0 && (
+            // Dicho una vez, abajo, en gris, y sin número rojo: hay una forma
+            // de sacarse cosas de encima si querés, y no pasa nada si no.
+            <p className="pt-1 text-[11px] text-muted">
+              {plan.rolled === 1 ? "Una tarea viene" : `${plan.rolled} tareas vienen`} de días
+              anteriores. Podés repasarlas en Cerrar el día.
+            </p>
+          )}
         </>
       )}
     </div>
@@ -345,20 +378,19 @@ const PRIORITY_TONE: Record<string, string> = {
   LOW: "text-primary", MEDIUM: "text-amber-500", HIGH: "text-danger",
 };
 
-function TaskRow({ task, lists, onChange, onOpen, overdue }: {
+function TaskRow({ task, lists, onChange, onOpen }: {
   task: OrganizationTask; lists: List[];
   onChange: (id: string, patch: Partial<OrganizationTask>) => void;
   onOpen?: (id: string) => void;
-  overdue?: boolean;
 }) {
+  const onDrop = useContext(DropTaskContext);
   // Sólo hay hora si hay bloque: scheduledEnd null significa "reservada sin hora".
   const time = hasTime(task)
     ? new Date(task.scheduledStart!).toLocaleTimeString("es-AR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" })
     : null;
   const list = task.listId ? lists.find((l) => l.id === task.listId) : null;
-  const when = overdue ? (task.scheduledStart ?? task.dueDate) : null;
   return (
-    <article className={`group flex items-center gap-3 rounded-xl border bg-surface px-3 py-3 transition-colors hover:border-primary/35 ${overdue ? "border-danger/40" : "border-border/70"}`}>
+    <article className="group flex items-center gap-3 rounded-xl border border-border/70 bg-surface px-3 py-3 transition-colors hover:border-primary/35">
       <button
         aria-label={task.done ? "Reabrir tarea" : "Completar tarea"}
         onClick={() => onChange(task.id, { status: task.done ? "TODO" : "DONE" })}
@@ -375,11 +407,6 @@ function TaskRow({ task, lists, onChange, onOpen, overdue }: {
       >
         <p className={`truncate text-sm font-medium ${task.done ? "text-muted line-through" : "text-foreground"}`}>{task.title}</p>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted">
-          {when && (
-            <span className="font-medium text-danger">
-              era {new Date(when).toLocaleDateString("es-AR", { timeZone: TZ, day: "numeric", month: "short" })}
-            </span>
-          )}
           {time && <span className="inline-flex items-center gap-1"><Clock3 size={11} />{time}</span>}
           {list && <span style={{ color: list.color }}>{list.name}</span>}
           {task.priority !== "NONE" && <span className={PRIORITY_TONE[task.priority] ?? ""}>Prioridad {task.priority.toLowerCase()}</span>}
@@ -389,6 +416,19 @@ function TaskRow({ task, lists, onChange, onOpen, overdue }: {
           {task.syncStatus === "ERROR" && <span className="text-danger" title={task.syncError ?? ""}>Sin sincronizar</span>}
         </div>
       </button>
+      {/* La tercera salida, a un toque: ni hacerla ni posponerla. Aparece al
+          pasar el mouse para no competir con el check, pero en pantallas
+          táctiles está siempre — que es donde más se usa. */}
+      {onDrop && !task.done && (
+        <button
+          aria-label={`Descartar ${task.title}`}
+          title="Ya no importa"
+          onClick={() => onDrop(task.id)}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted opacity-100 transition-opacity hover:bg-surface-2 hover:text-foreground md:opacity-0 md:group-hover:opacity-100"
+        >
+          <X size={14} />
+        </button>
+      )}
     </article>
   );
 }
@@ -494,6 +534,32 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
       else { toast.success("Tarea borrada"); router.refresh(); }
     });
   };
+  /**
+   * "Ya no importa". Sale de la vista al instante y ofrece deshacer en el mismo
+   * aviso: si descartar costara una confirmación, volvería a ser más barato
+   * posponer para siempre — que es justo lo que infla la lista.
+   */
+  const drop = (id: string) => {
+    const before = tasks;
+    const title = tasks.find((task) => task.id === id)?.title;
+    setTasks((items) => items.filter((item) => item.id !== id));
+    setSelectedId(null);
+    start(async () => {
+      const result = await dropOrganizationTaskAction(id);
+      if (result.error) { setTasks(before); toast.error(result.error); return; }
+      toast.success(title ? `Listo, "${title}" ya no está` : "Descartada", {
+        action: {
+          label: "Deshacer",
+          onClick: () => start(async () => {
+            const undo = await restoreOrganizationTaskAction(id);
+            if (undo.error) toast.error(undo.error);
+            else { setTasks(before); router.refresh(); }
+          }),
+        },
+      });
+      router.refresh();
+    });
+  };
   const retrySync = (id: string) => start(async () => {
     const result = await retryTaskSyncAction(id);
     if (result.error) toast.error(result.error);
@@ -521,11 +587,12 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
   }, [anchor]);
   const financeOn = (key: string) => financeEvents.filter((event) => dayKey(new Date(event.date)) === key);
   const step = current === "today" ? 1 : zoom === "week" ? 7 : 30;
-  // La cola del cierre: lo de hoy sin terminar, más lo que quedó atrás.
+  // La cola del cierre: todo lo de hoy sin terminar, incluido lo que rodó.
   const todayPlan = planForDay(visibleActive, currentDay, today());
-  const pendingToday = [...todayPlan.overdue, ...todayPlan.timed, ...todayPlan.untimed, ...todayPlan.due];
+  const pendingToday = [...todayPlan.timed, ...todayPlan.untimed, ...todayPlan.due];
 
   return (
+    <DropTaskContext.Provider value={drop}>
     <main className="mx-auto w-full max-w-[1500px] space-y-5 pb-24">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -743,9 +810,11 @@ export function OrganizationClient({ section, initial, financeEvents, googleConn
         onClose={() => setSelectedId(null)}
         onSave={saveDetail}
         onDelete={remove}
+        onDrop={drop}
         onRetrySync={retrySync}
       />
     </main>
+    </DropTaskContext.Provider>
   );
 }
 
@@ -1060,10 +1129,14 @@ const WEEKDAYS = [
   { value: 4, label: "J" }, { value: 5, label: "V" }, { value: 6, label: "S" }, { value: 0, label: "D" },
 ];
 
+/** Ejemplos de ancla: lo que hace falta para entender qué se espera acá. */
+const ANCHOR_HINTS = ["desayunar", "llegar del trabajo", "almorzar", "lavarme los dientes", "acostarme"];
+
 function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }) {
   const router = useRouter();
   const [name, setName] = useState(habit.name);
   const [icon, setIcon] = useState(habit.icon ?? "");
+  const [anchor, setAnchor] = useState(habit.anchor ?? "");
   const [frequency, setFrequency] = useState(habit.frequency);
   const [days, setDays] = useState<number[]>(habit.daysOfWeek ?? []);
   const [pending, start] = useTransition();
@@ -1072,6 +1145,7 @@ function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }) 
     const result = await updateHabitAction(habit.id, {
       name, icon: icon || null, frequency: frequency as "DAILY" | "WEEKLY",
       daysOfWeek: frequency === "WEEKLY" ? days : [],
+      anchor: anchor.trim() || null,
     });
     if (result.error) toast.error(result.error);
     else { toast.success("Hábito actualizado"); onClose(); router.refresh(); }
@@ -1090,6 +1164,31 @@ function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }) 
           aria-label="Nombre del hábito"
           className="min-h-11 flex-1 rounded-xl border border-border bg-background px-3 text-sm"
         />
+      </div>
+
+      {/* El ancla, no la hora. Un hábito colgado de algo que ya hacés todos los
+          días se vuelve automático; uno colgado de un horario depende de que
+          justo estés libre a esa hora y de que la notificación te encuentre. */}
+      <div>
+        <label className="flex items-center gap-2 rounded-xl border border-border bg-background px-3">
+          <span className="shrink-0 text-sm text-muted">Después de</span>
+          <input
+            value={anchor} onChange={(event) => setAnchor(event.target.value)} maxLength={80}
+            placeholder="desayunar"
+            aria-label="Después de qué"
+            className="min-h-11 min-w-0 flex-1 bg-transparent text-sm outline-none"
+          />
+        </label>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {ANCHOR_HINTS.map((hint) => (
+            <button
+              key={hint} type="button" onClick={() => setAnchor(hint)}
+              className="rounded-full border border-border px-2 py-1 text-[11px] text-muted hover:border-primary hover:text-primary"
+            >
+              {hint}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="flex overflow-hidden rounded-xl border border-border">
         {(["DAILY", "WEEKLY"] as const).map((option) => (
@@ -1126,6 +1225,7 @@ function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }) 
 function Habits({ habits }: { habits: Habit[] }) {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [newAnchor, setNewAnchor] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Habit | null>(null);
   const [pending, start] = useTransition();
@@ -1137,9 +1237,9 @@ function Habits({ habits }: { habits: Habit[] }) {
   const now = today();
 
   const create = () => start(async () => {
-    const result = await createHabitAction({ name });
+    const result = await createHabitAction({ name, anchor: newAnchor.trim() || null });
     if (result.error) toast.error(result.error);
-    else { setName(""); toast.success("Hábito creado"); router.refresh(); }
+    else { setName(""); setNewAnchor(""); toast.success("Hábito creado"); router.refresh(); }
   });
   const toggle = (habitId: string, day: string) => start(async () => {
     const result = await toggleHabitAction(habitId, day);
@@ -1154,16 +1254,33 @@ function Habits({ habits }: { habits: Habit[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
-        <input
-          value={name} onChange={(event) => setName(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Enter" && name.trim()) create(); }}
-          placeholder="Nuevo hábito, ej. Tomar vitaminas"
-          className="min-h-11 flex-1 rounded-xl border border-border bg-background px-3 text-sm"
-        />
-        <button onClick={create} disabled={pending || !name.trim()} className="min-h-11 shrink-0 rounded-xl bg-primary px-4 text-sm font-semibold text-white disabled:opacity-40">
-          <Plus size={16} className="mr-1 inline" />Añadir
-        </button>
+      {/* El ancla se pide en el alta, no después: un hábito nace pegado a algo
+          que ya hacés, o nace dependiendo de que te acuerdes. */}
+      <div className="space-y-2 rounded-2xl border border-border bg-surface p-3">
+        <div className="flex flex-wrap gap-2">
+          <input
+            value={name} onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter" && name.trim()) create(); }}
+            placeholder="Nuevo hábito, ej. Tomar vitaminas"
+            className="min-h-11 min-w-48 flex-1 rounded-xl border border-border bg-background px-3 text-sm"
+          />
+          <label className="flex min-w-52 flex-1 items-center gap-2 rounded-xl border border-border bg-background px-3">
+            <span className="shrink-0 text-sm text-muted">después de</span>
+            <input
+              value={newAnchor} onChange={(event) => setNewAnchor(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Enter" && name.trim()) create(); }}
+              placeholder="desayunar"
+              aria-label="Después de qué"
+              className="min-h-11 min-w-0 flex-1 bg-transparent text-sm outline-none"
+            />
+          </label>
+          <button onClick={create} disabled={pending || !name.trim()} className="min-h-11 shrink-0 rounded-xl bg-primary px-4 text-sm font-semibold text-white disabled:opacity-40">
+            <Plus size={16} className="mr-1 inline" />Añadir
+          </button>
+        </div>
+        <p className="text-[11px] text-muted">
+          Colgarlo de algo que ya hacés todos los días funciona mejor que ponerle una hora.
+        </p>
       </div>
 
       {habits.map((habit) => {
@@ -1178,6 +1295,8 @@ function Habits({ habits }: { habits: Habit[] }) {
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{habit.icon ?? "●"} {habit.name}</p>
                 <p className="text-[11px] text-muted">
+                  {habit.anchor ? `Después de ${habit.anchor}` : "Sin ancla"}
+                  {" · "}
                   {habit.frequency === "DAILY"
                     ? "Todos los días"
                     : habit.daysOfWeek?.length
@@ -1186,11 +1305,18 @@ function Habits({ habits }: { habits: Habit[] }) {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <p className="text-lg font-bold leading-none text-foreground">
-                    <Flame size={15} className="mr-1 inline text-amber-500" />{streak.current}
+                {/* Fuerza, no racha. La racha sigue calculándose y se menciona
+                    al pasar, pero dejó de ser el número grande: el número
+                    grande es el que la gente siente que pierde. */}
+                <div className="w-28 text-right">
+                  <p className="text-lg font-bold leading-none text-foreground">{streak.strength}<span className="text-xs font-normal text-muted">/100</span></p>
+                  <span className="mt-1 block h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+                    <span className="block h-full rounded-full bg-primary" style={{ width: `${streak.strength}%` }} />
+                  </span>
+                  <p className="mt-1 text-[10px] text-muted">
+                    fuerza · {streak.rate}% este mes
+                    {streak.current > 0 && <> · <Flame size={9} className="inline text-amber-500" />{streak.current}</>}
                   </p>
-                  <p className="text-[10px] text-muted">racha · mejor {streak.best} · {streak.rate}%</p>
                 </div>
                 <button
                   aria-label="Editar hábito" title="Editar"

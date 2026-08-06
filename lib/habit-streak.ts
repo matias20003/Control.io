@@ -39,9 +39,52 @@ export type HabitStreak = {
   best: number;
   /** % de días que tocaba y cumplió en la ventana pedida. */
   rate: number;
+  /**
+   * Qué tan afirmado está el hábito, de 0 a 100. Sube con cada cumplimiento y
+   * baja con cada día que tocaba y no fue, pero nunca se desploma: faltar un
+   * día lo baja unos puntos, no lo vuelve a cero.
+   */
+  strength: number;
   doneToday: boolean;
   dueToday: boolean;
 };
+
+/**
+ * Cuánto pesa el día más reciente frente a todo el historial. 0.12 deja una
+ * vida media de unos seis días que tocan: suficiente para que un buen tramo se
+ * note enseguida, y para que una semana floja se recupere sin drama.
+ */
+const STRENGTH_ALPHA = 0.12;
+
+/**
+ * Fuerza del hábito como media móvil exponencial sobre los días que tocaban.
+ *
+ * Reemplaza a la racha como medida principal por una razón concreta: el estudio
+ * de referencia sobre formación de hábitos (Lally, 2010) midió que saltear una
+ * oportunidad no afecta materialmente el proceso. Una racha que vuelve a cero
+ * castiga con la pérdida total de lo acumulado un evento que, según la
+ * evidencia, no cambia nada — y ese castigo es lo que hace que la gente
+ * abandone. Un puntaje que decae dice la verdad sin romper nada.
+ */
+export function habitStrength(
+  schedule: HabitSchedule,
+  completedDays: string[],
+  today: string,
+  windowDays = 120,
+): number {
+  const done = new Set(completedDays);
+  let score = 0;
+  let seen = false;
+  for (let i = windowDays - 1; i >= 0; i--) {
+    const day = shiftDay(today, -i);
+    if (!isHabitDue(day, schedule)) continue;
+    // El día de hoy todavía está en curso: no cuenta como falta hasta mañana.
+    if (day === today && !done.has(day)) continue;
+    score = score * (1 - STRENGTH_ALPHA) + (done.has(day) ? 100 : 0) * STRENGTH_ALPHA;
+    seen = true;
+  }
+  return seen ? Math.round(score) : 0;
+}
 
 export function getHabitStreak(
   schedule: HabitSchedule,
@@ -101,6 +144,7 @@ export function getHabitStreak(
     current,
     best: Math.max(best, current),
     rate: due ? Math.round((hits / due) * 100) : 0,
+    strength: habitStrength(schedule, completedDays, today),
     doneToday,
     dueToday,
   };

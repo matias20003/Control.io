@@ -57,18 +57,49 @@ describe("planForDay", () => {
     expect(plan.due.map((t) => t.id)).toEqual(["vence"]);
   });
 
-  it("lo atrasado nunca se esconde", () => {
+  it("lo que quedo sin hacer rueda a hoy, mezclado con el resto", () => {
     const ayer = task({ id: "ayer", scheduledStart: arg("2026-08-04", "00:00") });
     const vencido = task({ id: "vencido", dueDate: arg("2026-08-01") });
-    const plan = planForDay([ayer, vencido], HOY, HOY);
-    expect(plan.overdue.map((t) => t.id).sort()).toEqual(["ayer", "vencido"]);
+    const dehoy = task({ id: "dehoy", scheduledStart: arg(HOY, "00:00") });
+    const plan = planForDay([ayer, vencido, dehoy], HOY, HOY);
+
+    // Sin sección aparte: las tres son, hoy, lo mismo.
+    expect(plan.untimed.map((t) => t.id).sort()).toEqual(["ayer", "dehoy", "vencido"]);
+    expect(plan.total).toBe(3);
   });
 
-  it("no marca atrasado si estas mirando otro dia", () => {
+  it("cuenta cuantas rodaron, para poder ofrecer el cierre del dia", () => {
+    const ayer = task({ id: "ayer", scheduledStart: arg("2026-08-04", "00:00") });
+    const dehoy = task({ id: "dehoy", scheduledStart: arg(HOY, "00:00") });
+    expect(planForDay([ayer, dehoy], HOY, HOY).rolled).toBe(1);
+  });
+
+  it("la hora de un dia pasado no ordena el dia de hoy", () => {
+    // Estaba agendada 8:00 de ayer; hoy es trabajo sin hora, no la primera cita.
+    const ayerTemprano = task({
+      id: "ayer",
+      scheduledStart: arg("2026-08-04", "08:00"),
+      scheduledEnd: arg("2026-08-04", "09:00"),
+    });
+    const plan = planForDay([ayerTemprano], HOY, HOY);
+    expect(plan.timed).toHaveLength(0);
+    expect(plan.untimed.map((t) => t.id)).toEqual(["ayer"]);
+  });
+
+  it("no rueda nada si estas mirando otro dia", () => {
     const ayer = task({ id: "ayer", scheduledStart: arg("2026-08-04", "00:00") });
     const plan = planForDay([ayer], "2026-08-10", HOY);
-    expect(plan.overdue).toHaveLength(0);
+    expect(plan.rolled).toBe(0);
     expect(plan.total).toBe(0);
+  });
+
+  it("lo descartado desaparece de todas las vistas", () => {
+    const descartada = task({ id: "nope", scheduledStart: arg(HOY, "00:00"), status: "DROPPED" });
+    const viva = task({ id: "si", scheduledStart: arg(HOY, "00:00") });
+    const plan = planForDay([descartada, viva], HOY, HOY);
+    expect(plan.untimed.map((t) => t.id)).toEqual(["si"]);
+    expect(scheduledOn([descartada, viva], HOY).map((t) => t.id)).toEqual(["si"]);
+    expect(inboxOf([task({ id: "inbox", status: "DROPPED" })])).toHaveLength(0);
   });
 
   it("una tarea no se cuenta dos veces si esta agendada y vence el mismo dia", () => {

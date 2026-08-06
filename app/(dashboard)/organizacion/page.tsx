@@ -1,9 +1,16 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { OrganizationDashboard } from "@/components/organization/OrganizationDashboard";
+import { requireOwnerOrCalendar } from "@/lib/organization-page";
 
-/**
- * Hasta que Organización tenga su propio resumen, el pilar entra por Hoy, que
- * es la pantalla con la que se arranca el día.
- */
-export default function OrganizacionPage() {
-  redirect("/hoy");
+export const metadata: Metadata = { title: "Organización" };
+
+export default async function OrganizacionPage() {
+  const { initial, financeEvents } = await requireOwnerOrCalendar();
+  return (
+    <OrganizationDashboard
+      tasks={initial.tasks}
+      habits={initial.habits}
+      financeEvents={financeEvents}
+    />
+  );
 }

@@ -57,6 +57,7 @@ export const AREAS: Record<NavArea, Area> = {
     icon: CalendarCheck,
     home: "/organizacion",
     items: [
+      { href: "/organizacion", icon: BarChart3,     label: "Resumen" },
       { href: "/hoy",          icon: Sparkles,      label: "Hoy" },
       { href: "/calendario",   icon: CalendarDays,  label: "Calendario", match: ["/calendario", "/agenda"] },
       { href: "/tareas",       icon: ListChecks,    label: "Tareas" },

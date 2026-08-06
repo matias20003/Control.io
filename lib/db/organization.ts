@@ -21,6 +21,8 @@ export type OrganizationTask = {
   syncStatus: string;
   syncError: string | null;
   done: boolean;
+  /** Cuándo dijiste que ya no importaba. Se guarda para poder deshacer. */
+  droppedAt: string | null;
 };
 
 type TaskRow = {
@@ -29,6 +31,7 @@ type TaskRow = {
   priority: string; urgent: boolean; important: boolean; listId: string | null;
   someday: boolean; order: number; recurrenceRule: string | null; reminderMinutes: number | null;
   source: string; syncStatus: string; syncError: string | null; done: boolean;
+  droppedAt: Date | null;
 };
 
 function text(value: string | null): string | null {
@@ -43,6 +46,7 @@ export function serializeOrganizationTask(row: TaskRow): OrganizationTask {
     dueDate: row.dueDate?.toISOString() ?? null,
     scheduledStart: row.scheduledStart?.toISOString() ?? null,
     scheduledEnd: row.scheduledEnd?.toISOString() ?? null,
+    droppedAt: row.droppedAt?.toISOString() ?? null,
   };
 }
 
@@ -66,6 +70,7 @@ export async function getOrganization(userId: string) {
     habits: habits.map((habit) => ({
       ...habit,
       name: text(habit.name) ?? habit.name,
+      anchor: text(habit.anchor),
       createdAt: habit.createdAt.toISOString(),
       updatedAt: habit.updatedAt.toISOString(),
       completions: habit.completions.map((completion) => ({
@@ -138,7 +143,17 @@ export async function updateOrganizationTask(userId: string, id: string, input: 
       ...(input.dueDate !== undefined ? { dueDate: input.dueDate } : {}),
       ...(input.scheduledStart !== undefined ? { scheduledStart: input.scheduledStart, syncStatus: "PENDING" } : {}),
       ...(input.scheduledEnd !== undefined ? { scheduledEnd: input.scheduledEnd, syncStatus: "PENDING" } : {}),
-      ...(input.status !== undefined ? { status: input.status, done, doneAt: done ? new Date() : null } : {}),
+      // Descartar no es completar: done queda en false para que no engorde el
+      // "hecho" de nadie. Y al reabrirla, droppedAt vuelve a null: se puede
+      // deshacer, así que decir "ya no importa" nunca es irreversible.
+      ...(input.status !== undefined
+        ? {
+            status: input.status,
+            done,
+            doneAt: done ? new Date() : null,
+            droppedAt: input.status === "DROPPED" ? new Date() : null,
+          }
+        : {}),
       ...(input.priority !== undefined ? { priority: input.priority } : {}),
       ...(input.urgent !== undefined ? { urgent: input.urgent } : {}),
       ...(input.important !== undefined ? { important: input.important } : {}),
@@ -150,6 +165,26 @@ export async function updateOrganizationTask(userId: string, id: string, input: 
     },
   });
   return serializeOrganizationTask(row);
+}
+
+/** Con qué evento de Google está espejada, para poder limpiarlo. */
+export async function getTaskGoogleRef(userId: string, id: string) {
+  return prisma.task.findFirst({
+    where: { id, userId },
+    select: { googleEventId: true, googleCalendarId: true },
+  });
+}
+
+/**
+ * Olvida el evento espejo. Va después de borrarlo en Google: si la referencia
+ * quedara, el próximo sync intentaría actualizar un evento que ya no existe y
+ * la tarea terminaría marcada como "sin sincronizar" sin que nada esté mal.
+ */
+export async function clearTaskGoogleRef(userId: string, id: string) {
+  await prisma.task.updateMany({
+    where: { id, userId },
+    data: { googleEventId: null, googleCalendarId: null, googleEtag: null, syncStatus: "LOCAL", syncError: null },
+  });
 }
 
 /** Borra la tarea. Devuelve los datos de Google para poder limpiar el evento. */
@@ -212,6 +247,7 @@ export async function reorderOrganizationLists(userId: string, ids: string[]) {
 export async function createHabit(userId: string, input: {
   name: string; icon?: string | null; color?: string; frequency?: string;
   daysOfWeek?: number[]; targetPerPeriod?: number; scheduledTime?: string | null;
+  anchor?: string | null;
 }) {
   return prisma.habit.create({
     data: {
@@ -223,6 +259,7 @@ export async function createHabit(userId: string, input: {
       daysOfWeek: input.daysOfWeek ?? [],
       targetPerPeriod: input.targetPerPeriod ?? 1,
       scheduledTime: input.scheduledTime,
+      anchor: input.anchor ? (encrypt(input.anchor) ?? input.anchor) : null,
     },
   });
 }
@@ -230,6 +267,7 @@ export async function createHabit(userId: string, input: {
 export async function updateHabit(userId: string, id: string, input: {
   name?: string; icon?: string | null; color?: string; frequency?: string;
   daysOfWeek?: number[]; targetPerPeriod?: number; scheduledTime?: string | null;
+  anchor?: string | null;
 }) {
   const habit = await prisma.habit.findFirst({ where: { id, userId }, select: { id: true } });
   if (!habit) throw new Error("Hábito no encontrado");
@@ -243,6 +281,9 @@ export async function updateHabit(userId: string, id: string, input: {
       ...(input.daysOfWeek !== undefined ? { daysOfWeek: input.daysOfWeek } : {}),
       ...(input.targetPerPeriod !== undefined ? { targetPerPeriod: input.targetPerPeriod } : {}),
       ...(input.scheduledTime !== undefined ? { scheduledTime: input.scheduledTime } : {}),
+      ...(input.anchor !== undefined
+        ? { anchor: input.anchor ? (encrypt(input.anchor) ?? input.anchor) : null }
+        : {}),
     },
   });
 }

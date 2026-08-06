@@ -405,7 +405,13 @@ model Task {
   // Algún día: no lo descartaste pero tampoco lo agendaste. Queda fuera de
   // todas las vistas activas para que la lista principal no se vuelva impasable.
   someday         Boolean   @default(false)
+  // TODO | IN_PROGRESS | DONE | DROPPED. DROPPED es "esto ya no importa": la
+  // tarea sale de todas las vistas sin contarse como hecha ni como pendiente.
+  // Sin esa salida, lo único que se puede hacer con algo que dejó de importar
+  // es posponerlo para siempre, y eso es lo que infla la lista hasta que la
+  // persona deja de abrirla.
   status          String    @default("TODO")
+  droppedAt       DateTime?
   priority        String    @default("NONE")
   urgent          Boolean   @default(false)
   important       Boolean   @default(false)
@@ -460,6 +466,10 @@ model Habit {
   daysOfWeek      Int[]
   targetPerPeriod Int      @default(1)
   scheduledTime   String?
+  // El evento después del cual toca ("después de desayunar"). Es el único
+  // disparador con respaldo experimental para volver algo automático: el
+  // recordatorio por hora acompaña la repetición pero no forma el hábito.
+  anchor          String?
   googleEventId   String?
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())

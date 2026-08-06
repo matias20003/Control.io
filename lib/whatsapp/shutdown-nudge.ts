@@ -93,14 +93,14 @@ export async function fireShutdownNudges(): Promise<{ sent: number; attempted: n
     }));
 
     const plan = planForDay(tasks, day, day);
-    const pending = [...plan.overdue, ...plan.timed, ...plan.untimed, ...plan.due];
+    const pending = [...plan.timed, ...plan.untimed, ...plan.due];
     // El claim ya quedó tomado, así que aunque no haya nada que avisar tampoco
     // se reintenta en el próximo minuto. Eso es lo que queremos.
     if (pending.length === 0) continue;
 
     const lista = pending.slice(0, 4).map((task) => `• ${task.title}`).join("\n");
     const resto = pending.length > 4 ? `\n…y ${pending.length - 4} más` : "";
-    const atrasadas = plan.overdue.length > 0 ? ` (${plan.overdue.length} vienen de antes)` : "";
+    const atrasadas = plan.rolled > 0 ? ` (${plan.rolled} vienen de antes)` : "";
 
     try {
       await sendText(

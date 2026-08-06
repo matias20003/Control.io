@@ -10,7 +10,7 @@
  */
 import { useState, useTransition } from "react";
 import * as RadixDialog from "@radix-ui/react-dialog";
-import { AlertTriangle, Check, RefreshCw, Star, Trash2, X } from "lucide-react";
+import { AlertTriangle, Archive, Check, RefreshCw, Star, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { OrganizationTask } from "@/lib/db/organization";
@@ -65,6 +65,7 @@ function TaskForm({
   lists,
   onSave,
   onDelete,
+  onDrop,
   onRetrySync,
   onClose,
 }: {
@@ -72,6 +73,7 @@ function TaskForm({
   lists: TaskList[];
   onSave: (patch: TaskPatch) => void;
   onDelete: () => void;
+  onDrop: () => void;
   onRetrySync: () => void;
   onClose: () => void;
 }) {
@@ -277,6 +279,13 @@ function TaskForm({
           <Trash2 size={16} />
           <span className="sr-only sm:not-sr-only">Borrar</span>
         </Button>
+        {/* Descartar no pide confirmación y borrar sí: descartar se deshace y
+            borrar no. Poner un cartel delante de la salida barata la volvería
+            tan cara como posponer, que es lo que se quiere evitar. */}
+        <Button type="button" variant="ghost" className="px-3" onClick={onDrop}>
+          <Archive size={16} />
+          <span className="sr-only sm:not-sr-only">Ya no importa</span>
+        </Button>
         <div className="ml-auto flex gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button type="button" onClick={save} disabled={pending || !title.trim()}>Guardar</Button>
@@ -306,6 +315,7 @@ export function TaskDetailPanel({
   onClose,
   onSave,
   onDelete,
+  onDrop,
   onRetrySync,
 }: {
   task: OrganizationTask | null;
@@ -313,6 +323,7 @@ export function TaskDetailPanel({
   onClose: () => void;
   onSave: (id: string, patch: TaskPatch) => void;
   onDelete: (id: string) => void;
+  onDrop: (id: string) => void;
   onRetrySync: (id: string) => void;
 }) {
   return (
@@ -353,6 +364,7 @@ export function TaskDetailPanel({
               lists={lists}
               onSave={(patch) => onSave(task.id, patch)}
               onDelete={() => onDelete(task.id)}
+              onDrop={() => onDrop(task.id)}
               onRetrySync={() => onRetrySync(task.id)}
               onClose={onClose}
             />

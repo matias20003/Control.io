@@ -26,7 +26,14 @@ export type DayTask = {
   urgent: boolean;
   important: boolean;
   order: number;
+  /** DROPPED = la descartaste. No se borra, pero deja de existir para las vistas. */
+  status?: string;
 };
+
+/** Ni terminada, ni descartada, ni guardada para algún día. */
+export function isOpen(task: DayTask): boolean {
+  return !task.done && !task.someday && task.status !== "DROPPED";
+}
 
 /** Día calendario argentino de una fecha ISO, como "YYYY-MM-DD". */
 export function argDay(iso: string | Date): string {
@@ -56,41 +63,51 @@ export function byPriority(a: DayTask, b: DayTask): number {
 }
 
 export type DayPlan<T extends DayTask> = {
-  /** Venció o estaba agendada para antes de hoy y sigue abierta. Nunca se esconde. */
-  overdue: T[];
   /** Agendada hoy con bloque horario, en orden cronológico. */
   timed: T[];
   /** Vence hoy pero no la agendaste: la restricción es de afuera. */
   due: T[];
-  /** Reservada para hoy sin hora, por prioridad. */
+  /** Reservada para hoy sin hora, más lo que rodó de días anteriores. */
   untimed: T[];
+  /**
+   * Cuántas venían de antes. Es un dato, no una sección: nadie las ve
+   * separadas. Sirve para ofrecer el cierre del día, no para señalar.
+   */
+  rolled: number;
   total: number;
 };
 
 /**
  * Reparte las tareas en el plan de un día.
  *
- * `day` es el día que se está mirando y `todayKey` el día real: sólo se marca
- * como atrasado cuando se mira hoy, porque "atrasado" no significa nada si
- * estás mirando la semana que viene.
+ * Lo que quedó sin hacer rueda a hoy y se mezcla con el resto, ordenado por
+ * prioridad como cualquier otra. Antes tenía sección propia arriba de todo,
+ * en rojo y con la fecha en que "debería" haberse hecho — y esa es justamente
+ * la pantalla que hace que la gente deje de abrir la app: convierte cada
+ * mañana en un balance de deudas. La tarea sigue estando; lo que se va es el
+ * reproche.
+ *
+ * `day` es el día que se está mirando y `todayKey` el día real: sólo rueda
+ * hacia hoy, porque mirando la semana que viene no hay nada que arrastrar.
  */
 export function planForDay<T extends DayTask>(tasks: T[], day: string, todayKey: string): DayPlan<T> {
-  const overdue: T[] = [];
   const timed: T[] = [];
   const due: T[] = [];
   const untimed: T[] = [];
+  let rolled = 0;
   const lookingAtToday = day === todayKey;
 
   for (const task of tasks) {
-    if (task.done || task.someday) continue;
+    if (!isOpen(task)) continue;
 
     const scheduled = scheduledDay(task);
     const dueDay = task.dueDate ? argDay(task.dueDate) : null;
 
-    // Lo que quedó atrás sólo aparece cuando mirás hoy, y aparece siempre:
-    // esconderlo es exactamente cuando más importa verlo.
+    // Rueda: la hora a la que ibas a hacerla ayer ya no significa nada hoy, así
+    // que entra al día sin hora, junto a todo lo demás.
     if (lookingAtToday && ((scheduled && scheduled < day) || (dueDay && dueDay < day))) {
-      overdue.push(task);
+      untimed.push(task);
+      rolled++;
       continue;
     }
 
@@ -106,15 +123,14 @@ export function planForDay<T extends DayTask>(tasks: T[], day: string, todayKey:
   timed.sort((a, b) => Date.parse(a.scheduledStart!) - Date.parse(b.scheduledStart!));
   due.sort(byPriority);
   untimed.sort(byPriority);
-  overdue.sort(byPriority);
 
-  return { overdue, timed, due, untimed, total: overdue.length + timed.length + due.length + untimed.length };
+  return { timed, due, untimed, rolled, total: timed.length + due.length + untimed.length };
 }
 
 /** Lo que va en la vista Semana de un día: todo lo agendado ahí, sin esconder nada. */
 export function scheduledOn<T extends DayTask>(tasks: T[], day: string): T[] {
   return tasks
-    .filter((task) => !task.done && !task.someday && (scheduledDay(task) === day || (task.dueDate && argDay(task.dueDate) === day)))
+    .filter((task) => isOpen(task) && (scheduledDay(task) === day || (task.dueDate && argDay(task.dueDate) === day)))
     .sort((a, b) => {
       const aTime = hasTime(a);
       const bTime = hasTime(b);
@@ -128,6 +144,6 @@ export function scheduledOn<T extends DayTask>(tasks: T[], day: string): T[] {
 /** Lo que todavía no tiene día ni está en Algún día: el Inbox a vaciar. */
 export function inboxOf<T extends DayTask>(tasks: T[]): T[] {
   return tasks
-    .filter((task) => !task.done && !task.someday && !task.scheduledStart && !task.dueDate)
+    .filter((task) => isOpen(task) && !task.scheduledStart && !task.dueDate)
     .sort(byPriority);
 }

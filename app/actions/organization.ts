@@ -4,12 +4,14 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import {
+  clearTaskGoogleRef,
   createHabit,
   createOrganizationList,
   createOrganizationTask,
   deleteHabit,
   deleteOrganizationList,
   deleteOrganizationTask,
+  getTaskGoogleRef,
   reorderOrganizationLists,
   toggleHabitCompletion,
   updateHabit,
@@ -60,7 +62,7 @@ const taskSchema = z.object({
   dueDate: z.string().nullable().optional(),
   scheduledStart: z.string().nullable().optional(),
   scheduledEnd: z.string().nullable().optional(),
-  status: z.enum(["TODO", "IN_PROGRESS", "DONE"]).optional(),
+  status: z.enum(["TODO", "IN_PROGRESS", "DONE", "DROPPED"]).optional(),
   priority: z.enum(["NONE", "LOW", "MEDIUM", "HIGH"]).optional(),
   urgent: z.boolean().optional(),
   important: z.boolean().optional(),
@@ -125,6 +127,41 @@ export async function deleteOrganizationTaskAction(id: string): Promise<Organiza
     return { ok: true };
   } catch (error) {
     return fail(error, "No se pudo borrar la tarea");
+  }
+}
+
+/**
+ * "Esto ya no importa": la tercera salida, además de hacerla y posponerla.
+ *
+ * No se borra — se puede deshacer, y por eso decirlo no cuesta nada. Pero sí se
+ * limpia el evento espejo: algo que descartaste no tiene por qué seguir
+ * ocupando lugar en tu calendario.
+ */
+export async function dropOrganizationTaskAction(id: string): Promise<OrganizationActionResult> {
+  try {
+    const uid = await userId();
+    const before = await getTaskGoogleRef(uid, id);
+    const task = await updateOrganizationTask(uid, id, { status: "DROPPED" });
+    if (before?.googleEventId) {
+      await deleteTaskFromGoogle(uid, before.googleEventId, before.googleCalendarId).catch(() => null);
+      await clearTaskGoogleRef(uid, id).catch(() => null);
+    }
+    revalidateOrganization();
+    return { ok: true, task };
+  } catch (error) {
+    return fail(error, "No se pudo descartar la tarea");
+  }
+}
+
+/** Devuelve al ruedo algo que habías descartado. */
+export async function restoreOrganizationTaskAction(id: string): Promise<OrganizationActionResult> {
+  try {
+    const uid = await userId();
+    const task = await updateOrganizationTask(uid, id, { status: "TODO" });
+    revalidateOrganization();
+    return { ok: true, task };
+  } catch (error) {
+    return fail(error, "No se pudo restaurar la tarea");
   }
 }
 
@@ -202,6 +239,8 @@ const habitSchema = z.object({
   daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   targetPerPeriod: z.number().int().min(1).max(50).optional(),
   scheduledTime: z.string().trim().max(5).nullable().optional(),
+  // El evento que lo dispara, en las palabras de quien lo escribe.
+  anchor: z.string().trim().max(80).nullable().optional(),
 });
 
 export async function createHabitAction(input: z.input<typeof habitSchema>): Promise<OrganizationActionResult> {
