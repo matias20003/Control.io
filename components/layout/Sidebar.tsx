@@ -23,7 +23,7 @@ export function Sidebar({
   showMyCircle?: boolean;
 }) {
   const pathname = usePathname();
-  const { area, setArea } = useNavArea();
+  const { area } = useNavArea();
 
   const renderItem = (item: NavItem) => {
     const isActive = isItemActive(item, pathname);
@@ -77,7 +77,6 @@ export function Sidebar({
                         dejaba la pantalla igual, sin explicar qué pasó. */}
                     <Link
                       href={pillar.home}
-                      onClick={() => setArea(key)}
                       aria-expanded={isOpen}
                       className={cn(
                         "flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-all duration-150",

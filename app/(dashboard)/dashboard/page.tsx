@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getMonthSummary } from "@/lib/db/transactions";
 import { getNetWorth } from "@/lib/db/insights";
+import { getTrends } from "@/lib/db/trends";
 import { getAgenda } from "@/lib/db/agenda";
 import { getOrganization } from "@/lib/db/organization";
 import { getCircleContacts } from "@/lib/db/circle";
@@ -39,13 +40,22 @@ export default async function InicioPage({
 
   // Cada consulta cae sola si falla: un resumen es lo último que debería
   // romperse entero porque una de sus tres partes tuvo un mal día.
-  const [month, netWorth, agenda, organization, contacts] = await Promise.all([
+  const [month, netWorth, agenda, organization, contacts, trends] = await Promise.all([
     getMonthSummary(user.id),
     getNetWorth(user.id).catch(() => null),
     getAgenda(user.id, 30).catch(() => []),
     getOrganization(user.id).catch(() => ({ tasks: [], lists: [], habits: [] })),
     showCircle ? getCircleContacts(user.id).catch(() => []) : Promise.resolve([]),
+    getTrends(user.id, 6).catch(() => null),
   ]);
+
+  const series = trends?.months ?? [];
+  // Las tres categorías más pesadas del mes: más que eso deja de leerse de un
+  // vistazo, que es lo único que esta pantalla tiene que lograr.
+  const topCategories = [...month.byCategory]
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 3)
+    .map((category) => ({ name: category.name, total: category.total, color: category.color }));
 
   return (
     <main className="mx-auto w-full max-w-[1500px] space-y-5 pb-24">
@@ -61,6 +71,9 @@ export default async function InicioPage({
         habits={organization.habits}
         contacts={contacts}
         showCircle={showCircle}
+        trend={series.map((entry) => ({ label: entry.label, income: entry.income, expense: entry.expense }))}
+        balanceSeries={series.map((entry) => ({ label: entry.label, balance: entry.balance }))}
+        topCategories={topCategories}
       />
     </main>
   );
