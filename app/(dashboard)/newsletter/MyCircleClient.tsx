@@ -69,7 +69,7 @@ import {
   type Reward,
 } from "./CircleUI";
 
-type CircleSection =
+export type CircleSection =
   | "home"
   | "cercanos"
   | "referentes"
@@ -80,6 +80,26 @@ type CircleSection =
   | "cosecha"
   | "mudanza"
   | "settings";
+
+/**
+ * Cada sección tiene URL propia. La pantalla sigue siendo una sola y la sección
+ * vive en el estado, pero la URL la acompaña: sin eso, ocho pantallas enteras
+ * (los vínculos que tocan, la cosecha, el espejo) eran inalcanzables desde el
+ * menú, no se podían compartir ni volver con el botón de atrás, y nadie sabía
+ * que existían.
+ */
+export const CIRCLE_SECTION_PATHS: Record<CircleSection, string> = {
+  home: "/circulo",
+  cercanos: "/circulo/cercanos",
+  referentes: "/circulo/referentes",
+  norte: "/circulo/norte",
+  cosecha: "/circulo/cosecha",
+  espejo: "/circulo/espejo",
+  mudanza: "/circulo/mudanza",
+  radar: "/circulo/radar",
+  news: "/circulo/noticias",
+  settings: "/circulo/ajustes",
+};
 
 
 type Props = {
@@ -105,6 +125,10 @@ type Props = {
   conversationsWithMemory: number;
   /** Fechas de actos valiosos (conversiones y conversaciones), para la racha. */
   actDates: string[];
+  /** Con qué sección abre. La define la ruta. */
+  initialSection?: CircleSection;
+  /** Si la URL debe seguir a la sección. Sólo en las rutas /circulo. */
+  syncUrl?: boolean;
   /** Cuánta maquinaria fabricada corresponde hoy. */
   dose: ScaffoldDose;
 };
@@ -189,8 +213,21 @@ export function MyCircleClient({
   conversationsWithMemory,
   actDates,
   dose,
+  initialSection = "home",
+  syncUrl = false,
 }: Props) {
-  const [section, setSection] = useState<CircleSection>("home");
+  const [section, setSectionState] = useState<CircleSection>(initialSection);
+  /**
+   * Cambiar de sección reescribe la URL sin recargar. Se usa replaceState y no
+   * el router para no volver a pedir los datos al servidor: la pantalla ya los
+   * tiene todos y navegar sería tirar abajo el estado por un cambio de vista.
+   */
+  const setSection = (next: CircleSection) => {
+    setSectionState(next);
+    if (syncUrl && typeof window !== "undefined") {
+      window.history.replaceState(null, "", CIRCLE_SECTION_PATHS[next]);
+    }
+  };
   const [config, setConfig] = useState(initialConfig);
   const [editions, setEditions] = useState(initialEditions);
   const [sources, setSources] = useState(initialSources);

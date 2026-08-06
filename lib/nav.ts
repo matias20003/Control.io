@@ -1,7 +1,7 @@
 import {
-  ArrowUpDown, BarChart3, CalendarDays, CalendarCheck, CircleDollarSign, CreditCard, Flame,
-  GraduationCap, HandCoins, LayoutDashboard, ListChecks, Mail, Newspaper,
-  Sparkles, Target, Users, Wallet,
+  ArrowUpDown, BarChart3, CalendarDays, CalendarCheck, CircleDollarSign, Compass, CreditCard, Eye,
+  Flame, GraduationCap, HandCoins, HeartHandshake, LayoutDashboard, ListChecks, Mail, Newspaper,
+  Rss, Sparkles, Sprout, Target, Users, Wallet,
 } from "lucide-react";
 
 /**
@@ -42,6 +42,7 @@ export const AREAS: Record<NavArea, Area> = {
     icon: Wallet,
     home: "/finanzas",
     items: [
+      { href: "/finanzas",     icon: BarChart3,        label: "Resumen" },
       { href: "/movimientos",  icon: ArrowUpDown,      label: "Movimientos" },
       { href: "/cuentas",      icon: Wallet,           label: "Cuentas" },
       { href: "/presupuestos", icon: Target,           label: "Planificá", match: ["/presupuestos", "/metas", "/recurrentes"] },
@@ -71,7 +72,12 @@ export const AREAS: Record<NavArea, Area> = {
     icon: Users,
     home: "/circulo",
     items: [
-      { href: "/newsletter", icon: Newspaper, label: "Mi Brief" },
+      { href: "/circulo",             icon: Newspaper,     label: "La ración" },
+      { href: "/circulo/cercanos",    icon: HeartHandshake, label: "Cercanos" },
+      { href: "/circulo/referentes",  icon: Rss,           label: "Referentes" },
+      { href: "/circulo/norte",       icon: Compass,       label: "El Norte" },
+      { href: "/circulo/cosecha",     icon: Sprout,        label: "La Cosecha" },
+      { href: "/circulo/espejo",      icon: Eye,           label: "El Espejo" },
     ],
   },
 };
