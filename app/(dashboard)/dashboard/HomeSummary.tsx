@@ -7,6 +7,8 @@ import type { AgendaEvent } from "@/lib/db/agenda";
 import type { OrganizationTask } from "@/lib/db/organization";
 import { summarizeOrganization, type HabitLike } from "@/lib/organization-summary";
 import { cadenceState, sinceLabel } from "@/lib/circle-cadence";
+import type { CurrencyPosition } from "@/lib/net-worth";
+import { HomeNetWorth } from "./HomeNetWorth";
 
 /**
  * Inicio: un bloque por pilar, cada uno con su número y su forma.
@@ -67,45 +69,6 @@ function Line({ value, detail, tone }: { value: string; detail: string; tone?: s
 /** Título chico sobre cada gráfico: sin él una barra suelta no dice de qué habla. */
 function ChartTitle({ children }: { children: React.ReactNode }) {
   return <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted">{children}</p>;
-}
-
-/**
- * Evolución del patrimonio como área, sobre la línea del cero.
- *
- * Se dibuja a mano en SVG porque es una sola curva: bajar un motor de gráficos
- * a la pantalla que más se abre costaría más de lo que rinde. La línea del cero
- * está a propósito — un mes en rojo tiene que verse abajo, no simplemente más
- * corto que los demás.
- */
-function BalanceArea({ points }: { points: { label: string; balance: number }[] }) {
-  if (points.length < 2) return null;
-  const width = 260;
-  const height = 56;
-  const max = Math.max(...points.map((point) => Math.abs(point.balance)), 1);
-  // El eje va de -max a +max, así el cero queda siempre en el medio.
-  const y = (value: number) => height / 2 - (value / max) * (height / 2 - 4);
-  const x = (index: number) => (index / (points.length - 1)) * width;
-
-  const line = points.map((point, index) => `${index === 0 ? "M" : "L"}${x(index)},${y(point.balance)}`).join(" ");
-  const area = `${line} L${width},${height / 2} L0,${height / 2} Z`;
-  const last = points[points.length - 1].balance;
-
-  return (
-    <div>
-      <ChartTitle>Balance mes a mes</ChartTitle>
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-14 w-full" preserveAspectRatio="none" role="img"
-        aria-label={`Evolución del balance, último mes ${formatCurrency(last, "ARS")}`}>
-        <line x1="0" y1={height / 2} x2={width} y2={height / 2} className="stroke-border" strokeWidth="1" strokeDasharray="3 3" />
-        <path d={area} className={last >= 0 ? "fill-success/15" : "fill-danger/15"} />
-        <path d={line} fill="none" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
-          className={last >= 0 ? "stroke-success" : "stroke-danger"} />
-      </svg>
-      <div className="flex justify-between text-[9px] uppercase text-muted">
-        <span>{points[0].label.slice(0, 3)}</span>
-        <span>{points[points.length - 1].label.slice(0, 3)}</span>
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -266,10 +229,10 @@ function CircleBars({ ok, soon, due }: { ok: number; soon: number; due: number }
 }
 
 export function HomeSummary({
-  month, netWorth, agenda, tasks, habits, contacts, showCircle, trend, balanceSeries, topCategories,
+  month, positions, agenda, tasks, habits, contacts, showCircle, trend, balanceSeries, topCategories,
 }: {
   month: { totalIncome: number; totalExpense: number; balance: number };
-  netWorth: number | null;
+  positions: CurrencyPosition[];
   agenda: AgendaEvent[];
   tasks: OrganizationTask[];
   habits: HabitLike[];
@@ -333,28 +296,11 @@ export function HomeSummary({
           )
         }
       >
-        {/* El patrimonio es el titular: es el número que dice cómo estás, no
-            cómo te fue este mes. El balance del mes va abajo, como contexto. */}
-        {netWorth !== null ? (
-          <>
-            <Line value={formatCurrency(netWorth, "ARS")} detail="Patrimonio neto" />
-            <p className="flex items-center gap-1.5 text-xs text-muted">
-              {month.balance >= 0
-                ? <><TrendingUp size={12} className="text-success" /> Este mes vas en positivo</>
-                : <><TrendingDown size={12} className="text-danger" /> Este mes gastás más de lo que entra</>}
-              <span className={`font-semibold tabular-nums ${month.balance >= 0 ? "text-success" : "text-danger"}`}>
-                {formatCurrency(month.balance, "ARS")}
-              </span>
-            </p>
-          </>
-        ) : (
-          <Line
-            value={formatCurrency(month.balance, "ARS")}
-            detail={`Balance del mes · ${formatCurrency(month.totalIncome, "ARS")} entró, ${formatCurrency(month.totalExpense, "ARS")} salió`}
-            tone={month.balance >= 0 ? "text-success" : "text-danger"}
-          />
-        )}
-        <BalanceArea points={balanceSeries} />
+        <HomeNetWorth
+          positions={positions}
+          monthlyBalances={balanceSeries}
+          monthBalance={month.balance}
+        />
         {trend.length > 1 && <MonthBars points={trend} />}
         <TopCategories items={topCategories} />
       </Pillar>

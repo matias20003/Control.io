@@ -65,7 +65,7 @@ export default async function InicioPage({
       </header>
       <HomeSummary
         month={month}
-        netWorth={netWorth?.netWorth ?? null}
+        positions={netWorth?.byCurrency ?? []}
         agenda={agenda}
         tasks={organization.tasks}
         habits={organization.habits}

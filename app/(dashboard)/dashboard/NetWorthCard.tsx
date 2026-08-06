@@ -8,171 +8,40 @@
  * que usan las transferencias). La cotización se puede editar a mano: el valor
  * propio queda en localStorage y pisa al de la API hasta que se resetea.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, ChevronDown, Pencil, RefreshCw, RotateCcw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
-import { useLocalValue } from "@/lib/client-store";
 import { NetWorthChart } from "./DashboardCharts";
-
-const OVERRIDES_KEY = "controlio:nw-rates";
-
-export type CurrencyPosition = {
-  currency: string;
-  assets: number;
-  liabilities: number;
-  net: number;
-};
-
-type Rate = {
-  currency: string;
-  name: string;
-  buy: number;
-  sell: number;
-  updatedAt: string;
-  source: string;
-};
+import { useNetWorthRates, type Rate } from "@/components/dashboard/useNetWorthRates";
+import { netWorthSeries, type CurrencyPosition } from "@/lib/net-worth";
 
 type Props = {
   positions: CurrencyPosition[];
   monthlyBalances: { label: string; balance: number }[];
 };
 
-/** Cotización efectiva de una moneda y de dónde salió. */
-type Resolved = {
-  position: CurrencyPosition;
-  rate: number | null;
-  manual: boolean;
-  reference: Rate | null;
-};
-
+/** Acepta coma o punto: en el teclado del celular sale la coma. */
 function parseRate(value: string): number | null {
-  const n = Number(value.replace(",", "."));
-  return Number.isFinite(n) && n > 0 ? n : null;
+  const parsed = Number(value.replace(",", "."));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 export function NetWorthCard({ positions, monthlyBalances }: Props) {
-  const foreign = useMemo(
-    () => positions.filter((p) => p.currency !== "ARS").map((p) => p.currency),
-    [positions],
-  );
-  // La lista de monedas cambia poco; la serializamos para usarla como dependencia
-  // estable del efecto que trae las cotizaciones.
-  const foreignKey = foreign.join(",");
-
-  // Guardamos junto a las cotizaciones la clave del pedido que las trajo. Así
-  // "cargando" se deriva (clave pedida ≠ clave cargada) en vez de ser otro
-  // estado que haya que sincronizar a mano desde el efecto.
-  const [loaded, setLoaded] = useState<{ key: string; rates: Record<string, Rate> } | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [editing, setEditing] = useState<string | null>(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
-  const [overridesRaw, setOverridesRaw] = useLocalValue(OVERRIDES_KEY);
-  const overrides = useMemo<Record<string, number>>(() => {
-    if (!overridesRaw) return {};
-    try {
-      const parsed = JSON.parse(overridesRaw) as Record<string, unknown>;
-      const clean: Record<string, number> = {};
-      for (const [currency, value] of Object.entries(parsed)) {
-        const n = Number(value);
-        if (Number.isFinite(n) && n > 0) clean[currency] = n;
-      }
-      return clean;
-    } catch {
-      return {};
-    }
-  }, [overridesRaw]);
+  // La conversión y las cotizaciones viven en un hook compartido con el Inicio:
+  // mientras cada pantalla hacía su cuenta, el mismo patrimonio aparecía con dos
+  // números distintos en la misma app.
+  const { resolved, totals, overrides, setOverride, loading, hasForeign, refresh } =
+    useNetWorthRates(positions);
 
-  const setOverride = useCallback(
-    (currency: string, value: number | null) => {
-      const next = { ...overrides };
-      if (value === null) delete next[currency];
-      else next[currency] = value;
-      setOverridesRaw(Object.keys(next).length ? JSON.stringify(next) : null);
-    },
-    [overrides, setOverridesRaw],
-  );
-
-  const fetchKey = `${foreignKey}|${refreshKey}`;
-  // Mientras se refresca seguimos mostrando las cotizaciones anteriores.
-  const rates = useMemo(() => loaded?.rates ?? {}, [loaded]);
-  const loading = foreign.length > 0 && loaded?.key !== fetchKey;
-
-  useEffect(() => {
-    const currencies = foreignKey ? foreignKey.split(",") : [];
-    if (currencies.length === 0) return;
-    const controller = new AbortController();
-    Promise.all(
-      currencies.map(async (currency) => {
-        try {
-          const response = await fetch(
-            `/api/cotizaciones/referencia?currency=${encodeURIComponent(currency)}`,
-            { signal: controller.signal, cache: "no-store" },
-          );
-          const payload = await response.json();
-          return payload.ok ? (payload.data as Rate) : null;
-        } catch {
-          return null;
-        }
-      }),
-    ).then((results) => {
-      if (controller.signal.aborted) return;
-      const next: Record<string, Rate> = {};
-      for (const rate of results) if (rate) next[rate.currency] = rate;
-      setLoaded({ key: `${foreignKey}|${refreshKey}`, rates: next });
-    });
-    return () => controller.abort();
-  }, [foreignKey, refreshKey]);
-
-  const resolved = useMemo<Resolved[]>(
-    () =>
-      positions.map((position) => {
-        if (position.currency === "ARS") {
-          return { position, rate: 1, manual: false, reference: null };
-        }
-        const reference = rates[position.currency] ?? null;
-        const override = overrides[position.currency];
-        // Por defecto valuamos a la compra: es lo que recibirías si vendieras
-        // hoy la tenencia. La cotización manual pisa a la de la API.
-        const rate = override ?? (reference ? reference.buy : null);
-        return { position, rate: rate ?? null, manual: override != null, reference };
-      }),
-    [positions, rates, overrides],
-  );
-
-  const totals = useMemo(() => {
-    let assets = 0;
-    let liabilities = 0;
-    let missing = 0;
-    for (const item of resolved) {
-      if (item.rate == null) {
-        missing++;
-        continue;
-      }
-      assets += item.position.assets * item.rate;
-      liabilities += item.position.liabilities * item.rate;
-    }
-    return { assets, liabilities, net: assets - liabilities, missing };
-  }, [resolved]);
-
-  // La serie histórica se ancla en el patrimonio de hoy y camina hacia atrás
-  // restando el neto de cada mes.
-  const series = useMemo(() => {
-    if (!monthlyBalances.length) return [];
-    const out: { label: string; patrimonio: number }[] = [];
-    let running = totals.net;
-    for (let i = monthlyBalances.length - 1; i >= 0; i--) {
-      out[i] = { label: monthlyBalances[i].label, patrimonio: Math.round(running) };
-      running -= monthlyBalances[i].balance;
-    }
-    return out;
-  }, [monthlyBalances, totals.net]);
+  const series = useMemo(() => netWorthSeries(monthlyBalances, totals.net), [monthlyBalances, totals.net]);
 
   const delta = series.length > 1 ? series[series.length - 1].patrimonio - series[0].patrimonio : null;
-  const hasForeign = foreign.length > 0;
   const hasBreakdown = hasForeign || positions.length > 1;
 
   const commitDraft = (currency: string, value: string) => {
@@ -205,7 +74,7 @@ export function NetWorthCard({ positions, monthlyBalances }: Props) {
             {hasForeign && (
               <button
                 type="button"
-                onClick={() => setRefreshKey((k) => k + 1)}
+                onClick={refresh}
                 disabled={loading}
                 aria-label="Actualizar cotizaciones"
                 title="Actualizar cotizaciones"
