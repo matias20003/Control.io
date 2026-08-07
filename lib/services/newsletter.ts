@@ -1,7 +1,9 @@
 // Orquestador del newsletter: ingesta (Google News RSS) → análisis (IA) →
 // guardado → aviso (push + WhatsApp).
 
-import { fetchNewsForTopics } from "./news";
+import { fetchNewsForTopics, isReputableSource } from "./news";
+import { fetchMediaCandidates } from "./media-feeds";
+import { mergeCandidates } from "./brief/merge-candidates";
 import { analyzeNews, type AnalyzedArticle } from "./newsletter-ai";
 import {
   saveEdition,
@@ -61,15 +63,24 @@ export async function generateEditionForUser(
     .map((t) => t.trim())
     .filter(Boolean);
 
-  const raw = await fetchNewsForTopics(topics, {
-    language: opts.language,
-    country: opts.country,
-    perTopic: 8,
-    priorityTopics,
-    perPriorityTopic: 12,
-  });
+  // Dos fuentes que se compensan. Google News busca por tema pero sólo entrega
+  // el titular: su `description` no tiene una palabra del artículo y sus
+  // enlaces son identificadores opacos que no llevan a ningún texto. Los feeds
+  // de los medios no buscan por tema, pero traen resumen de verdad y el enlace
+  // directo a la nota. Con las dos hay de qué elegir y con qué escribir.
+  const [raw, media] = await Promise.all([
+    fetchNewsForTopics(topics, {
+      language: opts.language,
+      country: opts.country,
+      perTopic: 8,
+      priorityTopics,
+      perPriorityTopic: 12,
+    }),
+    fetchMediaCandidates(topics).catch(() => []),
+  ]);
 
-  const analysis = await analyzeNews(topics, raw, priorityTopics, opts.aiDeadlineMs);
+  const candidates = mergeCandidates(raw, media, topics, isReputableSource);
+  const analysis = await analyzeNews(topics, candidates, priorityTopics, opts.aiDeadlineMs);
   const savedEdition = await saveEdition(
     userId,
     analysis.summary,

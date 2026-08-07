@@ -40,7 +40,7 @@ function normalizeSource(s: string): string {
     .replace(/[̀-ͯ]/g, ""); // saca acentos
 }
 
-function isReputableSource(source: string): boolean {
+export function isReputableSource(source: string): boolean {
   const s = normalizeSource(source);
   return REPUTABLE_SOURCES.some((r) => s.includes(r));
 }
